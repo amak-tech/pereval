@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dnsmasq-geoblock.conf
+Disallow: /nginx.conf
+Disallow: /*.map$
+
+Sitemap: https://pereval.example/sitemap.xml
