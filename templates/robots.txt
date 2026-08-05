@@ -6,4 +6,4 @@ Disallow: /services.yaml
 Disallow: /generate.py
 Disallow: /templates/
 
-Sitemap: ${origin}/sitemap.xml
+Sitemap: {{origin}}/sitemap.xml

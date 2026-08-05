@@ -1,0 +1,589 @@
+# -----------------------------------------------------------------------------
+# SNI-allowlist для блока stream в nginx.
+#
+# СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
+# Разрешено 488 доменов в 11 категориях. Дата: 2026-08-05
+#
+# Подключается внутрь map в nginx.conf:
+#     map $ssl_preread_server_name $sni_upstream {
+#         hostnames;
+#         default  127.0.0.1:9;
+#         include  /etc/nginx/geoblock/nginx-sni-allow.map;
+#     }
+#
+# Ключ вида «.example.com» работает благодаря директиве hostnames и совпадает
+# и с example.com, и со всеми поддоменами — ровно как address=/x/ в dnsmasq.
+#
+# Домены из passthrough сюда НЕ попадают: они не должны идти через прокси.
+# Домены из disabled тоже — они закомментированы и в dnsmasq.
+# -----------------------------------------------------------------------------
+
+# 1. ИИ и языковые модели
+#   Anthropic / Claude
+.claude.ai                                   $ssl_preread_server_name:443;
+.claude.com                                  $ssl_preread_server_name:443;
+.anthropic.com                               $ssl_preread_server_name:443;
+.anthropic.qualtrics.com                     $ssl_preread_server_name:443;
+.intercom.io                                 $ssl_preread_server_name:443;
+.downloads.intercomcdn.com                   $ssl_preread_server_name:443;
+.vector.co                                   $ssl_preread_server_name:443;
+#   OpenAI / ChatGPT / Sora
+.openai.com                                  $ssl_preread_server_name:443;
+.chatgpt.com                                 $ssl_preread_server_name:443;
+.oaistatic.com                               $ssl_preread_server_name:443;
+.oaiusercontent.com                          $ssl_preread_server_name:443;
+.chat.com                                    $ssl_preread_server_name:443;
+.ai.com                                      $ssl_preread_server_name:443;
+.sora.com                                    $ssl_preread_server_name:443;
+.chat.openai.com.cdn.cloudflare.net          $ssl_preread_server_name:443;
+.production-openaicom-storage.azureedge.net  $ssl_preread_server_name:443;
+#   Google Gemini / AI Studio / NotebookLM / Jules / Antigravity
+.gemini.google                               $ssl_preread_server_name:443;
+.gemini.google.com                           $ssl_preread_server_name:443;
+.aistudio.google.com                         $ssl_preread_server_name:443;
+.makersuite.google.com                       $ssl_preread_server_name:443;
+.bard.google.com                             $ssl_preread_server_name:443;
+.ai.google.dev                               $ssl_preread_server_name:443;
+.generativeai.google                         $ssl_preread_server_name:443;
+.generativelanguage.googleapis.com           $ssl_preread_server_name:443;
+.notebooklm.google                           $ssl_preread_server_name:443;
+.notebooklm.google.com                       $ssl_preread_server_name:443;
+.jules.google                                $ssl_preread_server_name:443;
+.jules.google.com                            $ssl_preread_server_name:443;
+.labs.google                                 $ssl_preread_server_name:443;
+.deepmind.google                             $ssl_preread_server_name:443;
+.deepmind.com                                $ssl_preread_server_name:443;
+.antigravity.google                          $ssl_preread_server_name:443;
+.antigravity-pa.googleapis.com               $ssl_preread_server_name:443;
+.antigravity.googleapis.com                  $ssl_preread_server_name:443;
+.antigravity-unleash.goog                    $ssl_preread_server_name:443;
+.aisandbox-pa.googleapis.com                 $ssl_preread_server_name:443;
+.aida.googleapis.com                         $ssl_preread_server_name:443;
+.geller-pa.googleapis.com                    $ssl_preread_server_name:443;
+.proactivebackend-pa.googleapis.com          $ssl_preread_server_name:443;
+.robinfrontend-pa.googleapis.com             $ssl_preread_server_name:443;
+.speechs3proto2-pa.googleapis.com            $ssl_preread_server_name:443;
+.stitch.withgoogle.com                       $ssl_preread_server_name:443;
+#   xAI / Grok
+.x.ai                                        $ssl_preread_server_name:443;
+.grok.com                                    $ssl_preread_server_name:443;
+.grok.x.com                                  $ssl_preread_server_name:443;
+#   Microsoft Copilot
+.copilot.microsoft.com                       $ssl_preread_server_name:443;
+.designer.microsoft.com                      $ssl_preread_server_name:443;
+#   Cursor
+.cursor.sh                                   $ssl_preread_server_name:443;
+.cursor.com                                  $ssl_preread_server_name:443;
+.cursorapi.com                               $ssl_preread_server_name:443;
+.cursor-cdn.com                              $ssl_preread_server_name:443;
+#   Windsurf / Codeium
+.windsurf.com                                $ssl_preread_server_name:443;
+.codeium.com                                 $ssl_preread_server_name:443;
+#   OpenRouter, Groq и другие шлюзы к моделям
+.openrouter.ai                               $ssl_preread_server_name:443;
+.groq.com                                    $ssl_preread_server_name:443;
+.lambdalabs.com                              $ssl_preread_server_name:443;
+.lightning.ai                                $ssl_preread_server_name:443;
+#   ИИ-агенты и инструменты для кода
+.augmentcode.com                             $ssl_preread_server_name:443;
+.data.cline.bot                              $ssl_preread_server_name:443;
+.trae.ai                                     $ssl_preread_server_name:443;
+.qoder.com                                   $ssl_preread_server_name:443;
+.manus.im                                    $ssl_preread_server_name:443;
+.files.manus.cdn                             $ssl_preread_server_name:443;
+.genspark.ai                                 $ssl_preread_server_name:443;
+.langdock.com                                $ssl_preread_server_name:443;
+.sonara.ai                                   $ssl_preread_server_name:443;
+.uizard.io                                   $ssl_preread_server_name:443;
+.blinkshot.io                                $ssl_preread_server_name:443;
+.ai-chat.bsg.brave.com                       $ssl_preread_server_name:443;
+#   Генерация изображений, видео и звука
+.elevenlabs.io                               $ssl_preread_server_name:443;
+.recraft.ai                                  $ssl_preread_server_name:443;
+.reve.art                                    $ssl_preread_server_name:443;
+.hume.ai                                     $ssl_preread_server_name:443;
+.clip.opus.pro                               $ssl_preread_server_name:443;
+.remove.bg                                   $ssl_preread_server_name:443;
+.unscreen.com                                $ssl_preread_server_name:443;
+.watermarkremover.io                         $ssl_preread_server_name:443;
+#   DeepL
+.deepl.com                                   $ssl_preread_server_name:443;
+
+# 2. Инструменты разработки, SaaS и облака
+#   JetBrains
+.jetbrains.com                               $ssl_preread_server_name:443;
+.myjetbrains.com                             $ssl_preread_server_name:443;
+.jetbrains.space                             $ssl_preread_server_name:443;
+.jetbrains.team                              $ssl_preread_server_name:443;
+.api.jetbrains.ai                            $ssl_preread_server_name:443;
+.youtrack.cloud                              $ssl_preread_server_name:443;
+.toolbox.app                                 $ssl_preread_server_name:443;
+.qodana.cloud                                $ssl_preread_server_name:443;
+.gvt1.com                                    $ssl_preread_server_name:443;
+.dvxdiz880bm14.cloudfront.net                $ssl_preread_server_name:443;
+.api.app.prod.grazie.aws.intellij.net        $ssl_preread_server_name:443;
+.api.ai.jetbrains.com.cn                     $ssl_preread_server_name:443;
+#   HashiCorp
+.hashicorp.com                               $ssl_preread_server_name:443;
+.terraform.io                                $ssl_preread_server_name:443;
+.vagrantcloud.com                            $ssl_preread_server_name:443;
+#   Notion
+.notion.so                                   $ssl_preread_server_name:443;
+.notion.com                                  $ssl_preread_server_name:443;
+.notion.new                                  $ssl_preread_server_name:443;
+.notion.site                                 $ssl_preread_server_name:443;
+.notion-static.com                           $ssl_preread_server_name:443;
+.notion-emojis.s3-us-west-2.amazonaws.com    $ssl_preread_server_name:443;
+.code.gist.build                             $ssl_preread_server_name:443;
+#   Atlassian
+.atlassian.com                               $ssl_preread_server_name:443;
+#   Sentry
+.sentry.io                                   $ssl_preread_server_name:443;
+.sentry.dev                                  $ssl_preread_server_name:443;
+#   Oracle
+.oracle.com                                  $ssl_preread_server_name:443;
+.oraclecloud.com                             $ssl_preread_server_name:443;
+#   Salesforce
+.salesforce.com                              $ssl_preread_server_name:443;
+.salesforceiq.com                            $ssl_preread_server_name:443;
+.force.com                                   $ssl_preread_server_name:443;
+.force-user-content.com                      $ssl_preread_server_name:443;
+.salesforceliveagent.com                     $ssl_preread_server_name:443;
+.salesforce-experience.com                   $ssl_preread_server_name:443;
+.salesforce-hub.com                          $ssl_preread_server_name:443;
+.salesforce-scrt.com                         $ssl_preread_server_name:443;
+.salesforce-setup.com                        $ssl_preread_server_name:443;
+.salesforce-sites.com                        $ssl_preread_server_name:443;
+.sfdcopens.com                               $ssl_preread_server_name:443;
+.site.com                                    $ssl_preread_server_name:443;
+.trailblazer.me                              $ssl_preread_server_name:443;
+.trailhead.com                               $ssl_preread_server_name:443;
+#   Базы данных, мониторинг, CI
+.mongodb.com                                 $ssl_preread_server_name:443;
+.docs.liquibase.com                          $ssl_preread_server_name:443;
+.redis.io                                    $ssl_preread_server_name:443;
+.redislabs.com                               $ssl_preread_server_name:443;
+.neo4j.com                                   $ssl_preread_server_name:443;
+.grafana.com                                 $ssl_preread_server_name:443;
+.graylog.org                                 $ssl_preread_server_name:443;
+.snyk.io                                     $ssl_preread_server_name:443;
+.pingdom.com                                 $ssl_preread_server_name:443;
+.posthog.com                                 $ssl_preread_server_name:443;
+.amplitude.com                               $ssl_preread_server_name:443;
+.buf.build                                   $ssl_preread_server_name:443;
+.fivetran.com                                $ssl_preread_server_name:443;
+.spacelift.io                                $ssl_preread_server_name:443;
+.dashboard.algolia.com                       $ssl_preread_server_name:443;
+.dashboard.gitguardian.com                   $ssl_preread_server_name:443;
+.hc-ping.com                                 $ssl_preread_server_name:443;
+.hchk.io                                     $ssl_preread_server_name:443;
+.swagger.io                                  $ssl_preread_server_name:443;
+.smartbear.com                               $ssl_preread_server_name:443;
+.smartbear.co                                $ssl_preread_server_name:443;
+.ibm.com                                     $ssl_preread_server_name:443;
+#   Хостинг, PaaS и конструкторы сайтов
+.assets.heroku.com                           $ssl_preread_server_name:443;
+.herokucdn.com                               $ssl_preread_server_name:443;
+.netlify.com                                 $ssl_preread_server_name:443;
+.framer.com                                  $ssl_preread_server_name:443;
+.framer.app                                  $ssl_preread_server_name:443;
+.framerstatic.com                            $ssl_preread_server_name:443;
+.framercanvas.com                            $ssl_preread_server_name:443;
+.framerusercontent.com                       $ssl_preread_server_name:443;
+.framercdn.com                               $ssl_preread_server_name:443;
+.hostinger.com                               $ssl_preread_server_name:443;
+.siteground.com                              $ssl_preread_server_name:443;
+.wpengine.com                                $ssl_preread_server_name:443;
+.weebly.com                                  $ssl_preread_server_name:443;
+.editorx.com                                 $ssl_preread_server_name:443;
+.webnames.ca                                 $ssl_preread_server_name:443;
+.octopus.do                                  $ssl_preread_server_name:443;
+.myqrcode.com                                $ssl_preread_server_name:443;
+.capacitorjs.com                             $ssl_preread_server_name:443;
+.reactflow.dev                               $ssl_preread_server_name:443;
+#   Сети, удалённый доступ и туннели
+.ngrok.com                                   $ssl_preread_server_name:443;
+.connect.ngrok-agent.com                     $ssl_preread_server_name:443;
+.pkgs.tailscale.com                          $ssl_preread_server_name:443;
+.httptoolkit.com                             $ssl_preread_server_name:443;
+.vyos.io                                     $ssl_preread_server_name:443;
+.teamviewer.com                              $ssl_preread_server_name:443;
+.support.anydesk.com                         $ssl_preread_server_name:443;
+.parallels.com                               $ssl_preread_server_name:443;
+.myparallels.com                             $ssl_preread_server_name:443;
+.parallels.net                               $ssl_preread_server_name:443;
+.parallels.cn                                $ssl_preread_server_name:443;
+.parallelsaccess.com                         $ssl_preread_server_name:443;
+.builds.parsec.app                           $ssl_preread_server_name:443;
+.public.parsec.app                           $ssl_preread_server_name:443;
+.nordvpn.com                                 $ssl_preread_server_name:443;
+.nordaccount.com                             $ssl_preread_server_name:443;
+.nordcdn.com                                 $ssl_preread_server_name:443;
+.remna.st                                    $ssl_preread_server_name:443;
+.showip.net                                  $ssl_preread_server_name:443;
+#   Корпоративные системы и виртуализация
+.broadcom.com                                $ssl_preread_server_name:443;
+.bitnami.com                                 $ssl_preread_server_name:443;
+.vmware.com                                  $ssl_preread_server_name:443;
+.omnissa.com                                 $ssl_preread_server_name:443;
+.citrix.com                                  $ssl_preread_server_name:443;
+.cisco.com                                   $ssl_preread_server_name:443;
+.netacad.com                                 $ssl_preread_server_name:443;
+.veeam.com                                   $ssl_preread_server_name:443;
+.dell.com                                    $ssl_preread_server_name:443;
+.dellcdn.com                                 $ssl_preread_server_name:443;
+.netapp.com                                  $ssl_preread_server_name:443;
+.solarwinds.com                              $ssl_preread_server_name:443;
+.jamf.com                                    $ssl_preread_server_name:443;
+.smartdeploy.com                             $ssl_preread_server_name:443;
+.itninja.com                                 $ssl_preread_server_name:443;
+.middlewareinventory.com                     $ssl_preread_server_name:443;
+.syslog-ng.com                               $ssl_preread_server_name:443;
+.sharefile.com                               $ssl_preread_server_name:443;
+.sharefile.io                                $ssl_preread_server_name:443;
+.qt.io                                       $ssl_preread_server_name:443;
+.devexpress.com                              $ssl_preread_server_name:443;
+.bell-sw.com                                 $ssl_preread_server_name:443;
+.platform.activestate.com                    $ssl_preread_server_name:443;
+.openh264.org                                $ssl_preread_server_name:443;
+.expandrive.com                              $ssl_preread_server_name:443;
+.daemon-tools.cc                             $ssl_preread_server_name:443;
+.tableau.com                                 $ssl_preread_server_name:443;
+.onshape.com                                 $ssl_preread_server_name:443;
+.ansys.com                                   $ssl_preread_server_name:443;
+#   Совместная работа и продуктивность
+.mattermost.com                              $ssl_preread_server_name:443;
+.getoutline.com                              $ssl_preread_server_name:443;
+.clickup.com                                 $ssl_preread_server_name:443;
+.zapier.com                                  $ssl_preread_server_name:443;
+.document360.io                              $ssl_preread_server_name:443;
+.document360.com                             $ssl_preread_server_name:443;
+.mailerlite.com                              $ssl_preread_server_name:443;
+.kmail-lists.com                             $ssl_preread_server_name:443;
+.surveymonkey.com                            $ssl_preread_server_name:443;
+.research.net                                $ssl_preread_server_name:443;
+.semrush.com                                 $ssl_preread_server_name:443;
+.flourish.studio                             $ssl_preread_server_name:443;
+.zerossl.com                                 $ssl_preread_server_name:443;
+.wetransfer.com                              $ssl_preread_server_name:443;
+.filebin.net                                 $ssl_preread_server_name:443;
+.streamable.com                              $ssl_preread_server_name:443;
+.tutanota.com                                $ssl_preread_server_name:443;
+.mailinator.com                              $ssl_preread_server_name:443;
+.tempmail.plus                               $ssl_preread_server_name:443;
+.grizzlysms.com                              $ssl_preread_server_name:443;
+.qwant.com                                   $ssl_preread_server_name:443;
+.arc.net                                     $ssl_preread_server_name:443;
+.diabrowser.com                              $ssl_preread_server_name:443;
+.meetup.com                                  $ssl_preread_server_name:443;
+.credly.com                                  $ssl_preread_server_name:443;
+.typing.com                                  $ssl_preread_server_name:443;
+.htmhell.dev                                 $ssl_preread_server_name:443;
+.andrevi.ch                                  $ssl_preread_server_name:443;
+.miracleptr.wordpress.com                    $ssl_preread_server_name:443;
+.buanzo.org                                  $ssl_preread_server_name:443;
+.wikidot.com                                 $ssl_preread_server_name:443;
+.wdfiles.com                                 $ssl_preread_server_name:443;
+
+# 3. Дизайн и творчество
+#   Adobe
+.adobe.com                                   $ssl_preread_server_name:443;
+.adobe.io                                    $ssl_preread_server_name:443;
+.adobe.net                                   $ssl_preread_server_name:443;
+#   Canva
+.canva.com                                   $ssl_preread_server_name:443;
+.canva.dev                                   $ssl_preread_server_name:443;
+.kaleido.ai                                  $ssl_preread_server_name:443;
+#   Autodesk и САПР
+.autodesk.com                                $ssl_preread_server_name:443;
+.cdn.web-platform.io                         $ssl_preread_server_name:443;
+.sketchup.com                                $ssl_preread_server_name:443;
+.chaos.com                                   $ssl_preread_server_name:443;
+.multisim.com                                $ssl_preread_server_name:443;
+.ni.com                                      $ssl_preread_server_name:443;
+.verificationacademy.com                     $ssl_preread_server_name:443;
+.home.by.me                                  $ssl_preread_server_name:443;
+#   Affinity и прочее
+.affinity.studio                             $ssl_preread_server_name:443;
+.nitropdf.com                                $ssl_preread_server_name:443;
+.pexels.com                                  $ssl_preread_server_name:443;
+.freeimages.com                              $ssl_preread_server_name:443;
+.alphacoders.com                             $ssl_preread_server_name:443;
+.zedge.net                                   $ssl_preread_server_name:443;
+.imgur.com                                   $ssl_preread_server_name:443;
+
+# 4. Стриминг, видео и медиа
+#   Netflix
+.netflix.com                                 $ssl_preread_server_name:443;
+.netflix.net                                 $ssl_preread_server_name:443;
+.netflix.ca                                  $ssl_preread_server_name:443;
+.netflixinvestor.com                         $ssl_preread_server_name:443;
+.netflixtechblog.com                         $ssl_preread_server_name:443;
+.fast.com                                    $ssl_preread_server_name:443;
+.nflxext.com                                 $ssl_preread_server_name:443;
+.nflximg.com                                 $ssl_preread_server_name:443;
+.nflximg.net                                 $ssl_preread_server_name:443;
+.nflxso.net                                  $ssl_preread_server_name:443;
+.nflxsearch.net                              $ssl_preread_server_name:443;
+.nflxvideo.net                               $ssl_preread_server_name:443;
+#   HBO Max
+.max.com                                     $ssl_preread_server_name:443;
+.hbomax.com                                  $ssl_preread_server_name:443;
+#   Disney+
+.disneyplus.com                              $ssl_preread_server_name:443;
+#   Crunchyroll
+.crunchyroll.com                             $ssl_preread_server_name:443;
+.v.vrv.co                                    $ssl_preread_server_name:443;
+.vod-fy.crunchyrollcdn.com                   $ssl_preread_server_name:443;
+.a-vrv.akamaized.net                         $ssl_preread_server_name:443;
+#   Amazon Prime Video
+.primevideo.com                              $ssl_preread_server_name:443;
+.gaming.amazon.com                           $ssl_preread_server_name:443;
+#   Twitch (частично: видео и GraphQL API)
+.usher.ttvnw.net                             $ssl_preread_server_name:443;
+.gql.twitch.tv                               $ssl_preread_server_name:443;
+#   Sky, FX и другие телеканалы
+.sky.com                                     $ssl_preread_server_name:443;
+.digitalcontent.sky                          $ssl_preread_server_name:443;
+.skycdp.com                                  $ssl_preread_server_name:443;
+.fxnetworks.com                              $ssl_preread_server_name:443;
+.global.fncstatic.com                        $ssl_preread_server_name:443;
+.truthsocial.com                             $ssl_preread_server_name:443;
+.metopera.org                                $ssl_preread_server_name:443;
+#   Метаданные для Plex, Jellyfin и *arr
+.themoviedb.org                              $ssl_preread_server_name:443;
+.tmdb.org                                    $ssl_preread_server_name:443;
+.tmdb.com                                    $ssl_preread_server_name:443;
+.tmdb-image-prod.b-cdn.net                   $ssl_preread_server_name:443;
+.theaudiodb.com                              $ssl_preread_server_name:443;
+.servarr.com                                 $ssl_preread_server_name:443;
+.prowlarr.com                                $ssl_preread_server_name:443;
+.lidarr.audio                                $ssl_preread_server_name:443;
+.torrenteditor.com                           $ssl_preread_server_name:443;
+.kinogo.la                                   $ssl_preread_server_name:443;
+.cdromance.org                               $ssl_preread_server_name:443;
+.philiascans.org                             $ssl_preread_server_name:443;
+.manybooks.net                               $ssl_preread_server_name:443;
+
+# 5. Музыка
+#   Стриминг
+.spotify.com                                 $ssl_preread_server_name:443;
+.deezer.com                                  $ssl_preread_server_name:443;
+.tidal.com                                   $ssl_preread_server_name:443;
+.qobuz.com                                   $ssl_preread_server_name:443;
+.last.fm                                     $ssl_preread_server_name:443;
+.mixcloud.com                                $ssl_preread_server_name:443;
+.widgetapp.stream                            $ssl_preread_server_name:443;
+.x-minus.pro                                 $ssl_preread_server_name:443;
+#   Работа со звуком
+.spitfireaudio.com                           $ssl_preread_server_name:443;
+.uaudio.com                                  $ssl_preread_server_name:443;
+
+# 6. Игры
+#   Supercell
+.supercell.com                               $ssl_preread_server_name:443;
+.clashofclans.com                            $ssl_preread_server_name:443;
+.brawlstarsgame.com                          $ssl_preread_server_name:443;
+.clashroyaleapp.com                          $ssl_preread_server_name:443;
+.squadbustersgame.com                        $ssl_preread_server_name:443;
+.haydaygame.com                              $ssl_preread_server_name:443;
+#   NVIDIA GeForce NOW и ресурсы для разработчиков
+.geforcenow.com                              $ssl_preread_server_name:443;
+.gfn.am                                      $ssl_preread_server_name:443;
+.developer.nvidia.com                        $ssl_preread_server_name:443;
+.install.launcher.omniverse.nvidia.com       $ssl_preread_server_name:443;
+#   Авторизация Xbox Live
+.xsts.auth.xboxlive.com                      $ssl_preread_server_name:443;
+#   WB Games и Marvel Snap
+.wbgames.com                                 $ssl_preread_server_name:443;
+.wbagora.com                                 $ssl_preread_server_name:443;
+.marvelsnap.com                              $ssl_preread_server_name:443;
+.seconddinnertech.com                        $ssl_preread_server_name:443;
+.snapgametech.com                            $ssl_preread_server_name:443;
+#   Игровые магазины и прочее
+.g2a.com                                     $ssl_preread_server_name:443;
+.eneba.com                                   $ssl_preread_server_name:443;
+.gamestop.com                                $ssl_preread_server_name:443;
+.shop.gameloft.com                           $ssl_preread_server_name:443;
+.guilded.gg                                  $ssl_preread_server_name:443;
+.ghostrc.game.idtech.services                $ssl_preread_server_name:443;
+.pcgamesn.com                                $ssl_preread_server_name:443;
+
+# 7. Платежи, финансы и покупки
+#   Wise
+.wise.com                                    $ssl_preread_server_name:443;
+.transferwise.com                            $ssl_preread_server_name:443;
+#   Patreon
+.patreon.com                                 $ssl_preread_server_name:443;
+.patreonusercontent.com                      $ssl_preread_server_name:443;
+#   Paddle
+.paddle.com                                  $ssl_preread_server_name:443;
+.paddlestatus.com                            $ssl_preread_server_name:443;
+.profitwell.com                              $ssl_preread_server_name:443;
+.paritydeals.com                             $ssl_preread_server_name:443;
+#   Другие платёжные и биллинговые сервисы
+.squareup.com                                $ssl_preread_server_name:443;
+.klarna.com                                  $ssl_preread_server_name:443;
+.paywithmoon.com                             $ssl_preread_server_name:443;
+.coingate.com                                $ssl_preread_server_name:443;
+.intuit.com                                  $ssl_preread_server_name:443;
+.quicknode.com                               $ssl_preread_server_name:443;
+.onfastspring.com                            $ssl_preread_server_name:443;
+.exchanger.bits.media                        $ssl_preread_server_name:443;
+.gonift.com                                  $ssl_preread_server_name:443;
+#   Краудфандинг и донаты
+.buymeacoffee.com                            $ssl_preread_server_name:443;
+.gofundme.com                                $ssl_preread_server_name:443;
+.gofund.me                                   $ssl_preread_server_name:443;
+#   Фриланс и поиск работы
+.upwork.com                                  $ssl_preread_server_name:443;
+.indeed.com                                  $ssl_preread_server_name:443;
+.swapd.co                                    $ssl_preread_server_name:443;
+.legalshield.com                             $ssl_preread_server_name:443;
+#   Магазины и путешествия
+.nike.com                                    $ssl_preread_server_name:443;
+.adidas.com                                  $ssl_preread_server_name:443;
+.abercrombie.com                             $ssl_preread_server_name:443;
+.hollisterco.com                             $ssl_preread_server_name:443;
+.primark.com                                 $ssl_preread_server_name:443;
+.timberland.de                               $ssl_preread_server_name:443;
+.ikea.com                                    $ssl_preread_server_name:443;
+.etsy.com                                    $ssl_preread_server_name:443;
+.walmart.com                                 $ssl_preread_server_name:443;
+.bestbuy.com                                 $ssl_preread_server_name:443;
+.sephora.com                                 $ssl_preread_server_name:443;
+.iherb.com                                   $ssl_preread_server_name:443;
+.groupon.com                                 $ssl_preread_server_name:443;
+.dyson.com                                   $ssl_preread_server_name:443;
+.lyst.com                                    $ssl_preread_server_name:443;
+.chainreactioncycles.com                     $ssl_preread_server_name:443;
+.monoprice.com                               $ssl_preread_server_name:443;
+.cdw.com                                     $ssl_preread_server_name:443;
+.disctech.com                                $ssl_preread_server_name:443;
+.btod.com                                    $ssl_preread_server_name:443;
+.shinyhardware.co.uk                         $ssl_preread_server_name:443;
+.alza.hu                                     $ssl_preread_server_name:443;
+.carrefouruae.com                            $ssl_preread_server_name:443;
+.housebrand.com                              $ssl_preread_server_name:443;
+.hotels.com                                  $ssl_preread_server_name:443;
+.aircanada.com                               $ssl_preread_server_name:443;
+.flyertalk.com                               $ssl_preread_server_name:443;
+.techbargains.com                            $ssl_preread_server_name:443;
+.volkswagen-classic-parts.com                $ssl_preread_server_name:443;
+.newsroom.porsche.com                        $ssl_preread_server_name:443;
+.ducati.com                                  $ssl_preread_server_name:443;
+.sigsauer.com                                $ssl_preread_server_name:443;
+.penguinrandomhouse.com                      $ssl_preread_server_name:443;
+.penguin.com                                 $ssl_preread_server_name:443;
+
+# 8. Оборудование и производители электроники
+#   Intel
+.intel.com                                   $ssl_preread_server_name:443;
+.intel.de                                    $ssl_preread_server_name:443;
+.intel.nl                                    $ssl_preread_server_name:443;
+.geolocation.onetrust.com                    $ssl_preread_server_name:443;
+#   Полупроводники и дистрибьюторы
+.qualcomm.com                                $ssl_preread_server_name:443;
+.ti.com                                      $ssl_preread_server_name:443;
+.analog.com                                  $ssl_preread_server_name:443;
+.nxp.com                                     $ssl_preread_server_name:443;
+.tsmc.com                                    $ssl_preread_server_name:443;
+.mouser.com                                  $ssl_preread_server_name:443;
+.mouser.fi                                   $ssl_preread_server_name:443;
+.newark.com                                  $ssl_preread_server_name:443;
+.arduino.cc                                  $ssl_preread_server_name:443;
+.keysight.com                                $ssl_preread_server_name:443;
+.flir.com                                    $ssl_preread_server_name:443;
+.flir.eu                                     $ssl_preread_server_name:443;
+.fluke.com                                   $ssl_preread_server_name:443;
+.flukenetworks.com                           $ssl_preread_server_name:443;
+.xrite.com                                   $ssl_preread_server_name:443;
+.se.com                                      $ssl_preread_server_name:443;
+.schneider-electric.com                      $ssl_preread_server_name:443;
+.new.abb.com                                 $ssl_preread_server_name:443;
+.bosch.com                                   $ssl_preread_server_name:443;
+.boschautoparts.com                          $ssl_preread_server_name:443;
+.boschaftermarket.com                        $ssl_preread_server_name:443;
+.cpu-monkey.com                              $ssl_preread_server_name:443;
+.gpu-monkey.com                              $ssl_preread_server_name:443;
+.intuitibits.com                             $ssl_preread_server_name:443;
+#   Облака бытовой техники и гаджетов
+.lgthinq.com                                 $ssl_preread_server_name:443;
+.lgeapi.com                                  $ssl_preread_server_name:443;
+.xiaomi.eu                                   $ssl_preread_server_name:443;
+.singlekey-id.com                            $ssl_preread_server_name:443;
+.home-connect.com                            $ssl_preread_server_name:443;
+.support.xerox.com                           $ssl_preread_server_name:443;
+.corsair.com                                 $ssl_preread_server_name:443;
+.synoforum.com                               $ssl_preread_server_name:443;
+.amazfitwatchfaces.com                       $ssl_preread_server_name:443;
+.plugshare.com                               $ssl_preread_server_name:443;
+.contabo.com                                 $ssl_preread_server_name:443;
+
+# 9. Информационная безопасность
+#   Вендоры
+.bitdefender.com                             $ssl_preread_server_name:443;
+.pandasecurity.com                           $ssl_preread_server_name:443;
+.clamav.net                                  $ssl_preread_server_name:443;
+.watchguard.com                              $ssl_preread_server_name:443;
+.data-cdn.mbamupdates.com                    $ssl_preread_server_name:443;
+.community.sophos.com                        $ssl_preread_server_name:443;
+.intelix.sophos.com                          $ssl_preread_server_name:443;
+.forum.netgate.com                           $ssl_preread_server_name:443;
+.spiceworks.com                              $ssl_preread_server_name:443;
+#   Анализ и фиды
+.cisecurity.org                              $ssl_preread_server_name:443;
+.talosintelligence.com                       $ssl_preread_server_name:443;
+.hybrid-analysis.com                         $ssl_preread_server_name:443;
+.joesandbox.com                              $ssl_preread_server_name:443;
+.tria.ge                                     $ssl_preread_server_name:443;
+.cvedetails.com                              $ssl_preread_server_name:443;
+.snort.org                                   $ssl_preread_server_name:443;
+.easydmarc.com                               $ssl_preread_server_name:443;
+
+# 10. Новости, справочники, спорт и прочее
+#   Здоровье и справочники
+.healthline.com                              $ssl_preread_server_name:443;
+.medicalnewstoday.com                        $ssl_preread_server_name:443;
+.clevelandclinic.org                         $ssl_preread_server_name:443;
+.iedb.org                                    $ssl_preread_server_name:443;
+.snapgene.com                                $ssl_preread_server_name:443;
+.ldoceonline.com                             $ssl_preread_server_name:443;
+.akc.org                                     $ssl_preread_server_name:443;
+.cats.com                                    $ssl_preread_server_name:443;
+.myheritage.com                              $ssl_preread_server_name:443;
+.ancestry.com                                $ssl_preread_server_name:443;
+#   Погода
+.weather.com                                 $ssl_preread_server_name:443;
+.wunderground.com                            $ssl_preread_server_name:443;
+.ntp.msn.com                                 $ssl_preread_server_name:443;
+#   Спорт
+.nba.com                                     $ssl_preread_server_name:443;
+.nfl.com                                     $ssl_preread_server_name:443;
+.f1.com                                      $ssl_preread_server_name:443;
+.formula1.com                                $ssl_preread_server_name:443;
+.premierleague.com                           $ssl_preread_server_name:443;
+.footballapi.pulselive.com                   $ssl_preread_server_name:443;
+.broncosportforum.com                        $ssl_preread_server_name:443;
+.strava.com                                  $ssl_preread_server_name:443;
+#   Технические медиа
+.lifehacker.com                              $ssl_preread_server_name:443;
+.pcmag.com                                   $ssl_preread_server_name:443;
+.extremetech.com                             $ssl_preread_server_name:443;
+.sdxcentral.com                              $ssl_preread_server_name:443;
+.all3dp.com                                  $ssl_preread_server_name:443;
+.yeggi.com                                   $ssl_preread_server_name:443;
+.telemetr.io                                 $ssl_preread_server_name:443;
+.ocstore.com                                 $ssl_preread_server_name:443;
+.mssg.me                                     $ssl_preread_server_name:443;
+.glpals.com                                  $ssl_preread_server_name:443;
+.gpsonextra.net                              $ssl_preread_server_name:443;
+.xtracloud.net                               $ssl_preread_server_name:443;
+.att.com                                     $ssl_preread_server_name:443;
+.w.atwiki.jp                                 $ssl_preread_server_name:443;
+
+# 11. Без категории
+#   Прочее
+.backend-v2.crixet.com                       $ssl_preread_server_name:443;
+.mintmobile.com                              $ssl_preread_server_name:443;
+

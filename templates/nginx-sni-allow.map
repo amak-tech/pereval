@@ -1,0 +1,21 @@
+# -----------------------------------------------------------------------------
+# SNI-allowlist для блока stream в nginx.
+#
+# СГЕНЕРИРОВАНО автоматически из {{source}} — не правьте руками.
+# Разрешено {{total}} доменов в {{category_count}} категориях. Дата: {{date}}
+#
+# Подключается внутрь map в nginx.conf:
+#     map $ssl_preread_server_name $sni_upstream {
+#         hostnames;
+#         default  127.0.0.1:9;
+#         include  /etc/nginx/geoblock/nginx-sni-allow.map;
+#     }
+#
+# Ключ вида «.example.com» работает благодаря директиве hostnames и совпадает
+# и с example.com, и со всеми поддоменами — ровно как address=/x/ в dnsmasq.
+#
+# Домены из passthrough сюда НЕ попадают: они не должны идти через прокси.
+# Домены из disabled тоже — они закомментированы и в dnsmasq.
+# -----------------------------------------------------------------------------
+
+{{sni_entries}}

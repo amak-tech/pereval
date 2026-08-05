@@ -5,8 +5,9 @@
     python3 generate.py services.yaml 153.80.200.170
 
 Ни строчки вёрстки, стилей и текста страницы здесь нет — всё лежит в templates/.
-Скрипт читает данные, собирает из них HTML-фрагменты и подставляет в шаблоны
-через string.Template (подстановки вида ${имя}, литеральный доллар — $$).
+Скрипт читает данные, собирает из них фрагменты и подставляет в шаблоны на месте
+подстановок вида {{имя}}. Двойные скобки выбраны потому, что не конфликтуют
+ни с $переменными nginx, ни с @media в CSS, ни с {} в JavaScript.
 
 Структура YAML:
 
@@ -45,7 +46,6 @@ import html
 import ipaddress
 import json
 import re
-import string
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -60,9 +60,12 @@ DOMAIN_RE = re.compile(r'^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-
 IPISH_RE = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
 FAQ_RE = re.compile(r'<details class="faq">\s*<summary>(.*?)</summary>\s*'
                     r'<p>(.*?)</p>\s*</details>', re.S)
+PLACEHOLDER_RE = re.compile(r'\{\{\s*(\w+)\s*\}\}')
 
 TEMPLATES = OrderedDict([
     ("dnsmasq.conf", "dnsmasq-geoblock.conf"),
+    ("nginx.conf", "nginx.conf"),
+    ("nginx-sni-allow.map", "nginx-sni-allow.map"),
     ("index.html", "index.html"),
 ])
 SEO_TEMPLATES = OrderedDict([
@@ -306,7 +309,7 @@ def faq_entities(template_text, template_name):
     if not items:
         raise ParseError(f"{template_name}: не нашлось ни одного блока "
                          f'<details class="faq"><summary>…</summary><p>…</p></details>, '
-                         f"а ${{faq_entities}} в шаблоне используется")
+                         f"а {{faq_entities}} в шаблоне используется")
     strip_tags = re.compile(r'<[^>]+>')
     entities = [{"@type": "Question",
                  "name": html.unescape(strip_tags.sub("", q)).strip(),
@@ -345,6 +348,27 @@ def conf_body(doc, ip):
     return "\n".join(out)
 
 
+def sni_entries(doc):
+    """Ключи для map в nginx: только активные домены, по одному на строку.
+
+    Ключ «.example.com» вместе с директивой hostnames совпадает и с самим
+    доменом, и со всеми поддоменами — то же покрытие, что address=/x/ в dnsmasq.
+    Значение — тот же хост с портом 443, то есть сессия уходит на настоящий
+    origin. Всё, чего в списке нет, попадает в default и обрывается.
+    """
+    width = max((len(d) for d, _, _ in doc.active()), default=0) + 1
+    out = []
+    for i, c in enumerate(doc.categories, 1):
+        out.append(f"# {i}. {c.name}")
+        for s in c.services:
+            out.append(f"#   {s.name}")
+            for d in s.domains:
+                key = "." + d
+                out.append(f"{key:<{width + 1}} $ssl_preread_server_name:443;")
+        out.append("")
+    return "\n".join(out)
+
+
 def conf_disabled(doc, ip):
     out = []
     for g in doc.disabled:
@@ -362,19 +386,25 @@ def conf_disabled(doc, ip):
 # ----------------------------------------------------------------- рендеринг
 
 
-class StrictTemplate(string.Template):
-    """string.Template, который не молчит про опечатки в именах подстановок."""
+def substitute(text, values, where):
+    """Подставляет {{имя}}. Про опечатку в имени сообщает с номером строки."""
+    missing = []
 
-    def render(self, values, where):
-        try:
-            return self.substitute(values)
-        except KeyError as exc:
-            raise ParseError(f"{where}: в шаблоне есть ${{{exc.args[0]}}}, "
-                             f"а скрипт такого значения не готовит. "
-                             f"Доступны: {', '.join(sorted(values))}")
-        except ValueError as exc:
-            raise ParseError(f"{where}: {exc}. Литеральный знак доллара "
-                             f"в шаблоне нужно писать как $$")
+    def repl(m):
+        key = m.group(1)
+        if key not in values:
+            line = text.count("\n", 0, m.start()) + 1
+            missing.append((line, key))
+            return m.group(0)
+        return values[key]
+
+    out = PLACEHOLDER_RE.sub(repl, text)
+    if missing:
+        first = ", ".join(f"строка {ln}: {{{{{k}}}}}" for ln, k in missing[:5])
+        raise ParseError(f"{where}: в шаблоне есть подстановки, которых скрипт "
+                         f"не готовит — {first}. "
+                         f"Доступны: {', '.join(sorted(values))}")
+    return out
 
 
 def build_values(doc, ip, source, templates_dir):
@@ -398,19 +428,20 @@ def build_values(doc, ip, source, templates_dir):
         "body": conf_body(doc, ip),
         "passthrough": "\n".join(f"# passthrough: {d}"
                                  for d in sorted(set(doc.passthrough.domains))),
+        "sni_entries": sni_entries(doc),
     }
     # FAQPage собирается из самой страницы, но только если шаблон его просит —
     # иначе отсутствие блоков FAQ маскировало бы настоящие ошибки шаблона.
     values["faq_entities"] = "[]"
     if idx.is_file():
         text = idx.read_text(encoding="utf-8")
-        if re.search(r'\$\{faq_entities\}|\$faq_entities\b', text.replace("$$", "")):
+        if re.search(r'\{\{\s*faq_entities\s*\}\}', text):
             values["faq_entities"] = faq_entities(text, str(idx))
     return values
 
 
 def render(templates_dir, tpl_name, values, doc, ip):
-    """Подставляет значения в шаблон. ${disabled} и ${passthrough_note} зависят
+    """Подставляет значения в шаблон. disabled и passthrough_note зависят
     от формата: в HTML это разметка, в конфиге — комментарии."""
     path = templates_dir / tpl_name
     if not path.is_file():
@@ -421,7 +452,7 @@ def render(templates_dir, tpl_name, values, doc, ip):
     else:
         local["disabled"] = conf_disabled(doc, ip)
         local["passthrough_note"] = wrap_comment(doc.passthrough.note)
-    return StrictTemplate(path.read_text(encoding="utf-8")).render(local, str(path))
+    return substitute(path.read_text(encoding="utf-8"), local, str(path))
 
 
 # --------------------------------------------------------------------- CLI
