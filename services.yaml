@@ -1,0 +1,741 @@
+# Единый источник данных: категории, сервисы и их домены.
+#
+# Из этого файла generate.py собирает dnsmasq-geoblock.conf и index.html:
+#
+#     python3 generate.py services.yaml 153.80.200.170
+#
+# Структура:
+#   meta             название, домен сайта и дата обновления для страницы
+#   dnsmasq_options  строки, которые попадут в блок опций dnsmasq как есть
+#   categories       категория -> сервисы -> домены. Поддомены включаются
+#                    автоматически: anthropic.com покрывает api.anthropic.com,
+#                    поэтому дочерние записи указывать не нужно
+#   disabled         группы доменов, закомментированных в конфиге, с пояснением
+#   passthrough      домены, которые НЕЛЬЗЯ проксировать: российские сервисы,
+#                    блокирующие зарубежные адреса, включая казахстанские
+#
+# После правок стоит прогнать проверку — она ловит дубли, конфликты
+# с passthrough и уже покрытые поддомены:
+#
+#     python3 generate.py services.yaml 153.80.200.170 --check
+
+meta:
+  name: Перевал
+  origin: https://pereval.example
+  date: '2026-08-05'
+dnsmasq_options:
+  - listen-address=0.0.0.0
+  - port=53
+  - no-resolv
+  - no-hosts
+  - server=1.1.1.1
+  - server=8.8.8.8
+  - cache-size=10000
+  - bogus-priv
+  - bind-interfaces
+categories:
+  - name: ИИ и языковые модели
+    services:
+      - name: Anthropic / Claude
+        domains:
+          - claude.ai
+          - claude.com
+          - anthropic.com
+          - anthropic.qualtrics.com
+          - intercom.io
+          - downloads.intercomcdn.com
+          - vector.co
+      - name: OpenAI / ChatGPT / Sora
+        domains:
+          - openai.com
+          - chatgpt.com
+          - oaistatic.com
+          - oaiusercontent.com
+          - chat.com
+          - ai.com
+          - sora.com
+          - chat.openai.com.cdn.cloudflare.net
+          - production-openaicom-storage.azureedge.net
+      - name: Google Gemini / AI Studio / NotebookLM / Jules / Antigravity
+        domains:
+          - gemini.google
+          - gemini.google.com
+          - aistudio.google.com
+          - makersuite.google.com
+          - bard.google.com
+          - ai.google.dev
+          - generativeai.google
+          - generativelanguage.googleapis.com
+          - notebooklm.google
+          - notebooklm.google.com
+          - jules.google
+          - jules.google.com
+          - labs.google
+          - deepmind.google
+          - deepmind.com
+          - antigravity.google
+          - antigravity-pa.googleapis.com
+          - antigravity.googleapis.com
+          - antigravity-unleash.goog
+          - aisandbox-pa.googleapis.com
+          - aida.googleapis.com
+          - geller-pa.googleapis.com
+          - proactivebackend-pa.googleapis.com
+          - robinfrontend-pa.googleapis.com
+          - speechs3proto2-pa.googleapis.com
+          - stitch.withgoogle.com
+      - name: xAI / Grok
+        domains:
+          - x.ai
+          - grok.com
+          - grok.x.com
+      - name: Microsoft Copilot
+        domains:
+          - copilot.microsoft.com
+          - designer.microsoft.com
+      - name: Cursor
+        domains:
+          - cursor.sh
+          - cursor.com
+          - cursorapi.com
+          - cursor-cdn.com
+      - name: Windsurf / Codeium
+        domains:
+          - windsurf.com
+          - codeium.com
+      - name: OpenRouter, Groq и другие шлюзы к моделям
+        domains:
+          - openrouter.ai
+          - groq.com
+          - lambdalabs.com
+          - lightning.ai
+      - name: ИИ-агенты и инструменты для кода
+        domains:
+          - augmentcode.com
+          - data.cline.bot
+          - trae.ai
+          - qoder.com
+          - manus.im
+          - files.manus.cdn
+          - genspark.ai
+          - langdock.com
+          - sonara.ai
+          - uizard.io
+          - blinkshot.io
+          - ai-chat.bsg.brave.com
+      - name: Генерация изображений, видео и звука
+        domains:
+          - elevenlabs.io
+          - recraft.ai
+          - reve.art
+          - hume.ai
+          - clip.opus.pro
+          - remove.bg
+          - unscreen.com
+          - watermarkremover.io
+      - name: DeepL
+        domains:
+          - deepl.com
+  - name: Инструменты разработки, SaaS и облака
+    services:
+      - name: JetBrains
+        domains:
+          - jetbrains.com
+          - myjetbrains.com
+          - jetbrains.space
+          - jetbrains.team
+          - api.jetbrains.ai
+          - youtrack.cloud
+          - toolbox.app
+          - qodana.cloud
+          - gvt1.com
+          - dvxdiz880bm14.cloudfront.net
+          - api.app.prod.grazie.aws.intellij.net
+          - api.ai.jetbrains.com.cn
+      - name: HashiCorp
+        domains:
+          - hashicorp.com
+          - terraform.io
+          - vagrantcloud.com
+      - name: Notion
+        domains:
+          - notion.so
+          - notion.com
+          - notion.new
+          - notion.site
+          - notion-static.com
+          - notion-emojis.s3-us-west-2.amazonaws.com
+          - code.gist.build
+      - name: Atlassian
+        domains:
+          - atlassian.com
+      - name: Sentry
+        domains:
+          - sentry.io
+          - sentry.dev
+      - name: Oracle
+        domains:
+          - oracle.com
+          - oraclecloud.com
+      - name: Salesforce
+        domains:
+          - salesforce.com
+          - salesforceiq.com
+          - force.com
+          - force-user-content.com
+          - salesforceliveagent.com
+          - salesforce-experience.com
+          - salesforce-hub.com
+          - salesforce-scrt.com
+          - salesforce-setup.com
+          - salesforce-sites.com
+          - sfdcopens.com
+          - site.com
+          - trailblazer.me
+          - trailhead.com
+      - name: Базы данных, мониторинг, CI
+        domains:
+          - mongodb.com
+          - docs.liquibase.com
+          - redis.io
+          - redislabs.com
+          - neo4j.com
+          - grafana.com
+          - graylog.org
+          - snyk.io
+          - pingdom.com
+          - posthog.com
+          - amplitude.com
+          - buf.build
+          - fivetran.com
+          - spacelift.io
+          - dashboard.algolia.com
+          - dashboard.gitguardian.com
+          - hc-ping.com
+          - hchk.io
+          - swagger.io
+          - smartbear.com
+          - smartbear.co
+          - ibm.com
+      - name: Хостинг, PaaS и конструкторы сайтов
+        domains:
+          - assets.heroku.com
+          - herokucdn.com
+          - netlify.com
+          - framer.com
+          - framer.app
+          - framerstatic.com
+          - framercanvas.com
+          - framerusercontent.com
+          - framercdn.com
+          - hostinger.com
+          - siteground.com
+          - wpengine.com
+          - weebly.com
+          - editorx.com
+          - webnames.ca
+          - octopus.do
+          - myqrcode.com
+          - capacitorjs.com
+          - reactflow.dev
+      - name: Сети, удалённый доступ и туннели
+        domains:
+          - ngrok.com
+          - connect.ngrok-agent.com
+          - pkgs.tailscale.com
+          - httptoolkit.com
+          - vyos.io
+          - teamviewer.com
+          - support.anydesk.com
+          - parallels.com
+          - myparallels.com
+          - parallels.net
+          - parallels.cn
+          - parallelsaccess.com
+          - builds.parsec.app
+          - public.parsec.app
+          - nordvpn.com
+          - nordaccount.com
+          - nordcdn.com
+          - remna.st
+          - showip.net
+      - name: Корпоративные системы и виртуализация
+        domains:
+          - broadcom.com
+          - bitnami.com
+          - vmware.com
+          - omnissa.com
+          - citrix.com
+          - cisco.com
+          - netacad.com
+          - veeam.com
+          - dell.com
+          - dellcdn.com
+          - netapp.com
+          - solarwinds.com
+          - jamf.com
+          - smartdeploy.com
+          - itninja.com
+          - middlewareinventory.com
+          - syslog-ng.com
+          - sharefile.com
+          - sharefile.io
+          - qt.io
+          - devexpress.com
+          - bell-sw.com
+          - platform.activestate.com
+          - openh264.org
+          - expandrive.com
+          - daemon-tools.cc
+          - tableau.com
+          - onshape.com
+          - ansys.com
+      - name: Совместная работа и продуктивность
+        domains:
+          - mattermost.com
+          - getoutline.com
+          - clickup.com
+          - zapier.com
+          - document360.io
+          - document360.com
+          - mailerlite.com
+          - kmail-lists.com
+          - surveymonkey.com
+          - research.net
+          - semrush.com
+          - flourish.studio
+          - zerossl.com
+          - wetransfer.com
+          - filebin.net
+          - streamable.com
+          - tutanota.com
+          - mailinator.com
+          - tempmail.plus
+          - grizzlysms.com
+          - qwant.com
+          - arc.net
+          - diabrowser.com
+          - meetup.com
+          - credly.com
+          - typing.com
+          - htmhell.dev
+          - andrevi.ch
+          - miracleptr.wordpress.com
+          - buanzo.org
+          - wikidot.com
+          - wdfiles.com
+  - name: Дизайн и творчество
+    services:
+      - name: Adobe
+        domains:
+          - adobe.com
+          - adobe.io
+          - adobe.net
+      - name: Canva
+        domains:
+          - canva.com
+          - canva.dev
+          - kaleido.ai
+      - name: Autodesk и САПР
+        domains:
+          - autodesk.com
+          - cdn.web-platform.io
+          - sketchup.com
+          - chaos.com
+          - multisim.com
+          - ni.com
+          - verificationacademy.com
+          - home.by.me
+      - name: Affinity и прочее
+        domains:
+          - affinity.studio
+          - nitropdf.com
+          - pexels.com
+          - freeimages.com
+          - alphacoders.com
+          - zedge.net
+          - imgur.com
+  - name: Стриминг, видео и медиа
+    services:
+      - name: Netflix
+        domains:
+          - netflix.com
+          - netflix.net
+          - netflix.ca
+          - netflixinvestor.com
+          - netflixtechblog.com
+          - fast.com
+          - nflxext.com
+          - nflximg.com
+          - nflximg.net
+          - nflxso.net
+          - nflxsearch.net
+          - nflxvideo.net
+      - name: HBO Max
+        domains:
+          - max.com
+          - hbomax.com
+      - name: Disney+
+        domains:
+          - disneyplus.com
+      - name: Crunchyroll
+        domains:
+          - crunchyroll.com
+          - v.vrv.co
+          - vod-fy.crunchyrollcdn.com
+          - a-vrv.akamaized.net
+      - name: Amazon Prime Video
+        domains:
+          - primevideo.com
+          - gaming.amazon.com
+      - name: 'Twitch (частично: видео и GraphQL API)'
+        domains:
+          - usher.ttvnw.net
+          - gql.twitch.tv
+      - name: Sky, FX и другие телеканалы
+        domains:
+          - sky.com
+          - digitalcontent.sky
+          - skycdp.com
+          - fxnetworks.com
+          - global.fncstatic.com
+          - truthsocial.com
+          - metopera.org
+      - name: Метаданные для Plex, Jellyfin и *arr
+        domains:
+          - themoviedb.org
+          - tmdb.org
+          - tmdb.com
+          - tmdb-image-prod.b-cdn.net
+          - theaudiodb.com
+          - servarr.com
+          - prowlarr.com
+          - lidarr.audio
+          - torrenteditor.com
+          - kinogo.la
+          - cdromance.org
+          - philiascans.org
+          - manybooks.net
+  - name: Музыка
+    services:
+      - name: Стриминг
+        domains:
+          - spotify.com
+          - deezer.com
+          - tidal.com
+          - qobuz.com
+          - last.fm
+          - mixcloud.com
+          - widgetapp.stream
+          - x-minus.pro
+      - name: Работа со звуком
+        domains:
+          - spitfireaudio.com
+          - uaudio.com
+  - name: Игры
+    services:
+      - name: Supercell
+        domains:
+          - supercell.com
+          - clashofclans.com
+          - brawlstarsgame.com
+          - clashroyaleapp.com
+          - squadbustersgame.com
+          - haydaygame.com
+      - name: NVIDIA GeForce NOW и ресурсы для разработчиков
+        domains:
+          - geforcenow.com
+          - gfn.am
+          - developer.nvidia.com
+          - install.launcher.omniverse.nvidia.com
+      - name: Авторизация Xbox Live
+        domains:
+          - xsts.auth.xboxlive.com
+      - name: WB Games и Marvel Snap
+        domains:
+          - wbgames.com
+          - wbagora.com
+          - marvelsnap.com
+          - seconddinnertech.com
+          - snapgametech.com
+      - name: Игровые магазины и прочее
+        domains:
+          - g2a.com
+          - eneba.com
+          - gamestop.com
+          - shop.gameloft.com
+          - guilded.gg
+          - ghostrc.game.idtech.services
+          - pcgamesn.com
+  - name: Платежи, финансы и покупки
+    services:
+      - name: Wise
+        domains:
+          - wise.com
+          - transferwise.com
+      - name: Patreon
+        domains:
+          - patreon.com
+          - patreonusercontent.com
+      - name: Paddle
+        domains:
+          - paddle.com
+          - paddlestatus.com
+          - profitwell.com
+          - paritydeals.com
+      - name: Другие платёжные и биллинговые сервисы
+        domains:
+          - squareup.com
+          - klarna.com
+          - paywithmoon.com
+          - coingate.com
+          - intuit.com
+          - quicknode.com
+          - onfastspring.com
+          - exchanger.bits.media
+          - gonift.com
+      - name: Краудфандинг и донаты
+        domains:
+          - buymeacoffee.com
+          - gofundme.com
+          - gofund.me
+      - name: Фриланс и поиск работы
+        domains:
+          - upwork.com
+          - indeed.com
+          - swapd.co
+          - legalshield.com
+      - name: Магазины и путешествия
+        domains:
+          - nike.com
+          - adidas.com
+          - abercrombie.com
+          - hollisterco.com
+          - primark.com
+          - timberland.de
+          - ikea.com
+          - etsy.com
+          - walmart.com
+          - bestbuy.com
+          - sephora.com
+          - iherb.com
+          - groupon.com
+          - dyson.com
+          - lyst.com
+          - chainreactioncycles.com
+          - monoprice.com
+          - cdw.com
+          - disctech.com
+          - btod.com
+          - shinyhardware.co.uk
+          - alza.hu
+          - carrefouruae.com
+          - housebrand.com
+          - hotels.com
+          - aircanada.com
+          - flyertalk.com
+          - techbargains.com
+          - volkswagen-classic-parts.com
+          - newsroom.porsche.com
+          - ducati.com
+          - sigsauer.com
+          - penguinrandomhouse.com
+          - penguin.com
+  - name: Оборудование и производители электроники
+    services:
+      - name: Intel
+        domains:
+          - intel.com
+          - intel.de
+          - intel.nl
+          - geolocation.onetrust.com
+      - name: Полупроводники и дистрибьюторы
+        domains:
+          - qualcomm.com
+          - ti.com
+          - analog.com
+          - nxp.com
+          - tsmc.com
+          - mouser.com
+          - mouser.fi
+          - newark.com
+          - arduino.cc
+          - keysight.com
+          - flir.com
+          - flir.eu
+          - fluke.com
+          - flukenetworks.com
+          - xrite.com
+          - se.com
+          - schneider-electric.com
+          - new.abb.com
+          - bosch.com
+          - boschautoparts.com
+          - boschaftermarket.com
+          - cpu-monkey.com
+          - gpu-monkey.com
+          - intuitibits.com
+      - name: Облака бытовой техники и гаджетов
+        domains:
+          - lgthinq.com
+          - lgeapi.com
+          - xiaomi.eu
+          - singlekey-id.com
+          - home-connect.com
+          - support.xerox.com
+          - corsair.com
+          - synoforum.com
+          - amazfitwatchfaces.com
+          - plugshare.com
+          - contabo.com
+  - name: Информационная безопасность
+    services:
+      - name: Вендоры
+        domains:
+          - bitdefender.com
+          - pandasecurity.com
+          - clamav.net
+          - watchguard.com
+          - data-cdn.mbamupdates.com
+          - community.sophos.com
+          - intelix.sophos.com
+          - forum.netgate.com
+          - spiceworks.com
+      - name: Анализ и фиды
+        domains:
+          - cisecurity.org
+          - talosintelligence.com
+          - hybrid-analysis.com
+          - joesandbox.com
+          - tria.ge
+          - cvedetails.com
+          - snort.org
+          - easydmarc.com
+  - name: Новости, справочники, спорт и прочее
+    services:
+      - name: Здоровье и справочники
+        domains:
+          - healthline.com
+          - medicalnewstoday.com
+          - clevelandclinic.org
+          - iedb.org
+          - snapgene.com
+          - ldoceonline.com
+          - akc.org
+          - cats.com
+          - myheritage.com
+          - ancestry.com
+      - name: Погода
+        domains:
+          - weather.com
+          - wunderground.com
+          - ntp.msn.com
+      - name: Спорт
+        domains:
+          - nba.com
+          - nfl.com
+          - f1.com
+          - formula1.com
+          - premierleague.com
+          - footballapi.pulselive.com
+          - broncosportforum.com
+          - strava.com
+      - name: Технические медиа
+        domains:
+          - lifehacker.com
+          - pcmag.com
+          - extremetech.com
+          - sdxcentral.com
+          - all3dp.com
+          - yeggi.com
+          - telemetr.io
+          - ocstore.com
+          - mssg.me
+          - glpals.com
+          - gpsonextra.net
+          - xtracloud.net
+          - att.com
+          - w.atwiki.jp
+  - name: Без категории
+    services:
+      - name: Прочее
+        domains:
+          - backend-v2.crixet.com
+          - mintmobile.com
+disabled:
+  - name: Общая инфраструктура Google и Firebase
+    note: >-
+      Через эти домены идёт и посторонний трафик. Если направить их через прокси, ломаются приложения
+      Android и синхронизация браузера. Включать по одному, только если соответствующий сервис
+      не работает.
+    domains:
+      - clients6.google.com
+      - firebaseinstallations.googleapis.com
+      - lookerstudio.google.com
+      - news.google.com
+      - suggestqueries.google.com
+  - name: Сообщается, но не подтверждено
+    note: >-
+      О блокировке сообщают, но подтвердить не удалось. Обычно это значит, что блокировка снята
+      или относится к аккаунту, а не к адресу. Проверьте со своего подключения перед включением.
+    domains:
+      - hub.docker.com
+      - registry-1.docker.io
+      - auth.docker.io
+      - production.cloudflare.docker.com
+      - figma.com
+      - slack.com
+      - api.githubcopilot.com
+      - copilot-proxy.githubusercontent.com
+      - grammarly.com
+      - coursera.org
+      - booking.com
+      - airbnb.com
+      - paypal.com
+      - stripe.com
+      - console.aws.amazon.com
+      - portal.azure.com
+      - console.cloud.google.com
+passthrough:
+  note: >-
+    Российские сервисы, которые сами блокируют зарубежные адреса, включая казахстанские. Должны
+    разрешаться обычным образом и подключаться напрямую.
+  domains:
+    - 1018213540.rsc.cdn77.org
+    - avtodor-tr.ru
+    - b2c-ticket-sentry.onelya.ru
+    - bitrix.info
+    - bkvet.ru
+    - cdn1.ozonusercontent.com
+    - cms1.dzvr.ru
+    - consultant.ru
+    - counter.yadro.ru
+    - dzvr.ru
+    - emex.ru
+    - fairplay-proxy.ott.yandex.ru
+    - fssp.gov.ru
+    - gorzdrav.spb.ru
+    - gosuslugi.ru
+    - gov.ru
+    - graphql.kinopoisk.ru
+    - gu-st.ru
+    - lemanapro.ru
+    - leroymerlin.ru
+    - magnit.ru
+    - mobileapp.russianpost.ru
+    - mos.ru
+    - mosenergosbyt.ru
+    - mosreg.ru
+    - nalog.ru
+    - ozon.ru
+    - pesc.ru
+    - pochta.ru
+    - reso.ru
+    - rosreestr.gov.ru
+    - rzd-bonus.ru
+    - rzd.ru
+    - sys.refocus.ru
+    - vshark.ttk.ru
+    - widevine-proxy.ott.yandex.ru
+    - xn--90aijkdmaud0d.xn--p1ai
+    - yandex.net

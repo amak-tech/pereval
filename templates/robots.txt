@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dnsmasq-geoblock.conf
+Disallow: /nginx.conf
+Disallow: /services.yaml
+Disallow: /generate.py
+Disallow: /templates/
+
+Sitemap: ${origin}/sitemap.xml

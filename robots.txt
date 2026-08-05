@@ -2,6 +2,8 @@ User-agent: *
 Allow: /
 Disallow: /dnsmasq-geoblock.conf
 Disallow: /nginx.conf
-Disallow: /*.map$
+Disallow: /services.yaml
+Disallow: /generate.py
+Disallow: /templates/
 
 Sitemap: https://pereval.example/sitemap.xml

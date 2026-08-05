@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<!--
+  Шаблон страницы. generate.py подставляет сюда значения из списка ниже и больше
+  ничего не меняет: вся вёрстка, стили, скрипты и текст живут здесь.
+
+  Скалярные подстановки:
+    $${name}            название сервиса из meta.name
+    $${ip}              адрес прокси-сервера (аргумент командной строки)
+    $${origin}          адрес сайта из meta.origin, без завершающего слэша
+    $${date}            дата обновления из meta.date
+    $${total}           сколько всего активных доменов
+    $${category_count}  сколько категорий
+
+  Блоки, собранные из YAML:
+    $${toc}                оглавление категорий (ссылки)
+    $${cards}              карточки категорий со всеми сервисами и доменами
+    $${disabled}           группы отключённых доменов вместе с пояснениями
+    $${passthrough_note}   пояснение к passthrough
+    $${passthrough_chips}  домены passthrough
+    $${faq_entities}       JSON-массив для FAQPage, собирается из блоков
+                           details class="faq" ниже — вопросы и ответы
+                           редактируются в одном месте, здесь
+
+  Литеральный знак доллара в шаблоне нужно удваивать: $$$$ даёт один доллар.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DNS-прокси для доступа к ChatGPT, Claude и Gemini — ${name}</title>
+<meta name="description" content="Доступ к ChatGPT, Claude, Gemini, Netflix и ещё ${total} доменам, закрытым для России и Беларуси. Один адрес DNS в настройках сети, без VPN-клиента.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="${origin}/">
+<link rel="alternate" hreflang="ru" href="${origin}/">
+<link rel="alternate" hreflang="x-default" href="${origin}/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${name}">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:url" content="${origin}/">
+<meta property="og:title" content="DNS-прокси для доступа к ChatGPT, Claude и Gemini — ${name}">
+<meta property="og:description" content="DNS-сервер в Казахстане, который возвращает доступ к ${total} доменам сервисов, закрытых для России и Беларуси: ChatGPT, Claude, Gemini, JetBrains, Netflix, Spotify. Без VPN-клиента — один адрес в настройках сети.">
+<meta property="article:modified_time" content="${date}">
+<!-- og:image требует PNG или JPEG 1200x630. Сконвертируйте og-image.svg и раскомментируйте:
+<meta property="og:image" content="${origin}/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${name} — DNS-прокси для доступа к закрытым сервисам">
+-->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DNS-прокси для доступа к ChatGPT, Claude и Gemini — ${name}">
+<meta name="twitter:description" content="DNS-сервер в Казахстане, который возвращает доступ к ${total} доменам сервисов, закрытых для России и Беларуси: ChatGPT, Claude, Gemini, JetBrains, Netflix, Spotify. Без VPN-клиента — один адрес в настройках сети.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"WebSite","@id":"${origin}/#website","url":"${origin}/","name":"${name}",
+ "description":"DNS-сервер в Казахстане, который возвращает доступ к ${total} доменам сервисов, закрытых для России и Беларуси.",
+ "inLanguage":"ru-RU"},
+{"@type":"WebPage","@id":"${origin}/#webpage","url":"${origin}/",
+ "name":"DNS-прокси для доступа к ChatGPT, Claude и Gemini — ${name}",
+ "description":"Доступ к ChatGPT, Claude, Gemini, Netflix и ещё ${total} доменам, закрытым для России и Беларуси.",
+ "inLanguage":"ru-RU","isPartOf":{"@id":"${origin}/#website"},"dateModified":"${date}"},
+{"@type":"Service","@id":"${origin}/#service","name":"${name}",
+ "serviceType":"DNS-прокси для доступа к геозаблокированным сервисам",
+ "description":"Доступ к ${total} доменам сервисов, закрытых для России и Беларуси.",
+ "areaServed":[{"@type":"Country","name":"Россия"},{"@type":"Country","name":"Беларусь"}],
+ "provider":{"@type":"Organization","name":"${name}","url":"${origin}/"}},
+{"@type":"FAQPage","@id":"${origin}/#faq","mainEntity":${faq_entities}},
+{"@type":"HowTo","@id":"${origin}/#howto","name":"Как настроить DNS-сервер на компьютере",
+ "inLanguage":"ru-RU","totalTime":"PT2M","step":[
+ {"@type":"HowToStep","position":1,"name":"Открыть настройки сети",
+  "text":"Откройте настройки сетевого подключения на macOS, Windows или Linux."},
+ {"@type":"HowToStep","position":2,"name":"Перейти к настройкам DNS",
+  "text":"Найдите раздел DNS и переключите его с автоматического режима на ручной."},
+ {"@type":"HowToStep","position":3,"name":"Указать адрес сервера",
+  "text":"Введите ${ip} как единственный DNS-сервер и сохраните настройки."},
+ {"@type":"HowToStep","position":4,"name":"Отключить шифрованный DNS в браузере",
+  "text":"В Chrome, Edge и Firefox выключите DNS-over-HTTPS, иначе системные настройки будут проигнорированы."}]}]}
+</script>
+<style>
+:root{--bg:#fbfbfa;--panel:#fff;--ink:#1a1a19;--mute:#6b6b68;--line:#e6e5e2;
+--accent:#0b5cff;--warn:#8a5300;--warnbg:#fff8e6;--code:#f4f4f2}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1c1c1a;--ink:#eeeeec;
+--mute:#a3a29e;--line:#2e2e2b;--accent:#7aa2ff;--warn:#e0b055;--warnbg:#2a2318;--code:#232320}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+.wrap{max-width:940px;margin:0 auto;padding:0 20px 80px}
+header{border-bottom:1px solid var(--line);background:var(--panel)}
+header .wrap{padding:44px 20px 36px}
+.brand{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mute);margin:0 0 8px}
+h1{font-size:34px;line-height:1.15;margin:0 0 12px;letter-spacing:-.02em}
+.lede{font-size:18px;color:var(--mute);margin:0;max-width:64ch}
+h2{font-size:22px;margin:56px 0 14px;letter-spacing:-.01em;scroll-margin-top:16px}
+h3{font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:10px}
+.subhead{font-size:13px;margin:18px 0 8px;color:var(--mute);font-weight:600;
+text-transform:uppercase;letter-spacing:.05em;display:block}
+p{max-width:70ch}
+a{color:var(--accent)}
+code{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+background:var(--code);padding:2px 6px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:10px;
+padding:14px 16px;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px}
+.ipbox{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:26px 0 0;
+background:var(--code);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.ipbox .lab{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0}
+.ipbox .ip{font:600 24px/1 ui-monospace,Menlo,monospace;letter-spacing:-.01em;margin:6px 0 0}
+button.copy{font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);
+background:var(--panel);color:var(--ink);border-radius:7px;padding:6px 12px}
+button.copy:hover{border-color:var(--accent);color:var(--accent)}
+.steps{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+margin:18px 0 0;padding:0;list-style:none;counter-reset:s}
+.steps li{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+padding:16px 18px;counter-increment:s;font-size:15px}
+.steps li::before{content:counter(s);display:grid;place-items:center;width:24px;height:24px;
+border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:600;
+margin-bottom:10px}
+.note{border-left:3px solid var(--warn);background:var(--warnbg);border-radius:0 10px 10px 0;
+padding:14px 18px;margin:20px 0}
+.note strong{color:var(--warn)}
+.note p{margin:8px 0 0}.note p:first-of-type{margin-top:0}
+.tabs{display:flex;gap:6px;margin:18px 0 0;border-bottom:1px solid var(--line)}
+.tabs button{font:inherit;font-size:15px;cursor:pointer;background:none;border:0;
+border-bottom:2px solid transparent;padding:10px 16px;color:var(--mute)}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.panel>h3:first-child{margin-top:18px}
+.panel ol{padding-left:22px}.panel li{margin:10px 0}
+.js .panel:not(.active){display:none}
+.js .panel>h3:first-child{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 8px}
+.toc a{font-size:14px;text-decoration:none;color:var(--ink);background:var(--panel);
+border:1px solid var(--line);border-radius:20px;padding:5px 13px}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.toc a span{color:var(--mute);font-size:12px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#q{width:100%;font:inherit;padding:11px 14px;border-radius:10px;border:1px solid var(--line);
+background:var(--panel);color:var(--ink);margin:14px 0 0}
+.cat{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+padding:20px 22px;margin:14px 0;scroll-margin-top:20px}
+.cat>h3{margin-top:0}
+.cat .count{font-size:12px;color:var(--mute);font-weight:400;background:var(--code);
+border-radius:20px;padding:2px 9px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+code.d{font-size:12.5px;background:var(--code)}
+code.d.off{opacity:.55;text-decoration:line-through}
+.sub[hidden],.cat[hidden]{display:none}
+.faq{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+padding:14px 18px;margin:10px 0}
+.faq summary{cursor:pointer;font-weight:600;font-size:16px}
+.faq p{margin:10px 0 0;color:var(--mute)}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+footer{border-top:1px solid var(--line);margin-top:60px;padding-top:22px;
+font-size:14px;color:var(--mute)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="brand">DNS-прокси · Казахстан</p>
+    <h1>${name} — доступ к сервисам, закрытым для России и Беларуси</h1>
+    <p class="lede">Если ChatGPT отвечает «not available in your country», Claude
+    не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не
+    в блокировках Роскомнадзора. ${name} — частный DNS-сервер в Казахстане, который
+    возвращает доступ к ${total} доменам таких сервисов: ChatGPT, Claude, Gemini, JetBrains,
+    Notion, Netflix, Spotify и сотням других. Достаточно указать один адрес в настройках
+    сети: без VPN-клиента, без расширений для браузера и без настройки каждого приложения
+    отдельно.</p>
+    <div class="ipbox">
+      <div>
+        <p class="lab">DNS-сервер</p>
+        <p class="ip">${ip}</p>
+      </div>
+      <button class="copy" type="button"
+        onclick="navigator.clipboard.writeText('${ip}');this.textContent='Скопировано'">Копировать</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<h2 id="how">Как это работает</h2>
+<p>Сервер делает две вещи. Как DNS-резолвер он отвечает только на запросы к доменам
+из списка ниже, возвращая вместо настоящего адреса свой собственный. Как TCP-прокси
+он читает имя хоста в начале TLS-рукопожатия и передаёт соединение по назначению —
+сервис видит адрес в Казахстане и пускает вас.</p>
+<ol class="steps">
+  <li>Ноутбук спрашивает у сервера адрес <code>claude.ai</code>.</li>
+  <li>Сервер отвечает своим адресом — <code>${ip}</code>.</li>
+  <li>Ноутбук открывает TLS-соединение туда.</li>
+  <li>Сервер передаёт его в Anthropic. Они видят Казахстан.</li>
+</ol>
+
+<div class="note">
+  <p><strong>Шифрование не затрагивается.</strong> Прокси ничего не расшифровывает: он
+  читает только имя сервера, которое браузер и так передаёт в открытом виде. Ноутбук
+  по-прежнему проверяет настоящий сертификат <code>claude.ai</code>, выданный Anthropic, —
+  устанавливать ничего не нужно, и прочитать ваш трафик на этом сервере невозможно.</p>
+  <p><strong>Остальное работает как раньше.</strong> Любой домен, которого нет в списке,
+  разрешается обычным образом и подключается напрямую. Российских и белорусских сайтов —
+  <code>gosuslugi.ru</code>, <code>ozon.ru</code>, банков, <code>kinopoisk.ru</code> —
+  прокси не касается вовсе, и это важно: многие из них сами блокируют зарубежные адреса.</p>
+</div>
+
+<h2 id="setup">Как настроить DNS на macOS, Windows и Linux</h2>
+<div class="tabs" role="tablist" aria-label="Операционная система">
+  <button type="button" role="tab" id="tab-mac" aria-controls="mac" aria-selected="true">macOS</button>
+  <button type="button" role="tab" id="tab-win" aria-controls="win" aria-selected="false">Windows</button>
+  <button type="button" role="tab" id="tab-lin" aria-controls="lin" aria-selected="false">Linux</button>
+</div>
+
+<div class="panel active" id="mac" role="tabpanel" aria-labelledby="tab-mac">
+  <h3>Настройка DNS на macOS</h3>
+  <h4 class="subhead">Через системные настройки</h4>
+  <ol>
+    <li>Откройте «Системные настройки» → «Сеть».</li>
+    <li>Выберите активное подключение (Wi-Fi или Ethernet) и нажмите «Подробнее…».</li>
+    <li>Перейдите на вкладку «DNS».</li>
+    <li>В разделе «DNS-серверы» удалите существующие записи, нажмите <strong>+</strong>
+        и добавьте <code>${ip}</code>.</li>
+    <li>Нажмите «ОК», затем «Применить».</li>
+  </ol>
+  <p>Повторите для каждой сети, которой пользуетесь: настройка привязана к интерфейсу,
+  поэтому Wi-Fi и Ethernet настраиваются отдельно.</p>
+  <h4 class="subhead">Или через терминал</h4>
+<pre><code>networksetup -setdnsservers Wi-Fi ${ip}
+dscacheutil -flushcache &amp;&amp; sudo killall -HUP mDNSResponder
+
+# проверить
+networksetup -getdnsservers Wi-Fi
+# вернуть настройки роутера (DHCP)
+networksetup -setdnsservers Wi-Fi empty</code></pre>
+</div>
+
+<div class="panel" id="win" role="tabpanel" aria-labelledby="tab-win">
+  <h3>Настройка DNS на Windows</h3>
+  <h4 class="subhead">Через «Параметры»</h4>
+  <ol>
+    <li>Откройте «Параметры» → «Сеть и Интернет».</li>
+    <li>Нажмите на своё подключение («Wi-Fi» или «Ethernet»), затем
+        «Свойства оборудования».</li>
+    <li>Рядом с «Назначение DNS-сервера» нажмите «Изменить».</li>
+    <li>Переключите список с «Автоматически (DHCP)» на «Вручную».</li>
+    <li>Включите <strong>IPv4</strong> и введите <code>${ip}</code> в поле
+        «Предпочтительный DNS». Альтернативный оставьте пустым.</li>
+    <li>IPv6 оставьте выключенным и нажмите «Сохранить».</li>
+  </ol>
+  <h4 class="subhead">Или через PowerShell от администратора</h4>
+<pre><code>Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses ${ip}
+Clear-DnsClientCache
+
+# проверить
+Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi"
+# вернуть DHCP
+Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses</code></pre>
+  <p>Если не знаете имя интерфейса, выполните <code>Get-NetAdapter</code>.</p>
+</div>
+
+<div class="panel" id="lin" role="tabpanel" aria-labelledby="tab-lin">
+  <h3>Настройка DNS на Linux</h3>
+  <h4 class="subhead">NetworkManager (Ubuntu, Fedora, большинство окружений)</h4>
+<pre><code>nmcli con show                       # узнать имя подключения
+nmcli con mod "&lt;имя&gt;" ipv4.dns "${ip}"
+nmcli con mod "&lt;имя&gt;" ipv4.ignore-auto-dns yes
+nmcli con up "&lt;имя&gt;"
+
+# проверить
+resolvectl status | grep -A2 'DNS Servers'</code></pre>
+  <p>Через графический интерфейс: «Настройки» → «Сеть» → значок шестерёнки → «IPv4»,
+  отключите автоматический DNS и введите адрес вручную.</p>
+  <h4 class="subhead">Напрямую через systemd-resolved</h4>
+<pre><code>resolvectl dns &lt;интерфейс&gt; ${ip}
+resolvectl domain &lt;интерфейс&gt; '~.'
+resolvectl flush-caches</code></pre>
+  <h4 class="subhead">Без NetworkManager</h4>
+<pre><code># /etc/resolv.conf — DHCP перезапишет файл, если его не защитить
+nameserver ${ip}</code></pre>
+</div>
+
+<div class="note">
+  <p><strong>Отключите шифрованный DNS в браузере, иначе ничего не заработает.</strong>
+  Chrome, Edge и Firefox используют собственный DNS-over-HTTPS-резолвер, который полностью
+  игнорирует системные настройки, поэтому подмена адресов просто не применится.</p>
+  <p><strong>Chrome и Edge:</strong> «Настройки» → «Конфиденциальность и безопасность» →
+  «Безопасность» → отключите «Использовать безопасный DNS».<br>
+  <strong>Firefox:</strong> «Настройки» → «Приватность и защита» → «DNS через HTTPS» →
+  выберите «Отключено».<br>
+  <strong>Safari:</strong> менять ничего не нужно, он следует системным настройкам.</p>
+  <p><strong>Если сайт открывается, но всё равно сообщает о блокировке</strong> — скорее
+  всего соединение прошло по IPv6, минуя подмену. Отключите IPv6 на интерфейсе или
+  подключитесь к сети без IPv6.</p>
+</div>
+
+<h2 id="check">Проверка</h2>
+<pre><code># в ответе должен быть ${ip}, а не настоящий адрес Anthropic
+nslookup claude.ai
+
+# должно вывести 200 или 307
+curl -sI https://claude.ai/ | head -1</code></pre>
+<p>Если <code>nslookup</code> возвращает не <code>${ip}</code>, настройки DNS не применились.
+Если адрес верный, но страница не открывается, проверьте, что сеть не блокирует исходящие
+соединения на порт 443.</p>
+
+<h2 id="services">Какие сервисы охвачены</h2>
+<p>${total} домена в ${category_count} категориях. Поддомены включаются автоматически:
+<code>anthropic.com</code> покрывает и <code>api.anthropic.com</code>, и любой другой хост
+внутри.</p>
+<label class="vh" for="q">Поиск по списку доменов</label>
+<input id="q" type="search" placeholder="Поиск — например claude, netflix, jetbrains, .ai" autocomplete="off">
+<nav class="toc" aria-label="Категории сервисов">${toc}</nav>
+${cards}
+
+<h2 id="faq">Частые вопросы</h2>
+<details class="faq"><summary>Чем это отличается от VPN?</summary><p>VPN направляет через себя весь трафик и обычно заметно снижает скорость. Здесь через сервер идут только соединения с доменами из списка — всё остальное подключается напрямую, как и раньше. Ничего не нужно включать и выключать: настроили один раз в свойствах сети, и оно работает в браузере, в терминале и в приложениях одновременно.</p></details>
+<details class="faq"><summary>Нужно ли что-то устанавливать?</summary><p>Нет. Ни клиента, ни расширения, ни сертификата. Меняется одно поле в настройках сети — адрес DNS-сервера.</p></details>
+<details class="faq"><summary>Работает ли это на iPhone и Android?</summary><p>По Wi-Fi — да: в свойствах сети укажите DNS-сервер вручную, как на компьютере. В мобильном интернете — нет: iOS и Android не дают задать DNS для сотовой сети, а поле «Приватный DNS» в Android принимает только имя хоста DNS-over-TLS, а не IP-адрес.</p></details>
+<details class="faq"><summary>Снизится ли скорость интернета?</summary><p>Только для доменов из списка — их трафик идёт через Казахстан, и к задержке добавляется путь до Алматы. Все остальные сайты, включая российские, подключаются напрямую и работают с прежней скоростью.</p></details>
+<details class="faq"><summary>Видит ли сервер мой трафик?</summary><p>Нет. TLS-соединение не расшифровывается: сервер читает только имя хоста, которое браузер и так передаёт открытым текстом, и пересылает соединение дальше байт в байт. Сертификат проверяет ваше устройство, и он настоящий — от Anthropic, Google или Netflix, а не подставной.</p></details>
+<details class="faq"><summary>Сервис всё равно пишет, что недоступен в моей стране. Почему?</summary><p>Три обычные причины. Первая: в браузере включён шифрованный DNS (DNS-over-HTTPS) и системные настройки игнорируются. Вторая: соединение прошло по IPv6, минуя подмену адреса. Третья: сервис проверяет не адрес, а страну аккаунта или платёжной карты — так работают лицензии JetBrains и подписки Adobe, и здесь прокси не поможет.</p></details>
+<details class="faq"><summary>Нужного домена нет в списке. Что делать?</summary><p>Он будет разрешаться обычным образом и останется заблокированным. Пришлите адрес — домен добавляется в список за пару минут, вместе со всеми поддоменами.</p></details>
+
+<h2 id="off">Отключено намеренно</h2>
+${disabled}
+
+<h2 id="ru">Российские сервисы продолжают работать</h2>
+<p>${passthrough_note}</p>
+<div class="chips">${passthrough_chips}</div>
+
+<h2 id="limits">Что важно знать об ограничениях</h2>
+<table>
+  <caption class="vh">Ограничения DNS-прокси</caption>
+  <thead><tr><th scope="col">Ситуация</th><th scope="col">Что происходит</th></tr></thead>
+  <tbody>
+  <tr><td>Сервис проверяет страну аккаунта или платёжного средства, а не адрес</td>
+      <td>Прокси не поможет — так работают лицензии JetBrains и подписки Adobe</td></tr>
+  <tr><td>Региональные лицензии на контент</td>
+      <td>Вы получаете казахстанский каталог; Disney+ и HBO Max в Казахстане могут быть
+          недоступны вовсе</td></tr>
+  <tr><td>Мобильные приложения с закреплением сертификата (pinning)</td>
+      <td>Работают: сертификат настоящий, соединение сквозное</td></tr>
+  <tr><td>Домена нет в списке</td>
+      <td>Он разрешается обычным образом и остаётся заблокированным. Пришлите его —
+          добавим</td></tr>
+  <tr><td>Сайты, заблокированные внутри России, а не блокирующие Россию</td>
+      <td>Не входит в задачу. Этот сервер снимает только ограничения со стороны самих
+          сервисов</td></tr>
+  </tbody>
+</table>
+
+</main>
+
+<footer class="wrap">
+  <p>Список доменов составлен на основе
+  <a href="https://github.com/itdoginfo/allow-domains" rel="noopener">itdoginfo/allow-domains</a>
+  (<code>Categories/geoblock.lst</code>, <code>Services/google_ai.lst</code>).
+  Обновлено ${date}.</p>
+</footer>
+
+<script>
+document.documentElement.classList.add('js');
+(function(){
+  var tabs=[].slice.call(document.querySelectorAll('.tabs button'));
+  function sel(b){
+    tabs.forEach(function(x){
+      var on=x===b; x.setAttribute('aria-selected',on); x.tabIndex=on?0:-1;
+      document.getElementById(x.getAttribute('aria-controls')).classList.toggle('active',on);
+    });
+  }
+  tabs.forEach(function(b,i){
+    b.onclick=function(){sel(b)};
+    b.onkeydown=function(ev){
+      var d=ev.key==='ArrowRight'?1:ev.key==='ArrowLeft'?-1:0;
+      if(!d)return; ev.preventDefault();
+      var n=tabs[(i+d+tabs.length)%tabs.length]; n.focus(); sel(n);
+    };
+  });
+  var q=document.getElementById('q');
+  if(!q)return;
+  q.oninput=function(){
+    var v=q.value.trim().toLowerCase();
+    document.querySelectorAll('.cat').forEach(function(cat){
+      var any=false;
+      cat.querySelectorAll('.sub').forEach(function(s){
+        var hit=!v||s.dataset.search.indexOf(v)>-1; s.hidden=!hit; any=any||hit;
+      });
+      cat.hidden=!any;
+    });
+  };
+})();
+</script>
+</body>
+</html>
