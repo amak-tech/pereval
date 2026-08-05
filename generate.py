@@ -66,6 +66,7 @@ TEMPLATES = OrderedDict([
     ("dnsmasq.conf", "dnsmasq-geoblock.conf"),
     ("nginx.conf", "nginx.conf"),
     ("nginx-sni-allow.map", "nginx-sni-allow.map"),
+    ("nginx-host-allow.map", "nginx-host-allow.map"),
     ("index.html", "index.html"),
 ])
 SEO_TEMPLATES = OrderedDict([
@@ -348,23 +349,21 @@ def conf_body(doc, ip):
     return "\n".join(out)
 
 
-def sni_entries(doc):
+def map_entries(doc, value):
     """Ключи для map в nginx: только активные домены, по одному на строку.
 
     Ключ «.example.com» вместе с директивой hostnames совпадает и с самим
     доменом, и со всеми поддоменами — то же покрытие, что address=/x/ в dnsmasq.
-    Значение — тот же хост с портом 443, то есть сессия уходит на настоящий
-    origin. Всё, чего в списке нет, попадает в default и обрывается.
+    Всё, чего в списке нет, попадает в default и обрывается.
     """
-    width = max((len(d) for d, _, _ in doc.active()), default=0) + 1
+    width = max((len(d) for d, _, _ in doc.active()), default=0) + 2
     out = []
     for i, c in enumerate(doc.categories, 1):
         out.append(f"# {i}. {c.name}")
-        for s in c.services:
-            out.append(f"#   {s.name}")
-            for d in s.domains:
-                key = "." + d
-                out.append(f"{key:<{width + 1}} $ssl_preread_server_name:443;")
+        for svc in c.services:
+            out.append(f"#   {svc.name}")
+            for d in svc.domains:
+                out.append(f"{'.' + d:<{width}} {value};")
         out.append("")
     return "\n".join(out)
 
@@ -428,7 +427,8 @@ def build_values(doc, ip, source, templates_dir):
         "body": conf_body(doc, ip),
         "passthrough": "\n".join(f"# passthrough: {d}"
                                  for d in sorted(set(doc.passthrough.domains))),
-        "sni_entries": sni_entries(doc),
+        "sni_entries": map_entries(doc, "$ssl_preread_server_name:443"),
+        "host_entries": map_entries(doc, "$host"),
     }
     # FAQPage собирается из самой страницы, но только если шаблон его просит —
     # иначе отсутствие блоков FAQ маскировало бы настоящие ошибки шаблона.
