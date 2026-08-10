@@ -152,6 +152,7 @@ categories:
           - dvxdiz880bm14.cloudfront.net
           - api.app.prod.grazie.aws.intellij.net
           - api.ai.jetbrains.com.cn
+          - download.jetbrains.com
       - name: HashiCorp
         domains:
           - hashicorp.com
