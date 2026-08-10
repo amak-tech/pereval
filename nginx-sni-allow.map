@@ -2,7 +2,7 @@
 # SNI-allowlist для блока stream в nginx.
 #
 # СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
-# Разрешено 489 доменов в 11 категориях. Дата: 2026-08-05
+# Разрешено 490 доменов в 11 категориях. Дата: 2026-08-05
 #
 # Подключается внутрь map в nginx.conf:
 #     map $ssl_preread_server_name $sni_upstream {
@@ -121,6 +121,7 @@
 .qodana.cloud                                $ssl_preread_server_name:443;
 .gvt1.com                                    $ssl_preread_server_name:443;
 .dvxdiz880bm14.cloudfront.net                $ssl_preread_server_name:443;
+.d1do0znm134sif.cloudfront.net               $ssl_preread_server_name:443;
 .api.app.prod.grazie.aws.intellij.net        $ssl_preread_server_name:443;
 .api.ai.jetbrains.com.cn                     $ssl_preread_server_name:443;
 .download.jetbrains.com                      $ssl_preread_server_name:443;

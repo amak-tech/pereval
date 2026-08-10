@@ -33,6 +33,7 @@ dnsmasq_options:
   - cache-size=10000
   - bogus-priv
   - bind-interfaces
+  - filter-AAAA
 categories:
   - name: ИИ и языковые модели
     services:
@@ -150,6 +151,7 @@ categories:
           - qodana.cloud
           - gvt1.com
           - dvxdiz880bm14.cloudfront.net
+          - d1do0znm134sif.cloudfront.net
           - api.app.prod.grazie.aws.intellij.net
           - api.ai.jetbrains.com.cn
           - download.jetbrains.com
