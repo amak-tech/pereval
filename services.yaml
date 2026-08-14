@@ -155,6 +155,7 @@ categories:
           - api.app.prod.grazie.aws.intellij.net
           - api.ai.jetbrains.com.cn
           - download.jetbrains.com
+          - jb.gg
       - name: HashiCorp
         domains:
           - hashicorp.com

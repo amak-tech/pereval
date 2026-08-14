@@ -2,7 +2,7 @@
 # Host-allowlist для блока http в nginx — обычный HTTP на порту 80.
 #
 # СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
-# Разрешено 490 доменов в 11 категориях. Дата: 2026-08-05
+# Разрешено 491 доменов в 11 категориях. Дата: 2026-08-05
 #
 # Подключается внутрь map в nginx.conf:
 #     map $host $http_upstream {
@@ -126,6 +126,7 @@
 .api.app.prod.grazie.aws.intellij.net        $host;
 .api.ai.jetbrains.com.cn                     $host;
 .download.jetbrains.com                      $host;
+.jb.gg                                       $host;
 #   HashiCorp
 .hashicorp.com                               $host;
 .terraform.io                                $host;
