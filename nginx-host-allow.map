@@ -2,7 +2,7 @@
 # Host-allowlist для блока http в nginx — обычный HTTP на порту 80.
 #
 # СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
-# Разрешено 491 доменов в 11 категориях. Дата: 2026-08-05
+# Разрешено 492 доменов в 11 категориях. Дата: 2026-08-05
 #
 # Подключается внутрь map в nginx.conf:
 #     map $host $http_upstream {
@@ -116,6 +116,7 @@
 .myjetbrains.com                             $host;
 .jetbrains.space                             $host;
 .jetbrains.team                              $host;
+.jetbrains.cloud                             $host;
 .api.jetbrains.ai                            $host;
 .youtrack.cloud                              $host;
 .toolbox.app                                 $host;

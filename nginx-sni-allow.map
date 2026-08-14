@@ -2,7 +2,7 @@
 # SNI-allowlist для блока stream в nginx.
 #
 # СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
-# Разрешено 491 доменов в 11 категориях. Дата: 2026-08-05
+# Разрешено 492 доменов в 11 категориях. Дата: 2026-08-05
 #
 # Подключается внутрь map в nginx.conf:
 #     map $ssl_preread_server_name $sni_upstream {
@@ -115,6 +115,7 @@
 .myjetbrains.com                             $ssl_preread_server_name:443;
 .jetbrains.space                             $ssl_preread_server_name:443;
 .jetbrains.team                              $ssl_preread_server_name:443;
+.jetbrains.cloud                             $ssl_preread_server_name:443;
 .api.jetbrains.ai                            $ssl_preread_server_name:443;
 .youtrack.cloud                              $ssl_preread_server_name:443;
 .toolbox.app                                 $ssl_preread_server_name:443;
