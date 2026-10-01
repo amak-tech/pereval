@@ -2,7 +2,7 @@
 # SNI-allowlist для блока stream в nginx.
 #
 # СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
-# Разрешено 492 доменов в 11 категориях. Дата: 2026-08-05
+# Разрешено 526 доменов в 11 категориях. Дата: 2026-08-05
 #
 # Подключается внутрь map в nginx.conf:
 #     map $ssl_preread_server_name $sni_upstream {
@@ -523,6 +523,41 @@
 .amazfitwatchfaces.com                       $ssl_preread_server_name:443;
 .plugshare.com                               $ssl_preread_server_name:443;
 .contabo.com                                 $ssl_preread_server_name:443;
+#   Samsung Smart TV (Q67BA 65)
+.samsung.com                                 $ssl_preread_server_name:443;
+.samsungelectronics.com                      $ssl_preread_server_name:443;
+.samsungcloudsolution.com                    $ssl_preread_server_name:443;
+.samsungcloudsolution.net                    $ssl_preread_server_name:443;
+.samsungcloud.tv                             $ssl_preread_server_name:443;
+.samsungcloudcdn.com                         $ssl_preread_server_name:443;
+.samsungcloudcdn.net                         $ssl_preread_server_name:443;
+.samsungqbe.com                              $ssl_preread_server_name:443;
+.samsungrm.net                               $ssl_preread_server_name:443;
+.samsungotn.net                              $ssl_preread_server_name:443;
+.samsungosp.com                              $ssl_preread_server_name:443;
+.samsungacr.com                              $ssl_preread_server_name:443;
+.samsungads.com                              $ssl_preread_server_name:443;
+.samsungadhub.com                            $ssl_preread_server_name:443;
+.samsungyosemite.com                         $ssl_preread_server_name:443;
+.samsungiotcloud.com                         $ssl_preread_server_name:443;
+.samsungtvplus.com                           $ssl_preread_server_name:443;
+.samsungapps.com                             $ssl_preread_server_name:443;
+.samsungcloud.com                            $ssl_preread_server_name:443;
+.samsungconsent.com                          $ssl_preread_server_name:443;
+.samsungpositioning.com                      $ssl_preread_server_name:443;
+.sbixby.com                                  $ssl_preread_server_name:443;
+.internetat.tv                               $ssl_preread_server_name:443;
+.pavv.co.kr                                  $ssl_preread_server_name:443;
+.pipeaota.com                                $ssl_preread_server_name:443;
+.smartthings.com                             $ssl_preread_server_name:443;
+.ueiwsp.com                                  $ssl_preread_server_name:443;
+.d1oxlq5h9kq8q5.cloudfront.net               $ssl_preread_server_name:443;
+.d179kwmlpc4o47.cloudfront.net               $ssl_preread_server_name:443;
+.d3mjsomixevyw7.cloudfront.net               $ssl_preread_server_name:443;
+.vd.emp.prd.s3.amazonaws.com                 $ssl_preread_server_name:443;
+.vd.contents.prod.eu.s3.amazonaws.com        $ssl_preread_server_name:443;
+.syncplusconfig.s3.amazonaws.com             $ssl_preread_server_name:443;
+.ns11.whois.co.kr                            $ssl_preread_server_name:443;
 
 # 9. Информационная безопасность
 #   Вендоры

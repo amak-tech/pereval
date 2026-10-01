@@ -2,7 +2,7 @@
 # Host-allowlist для блока http в nginx — обычный HTTP на порту 80.
 #
 # СГЕНЕРИРОВАНО автоматически из services.yaml — не правьте руками.
-# Разрешено 492 доменов в 11 категориях. Дата: 2026-08-05
+# Разрешено 526 доменов в 11 категориях. Дата: 2026-08-05
 #
 # Подключается внутрь map в nginx.conf:
 #     map $host $http_upstream {
@@ -524,6 +524,41 @@
 .amazfitwatchfaces.com                       $host;
 .plugshare.com                               $host;
 .contabo.com                                 $host;
+#   Samsung Smart TV (Q67BA 65)
+.samsung.com                                 $host;
+.samsungelectronics.com                      $host;
+.samsungcloudsolution.com                    $host;
+.samsungcloudsolution.net                    $host;
+.samsungcloud.tv                             $host;
+.samsungcloudcdn.com                         $host;
+.samsungcloudcdn.net                         $host;
+.samsungqbe.com                              $host;
+.samsungrm.net                               $host;
+.samsungotn.net                              $host;
+.samsungosp.com                              $host;
+.samsungacr.com                              $host;
+.samsungads.com                              $host;
+.samsungadhub.com                            $host;
+.samsungyosemite.com                         $host;
+.samsungiotcloud.com                         $host;
+.samsungtvplus.com                           $host;
+.samsungapps.com                             $host;
+.samsungcloud.com                            $host;
+.samsungconsent.com                          $host;
+.samsungpositioning.com                      $host;
+.sbixby.com                                  $host;
+.internetat.tv                               $host;
+.pavv.co.kr                                  $host;
+.pipeaota.com                                $host;
+.smartthings.com                             $host;
+.ueiwsp.com                                  $host;
+.d1oxlq5h9kq8q5.cloudfront.net               $host;
+.d179kwmlpc4o47.cloudfront.net               $host;
+.d3mjsomixevyw7.cloudfront.net               $host;
+.vd.emp.prd.s3.amazonaws.com                 $host;
+.vd.contents.prod.eu.s3.amazonaws.com        $host;
+.syncplusconfig.s3.amazonaws.com             $host;
+.ns11.whois.co.kr                            $host;
 
 # 9. Информационная безопасность
 #   Вендоры

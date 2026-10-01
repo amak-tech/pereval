@@ -593,6 +593,42 @@ categories:
           - amazfitwatchfaces.com
           - plugshare.com
           - contabo.com
+      - name: Samsung Smart TV (Q67BA 65)
+        domains:
+          - samsung.com
+          - samsungelectronics.com
+          - samsungcloudsolution.com
+          - samsungcloudsolution.net
+          - samsungcloud.tv
+          - samsungcloudcdn.com
+          - samsungcloudcdn.net
+          - samsungqbe.com
+          - samsungrm.net
+          - samsungotn.net
+          - samsungosp.com
+          - samsungacr.com
+          - samsungads.com
+          - samsungadhub.com
+          - samsungyosemite.com
+          - samsungiotcloud.com
+          - samsungtvplus.com
+          - samsungapps.com
+          - samsungcloud.com
+          - samsungconsent.com
+          - samsungpositioning.com
+          - sbixby.com
+          - internetat.tv
+          - pavv.co.kr
+          - pipeaota.com
+          - smartthings.com
+          - ueiwsp.com
+          - d1oxlq5h9kq8q5.cloudfront.net
+          - d179kwmlpc4o47.cloudfront.net
+          - d3mjsomixevyw7.cloudfront.net
+          - vd.emp.prd.s3.amazonaws.com
+          - vd.contents.prod.eu.s3.amazonaws.com
+          - syncplusconfig.s3.amazonaws.com
+          - ns11.whois.co.kr
   - name: Информационная безопасность
     services:
       - name: Вендоры
