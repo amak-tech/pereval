@@ -1,0 +1,44 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Generate configuration files
+        env:
+          SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
+        run: python3 generate.py services.yaml "$SUTTON_IP_ADDRESS"
+
+      - name: Deploy to server
+        env:
+          SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
+          SUTTON_SSH_KEY: ${{ secrets.SUTTON_SSH_KEY }}
+          SUTTON_SSH_USER: ${{ secrets.SUTTON_SSH_USER }}
+        run: |
+          SSH_KEY_FILE="$(mktemp)"
+          trap 'rm -f "$SSH_KEY_FILE"' EXIT
+          chmod 600 "$SSH_KEY_FILE"
+          printf '%s\n' "$SUTTON_SSH_KEY" > "$SSH_KEY_FILE"
+          chmod +x deploy.sh
+          ./deploy.sh "$SUTTON_IP_ADDRESS" "$SSH_KEY_FILE" "$SUTTON_SSH_USER"
