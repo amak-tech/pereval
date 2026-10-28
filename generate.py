@@ -49,6 +49,7 @@ import re
 import sys
 import uuid
 from collections import OrderedDict
+from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -446,7 +447,7 @@ def build_values(doc, ip, source, templates_dir):
         "profile_identifier": profile_identifier,
         "profile_uuid": profile_uuid,
         "dns_payload_uuid": dns_payload_uuid,
-        "date": doc.meta.get("date", ""),
+        "date": doc.meta.get("date") or date.today().isoformat(),
         "source": source,
         "total": str(doc.total),
         "category_count": str(len(doc.categories)),
