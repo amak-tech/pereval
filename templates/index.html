@@ -170,13 +170,33 @@ th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);verti
 th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
 footer{border-top:1px solid var(--line);margin-top:60px;padding-top:22px;
 font-size:14px;color:var(--mute)}
+.brand a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.brand a:hover{color:var(--accent)}
+.creator-card{margin:44px 0 0;padding:24px 26px;background:var(--panel);
+border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:14px}
+.creator-grid{display:grid;gap:24px;grid-template-columns:1.25fr 1fr;align-items:center}
+@media (max-width:760px){.creator-grid{grid-template-columns:1fr}}
+.creator-eyebrow{font-size:12px;font-weight:600;text-transform:uppercase;
+letter-spacing:.1em;color:var(--accent);margin:0 0 8px}
+.creator-card h3{font-size:20px;line-height:1.3;margin:0 0 10px;display:block}
+.creator-card p{margin:0 0 12px;font-size:15px}
+.creator-feats{margin:0 0 16px;padding-left:18px;font-size:14.5px;color:var(--mute)}
+.creator-feats li{margin:5px 0}
+.creator-actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+.creator-actions .btn{margin:0}
+.creator-link{font-size:14.5px;font-weight:500;text-decoration:none}
+.creator-link:hover{text-decoration:underline}
+.creator-term{background:var(--code);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.creator-term-bar{padding:8px 14px;border-bottom:1px solid var(--line);
+font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--mute)}
+.creator-term pre{margin:0;border:0;border-radius:0;padding:14px 16px;font-size:12.5px;line-height:1.55}
 </style>
 </head>
 <body>
 
 <header>
   <div class="wrap">
-    <p class="brand">DNS-прокси · Казахстан</p>
+    <p class="brand">DNS-прокси · Казахстан · от создателей <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=header" target="_blank" rel="noopener" data-pb-placement="header">Port Buddy</a></p>
     <h1>{{name}} — доступ к сервисам, закрытым для России и Беларуси</h1>
     <p class="lede">Если ChatGPT отвечает «not available in your country», Claude
     не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не
@@ -340,6 +360,38 @@ curl -sI https://claude.ai/ | head -1</code></pre>
 Если адрес верный, но страница не открывается, проверьте, что сеть не блокирует исходящие
 соединения на порт 443.</p>
 
+<aside class="creator-card" aria-label="Port Buddy — проект создателей сервиса">
+  <div class="creator-grid">
+    <div>
+      <p class="creator-eyebrow">От создателей «{{name}}» · Open Source · HTTP / TCP / UDP</p>
+      <h3>Разрабатываете локально? Откройте <code>localhost</code> в интернет одной командой</h3>
+      <p>{{name}} работает бесплатно благодаря команде <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=setup_card_inline" target="_blank" rel="noopener" data-pb-placement="setup_card_inline"><strong>Port Buddy</strong></a>. Сервис выдаёт любому порту на вашем компьютере публичный HTTPS-адрес — чтобы тестировать вебхуки Telegram, Stripe и GitHub, показывать вёрстку заказчику с телефона или делиться локальной БД и сервером Minecraft без деплоя, настройки роутера и VPN.</p>
+      <ul class="creator-feats">
+        <li>HTTP и UDP-туннели бесплатно, без привязки карты</li>
+        <li>Постоянные поддомены и свои домены с авто-SSL</li>
+        <li>TCP-туннели (Postgres, Redis, SSH, RDP, Minecraft) от $5/мес</li>
+        <li>Безлимитный трафик · macOS, Linux, Windows, Docker</li>
+      </ul>
+      <div class="creator-actions">
+        <a class="btn" href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=setup_card_cta" target="_blank" rel="noopener" data-pb-placement="setup_card_cta">Попробовать Port Buddy бесплатно →</a>
+        <a class="creator-link" href="https://portbuddy.dev/docs?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=setup_card_docs" target="_blank" rel="noopener" data-pb-placement="setup_card_docs">Документация</a>
+      </div>
+    </div>
+    <div class="creator-term">
+      <div class="creator-term-bar"><span>portbuddy — zsh</span></div>
+<pre><code># 1. Установка (macOS / Linux / Windows)
+$ brew install amak-tech/tap/portbuddy
+
+# 2. Публичный HTTPS-адрес для локального порта
+$ portbuddy 3000
+→ https://my-app.portbuddy.dev -&gt; localhost:3000
+
+# 3. Проброс БД, SSH или игрового сервера
+$ portbuddy tcp 5432</code></pre>
+    </div>
+  </div>
+</aside>
+
 <h2 id="services">Какие сервисы охвачены</h2>
 <p>{{total}} домена в {{category_count}} категориях. Поддомены включаются автоматически:
 <code>anthropic.com</code> покрывает и <code>api.anthropic.com</code>, и любой другой хост
@@ -389,7 +441,7 @@ curl -sI https://claude.ai/ | head -1</code></pre>
 </main>
 
 <footer class="wrap">
-  <p>Обновлено {{date}}.</p>
+  <p>Проект поддерживается командой <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=footer" target="_blank" rel="noopener" data-pb-placement="footer">Port Buddy</a> — публичные HTTP, TCP и UDP-туннели для локальной разработки. Обновлено {{date}}.</p>
 </footer>
 
 <script>
@@ -411,17 +463,28 @@ document.documentElement.classList.add('js');
     };
   });
   var q=document.getElementById('q');
-  if(!q)return;
-  q.oninput=function(){
-    var v=q.value.trim().toLowerCase();
-    document.querySelectorAll('.cat').forEach(function(cat){
-      var any=false;
-      cat.querySelectorAll('.sub').forEach(function(s){
-        var hit=!v||s.dataset.search.indexOf(v)>-1; s.hidden=!hit; any=any||hit;
+  if(q){
+    q.oninput=function(){
+      var v=q.value.trim().toLowerCase();
+      document.querySelectorAll('.cat').forEach(function(cat){
+        var any=false;
+        cat.querySelectorAll('.sub').forEach(function(s){
+          var hit=!v||s.dataset.search.indexOf(v)>-1; s.hidden=!hit; any=any||hit;
+        });
+        cat.hidden=!any;
       });
-      cat.hidden=!any;
+    };
+  }
+  document.querySelectorAll('[data-pb-placement]').forEach(function(a){
+    a.addEventListener('click',function(){
+      if(typeof gtag==='function'){
+        gtag('event','portbuddy_click',{
+          placement:a.getAttribute('data-pb-placement'),
+          link_url:a.href
+        });
+      }
     });
-  };
+  });
 })();
 </script>
 </body>
