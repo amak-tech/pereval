@@ -1,1 +1,6 @@
 .idea
+/dnsmasq-geoblock.conf
+/index.html
+/nginx.conf
+/nginx-host-allow.map
+/nginx-sni-allow.map
