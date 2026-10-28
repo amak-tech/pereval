@@ -21,6 +21,7 @@ set -euo pipefail
 DNSMASQ_CONF="dnsmasq-geoblock.conf"
 NGINX_CONF="nginx.conf"
 NGINX_MAPS=("nginx-sni-allow.map" "nginx-host-allow.map")
+WEB_FILES=("index.html" "dns.mobileconfig" "robots.txt" "sitemap.xml")
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
@@ -101,7 +102,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 step "Проверяю локальные файлы"
 
-LOCAL_FILES=("$DNSMASQ_CONF" "$NGINX_CONF" "${NGINX_MAPS[@]}")
+LOCAL_FILES=("$DNSMASQ_CONF" "$NGINX_CONF" "${NGINX_MAPS[@]}" "${WEB_FILES[@]}")
 missing=()
 for f in "${LOCAL_FILES[@]}"; do
 	[[ -f $f ]] || missing+=("$f")
@@ -133,6 +134,10 @@ for m in "${NGINX_MAPS[@]}"; do
     пересоберите оба файла одним запуском generate.py"
 done
 info "$n_dnsmasq доменов, списки dnsmasq и nginx совпадают"
+
+DOMAIN=$(sed -n '/<key>ServerName<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;q;}' dns.mobileconfig)
+[[ -n $DOMAIN ]] || die "не удалось определить ServerName из dns.mobileconfig"
+info "домен сервера: $DOMAIN"
 
 if [[ -f $SOURCE_YAML ]]; then
 	for f in "${LOCAL_FILES[@]}"; do
@@ -215,7 +220,10 @@ if ((DRY_RUN)); then
 	for m in "${NGINX_MAPS[@]}"; do
 		printf '    %-24s -> %s\n' "$m" "/etc/nginx/geoblock/$m"
 	done
-	printf '    затем: dnsmasq --test, nginx -t, restart dnsmasq, reload nginx\n'
+	for w in "${WEB_FILES[@]}"; do
+		printf '    %-24s -> %s\n' "$w" "/var/www/geoblock/$w"
+	done
+	printf '    затем: dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, certbot ($DOMAIN)\n'
 	exit 0
 fi
 
@@ -246,23 +254,25 @@ cat >"$LOCAL_STAGE/apply.sh" <<'REMOTE'
 #!/usr/bin/env bash
 set -euo pipefail
 
-STAGE="$1"; STAMP="$2"; SERVER_IP="$3"
+STAGE="$1"; STAMP="$2"; SERVER_IP="$3"; DOMAIN="$4"
 BACKUP="/var/backups/geoblock/$STAMP"
 DNSMASQ_DST="/etc/dnsmasq.conf"
 DNSMASQ_OLD="/etc/dnsmasq.d/dnsmasq-geoblock.conf"
 NGINX_DST="/etc/nginx/nginx.conf"
 MAP_DIR="/etc/nginx/geoblock"
+SSL_DIR="/etc/nginx/geoblock/ssl"
+WEB_DIR="/var/www/geoblock"
 
 say()  { printf '    %s\n' "$*"; }
 fail() { printf 'ошибка на сервере: %s\n' "$*" >&2; exit 1; }
 
-mkdir -p "$BACKUP" "$MAP_DIR"
+mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge"
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map; do
+for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map index.html dns.mobileconfig robots.txt sitemap.xml; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
-say "получено 4 файла"
+say "получено 8 файлов"
 
 # --- проверка синтаксиса ДО того, как что-то тронуто -----------------------
 dnsmasq --test -C "$STAGE/dnsmasq-geoblock.conf" \
@@ -279,22 +289,55 @@ backup_one "$DNSMASQ_DST"                  dnsmasq.conf
 backup_one "$NGINX_DST"                    nginx.conf
 backup_one "$MAP_DIR/nginx-sni-allow.map"  nginx-sni-allow.map
 backup_one "$MAP_DIR/nginx-host-allow.map" nginx-host-allow.map
+backup_one "$WEB_DIR/index.html"           index.html
+backup_one "$WEB_DIR/dns.mobileconfig"     dns.mobileconfig
+backup_one "$WEB_DIR/robots.txt"           robots.txt
+backup_one "$WEB_DIR/sitemap.xml"          sitemap.xml
 say "резервные копии: $BACKUP"
 
 restore() {
 	printf 'откатываю изменения\n' >&2
-	for name in dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map; do
+	for name in dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map index.html dns.mobileconfig robots.txt sitemap.xml; do
 		if [[ -f "$BACKUP/$name" ]]; then
 			case "$name" in
-				dnsmasq.conf) cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
-				nginx.conf)   cp -a "$BACKUP/$name" "$NGINX_DST" ;;
-				*)            cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
+				dnsmasq.conf)                                        cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
+				nginx.conf)                                          cp -a "$BACKUP/$name" "$NGINX_DST" ;;
+				index.html|dns.mobileconfig|robots.txt|sitemap.xml)  cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
+				*)                                                   cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
 			esac
 		fi
 	done
 	systemctl restart dnsmasq 2>/dev/null || true
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 }
+
+# --- firewall: открыть TCP/853 для DNS-over-TLS ---------------------------
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+	if ! ufw status | grep -qE '^853/tcp\s+ALLOW'; then
+		ufw allow 853/tcp >/dev/null
+		say "открыт порт 853/tcp в ufw (DNS-over-TLS)"
+	fi
+fi
+
+# --- TLS-сертификат: привязка к Let's Encrypt или временный самоподписанный --
+LE_LIVE="/etc/letsencrypt/live/$DOMAIN"
+if [[ -f "$LE_LIVE/fullchain.pem" && -f "$LE_LIVE/privkey.pem" ]]; then
+	ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
+	ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
+elif [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
+	openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+		-subj "/CN=$DOMAIN" \
+		-keyout "$SSL_DIR/privkey.pem" \
+		-out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
+	chmod 600 "$SSL_DIR/privkey.pem"
+	say "создан временный самоподписанный сертификат для $DOMAIN"
+fi
+
+# --- статика сайта и профиль iOS ------------------------------------------
+install -m 0644 "$STAGE/index.html"       "$WEB_DIR/index.html"
+install -m 0644 "$STAGE/dns.mobileconfig" "$WEB_DIR/dns.mobileconfig"
+install -m 0644 "$STAGE/robots.txt"       "$WEB_DIR/robots.txt"
+install -m 0644 "$STAGE/sitemap.xml"      "$WEB_DIR/sitemap.xml"
 
 # --- nginx: сначала установить, потом проверить, при провале откатить ------
 # nginx -t умеет тестировать только реальный /etc/nginx/nginx.conf, поэтому
@@ -339,6 +382,42 @@ if ! systemctl reload nginx; then
 fi
 say "nginx перезагружен"
 
+# --- выпуск и автопродление сертификата Let's Encrypt ---------------------
+if [[ $DOMAIN == *.example || $DOMAIN == *.invalid || $DOMAIN == *.localhost ]]; then
+	say "ВНИМАНИЕ: домен $DOMAIN тестовый — пропуск выпуска сертификата Let's Encrypt (укажите настоящий meta.origin в services.yaml)"
+else
+	if ! command -v certbot >/dev/null 2>&1; then
+		say "устанавливаю certbot..."
+		DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null
+		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot >/dev/null
+		say "certbot установлен"
+	fi
+
+	mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+	cat >/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
+#!/usr/bin/env bash
+systemctl reload nginx
+HOOK
+	chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
+	if systemctl list-unit-files certbot.timer >/dev/null 2>&1; then
+		systemctl enable --now certbot.timer >/dev/null 2>&1 || true
+		say "автопродление certbot.timer активно"
+	fi
+
+	if certbot certonly --webroot -w "$WEB_DIR" -d "$DOMAIN" \
+		--non-interactive --agree-tos --register-unsafely-without-email \
+		--keep-until-expiring >/tmp/certbot.log 2>&1; then
+		ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
+		ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
+		nginx -t 2>/tmp/nginx-test.log && systemctl reload nginx
+		say "сертификат Let's Encrypt для $DOMAIN активен"
+	else
+		say "ВНИМАНИЕ: certbot не смог выпустить сертификат для $DOMAIN (см. /tmp/certbot.log)"
+		cat /tmp/certbot.log >&2 || true
+	fi
+fi
+
 # --- проверка результата --------------------------------------------------
 sleep 1
 for unit in dnsmasq nginx; do
@@ -359,7 +438,7 @@ else
 	say "ВНИМАНИЕ: claude.ai -> ${got:-пусто}, ожидался $SERVER_IP"
 fi
 
-for port in 80 443; do
+for port in 80 443 853; do
 	if ss -tlnH "sport = :$port" | grep -q .; then
 		say "порт $port слушается"
 	else
@@ -388,7 +467,7 @@ fi
 
 step "Применяю на сервере"
 if ssh "${SSH_OPTS[@]}" "$TARGET" \
-	"$SUDO bash '$STAGE/apply.sh' '$STAGE' '$STAMP' '$SERVER_IP'"; then
+	"$SUDO bash '$STAGE/apply.sh' '$STAGE' '$STAMP' '$SERVER_IP' '$DOMAIN'"; then
 	step "Готово"
 	info "сервер $SERVER_IP обновлён, $n_dnsmasq доменов"
 	info "логи: journalctl -u dnsmasq -f  |  tail -f /var/log/nginx/sni.log"

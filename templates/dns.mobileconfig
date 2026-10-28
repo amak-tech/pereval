@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>DNSSettings</key>
+      <dict>
+        <key>DNSProtocol</key>
+        <string>TLS</string>
+        <key>ServerAddresses</key>
+        <array>
+          <string>{{ip}}</string>
+        </array>
+        <key>ServerName</key>
+        <string>{{domain}}</string>
+      </dict>
+      <key>PayloadDescription</key>
+      <string>Настраивает зашифрованный DNS (DNS-over-TLS) через {{name}}</string>
+      <key>PayloadDisplayName</key>
+      <string>{{name}} DNS</string>
+      <key>PayloadIdentifier</key>
+      <string>{{profile_identifier}}.dnsSettings</string>
+      <key>PayloadType</key>
+      <string>com.apple.dnsSettings.managed</string>
+      <key>PayloadUUID</key>
+      <string>{{dns_payload_uuid}}</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+    </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Профиль DNS-сервера {{name}} ({{domain}}) для доступа к закрытым сервисам по Wi-Fi и в мобильной сети.</string>
+  <key>PayloadDisplayName</key>
+  <string>{{name}} DNS</string>
+  <key>PayloadIdentifier</key>
+  <string>{{profile_identifier}}</string>
+  <key>PayloadRemovalDisallowed</key>
+  <false/>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>{{profile_uuid}}</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>

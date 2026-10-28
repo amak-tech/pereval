@@ -8,6 +8,7 @@
     name            название сервиса из meta.name
     ip              адрес прокси-сервера (аргумент командной строки)
     origin          адрес сайта из meta.origin, без завершающего слэша
+    domain          домен DNS-сервера (для DNS-over-TLS и профиля iOS)
     date            дата обновления из meta.date
     total           сколько всего активных доменов
     category_count  сколько категорий
@@ -27,6 +28,15 @@
 -->
 <html lang="ru">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3BY15ZZD8D"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-3BY15ZZD8D');
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DNS-прокси для доступа к ChatGPT, Claude и Gemini — {{name}}</title>
@@ -111,6 +121,10 @@ background:var(--code);border:1px solid var(--line);border-radius:12px;padding:1
 button.copy{font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);
 background:var(--panel);color:var(--ink);border-radius:7px;padding:6px 12px}
 button.copy:hover{border-color:var(--accent);color:var(--accent)}
+a.btn{display:inline-flex;align-items:center;gap:8px;font:600 15px/1.2 inherit;
+text-decoration:none;background:var(--accent);color:#fff;border-radius:9px;
+padding:11px 18px;margin:8px 0 4px}
+a.btn:hover{opacity:.92}
 .steps{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
 margin:18px 0 0;padding:0;list-style:none;counter-reset:s}
 .steps li{background:var(--panel);border:1px solid var(--line);border-radius:12px;
@@ -207,9 +221,10 @@ font-size:14px;color:var(--mute)}
   прокси не касается вовсе, и это важно: многие из них сами блокируют зарубежные адреса.</p>
 </div>
 
-<h2 id="setup">Как настроить DNS на macOS, Windows и Linux</h2>
+<h2 id="setup">Как настроить DNS на iOS, macOS, Windows и Linux</h2>
 <div class="tabs" role="tablist" aria-label="Операционная система">
   <button type="button" role="tab" id="tab-mac" aria-controls="mac" aria-selected="true">macOS</button>
+  <button type="button" role="tab" id="tab-ios" aria-controls="ios" aria-selected="false">iOS / iPadOS</button>
   <button type="button" role="tab" id="tab-win" aria-controls="win" aria-selected="false">Windows</button>
   <button type="button" role="tab" id="tab-lin" aria-controls="lin" aria-selected="false">Linux</button>
 </div>
@@ -235,6 +250,25 @@ dscacheutil -flushcache &amp;&amp; sudo killall -HUP mDNSResponder
 networksetup -getdnsservers Wi-Fi
 # вернуть настройки роутера (DHCP)
 networksetup -setdnsservers Wi-Fi empty</code></pre>
+</div>
+
+<div class="panel" id="ios" role="tabpanel" aria-labelledby="tab-ios">
+  <h3>Настройка DNS на iPhone и iPad (iOS / iPadOS)</h3>
+  <h4 class="subhead">Профиль конфигурации (Wi-Fi и мобильная сеть)</h4>
+  <p>Профиль настраивает зашифрованный DNS (DNS-over-TLS через <code>{{domain}}</code>) и работает как по Wi-Fi, так и в сотовой сети (LTE / 5G).</p>
+  <p><a class="btn" href="/dns.mobileconfig" download="{{domain}}.mobileconfig">Скачать профиль для iOS (.mobileconfig)</a></p>
+  <ol>
+    <li>Откройте эту страницу в <strong>Safari</strong> и нажмите «Скачать профиль для iOS», затем подтвердите загрузку («Разрешить»).</li>
+    <li>Откройте «Настройки» — вверху появится пункт «Профиль загружен». Нажмите на него и выберите «Установить» (потребуется код-пароль устройства).</li>
+    <li>Проверьте, что профиль выбран: «Настройки» → «Основные» → «VPN и управление устройством» → «DNS» → <strong>{{name}} DNS</strong>.</li>
+  </ol>
+  <p>Чтобы отключить или удалить профиль: «Настройки» → «Основные» → «VPN и управление устройством» → «{{name}} DNS» → «Удалить профиль».</p>
+  <h4 class="subhead">Или вручную только для текущей сети Wi-Fi</h4>
+  <ol>
+    <li>Откройте «Настройки» → «Wi-Fi» и нажмите значок <strong>ⓘ</strong> рядом с вашей сетью.</li>
+    <li>Прокрутите вниз до «Настройка DNS» и переключите с «Автоматически» на «Вручную».</li>
+    <li>Удалите существующие записи, нажмите «Добавить сервер» и введите <code>{{ip}}</code>, затем «Сохранить».</li>
+  </ol>
 </div>
 
 <div class="panel" id="win" role="tabpanel" aria-labelledby="tab-win">
@@ -318,7 +352,7 @@ curl -sI https://claude.ai/ | head -1</code></pre>
 <h2 id="faq">Частые вопросы</h2>
 <details class="faq"><summary>Чем это отличается от VPN?</summary><p>VPN направляет через себя весь трафик и обычно заметно снижает скорость. Здесь через сервер идут только соединения с доменами из списка — всё остальное подключается напрямую, как и раньше. Ничего не нужно включать и выключать: настроили один раз в свойствах сети, и оно работает в браузере, в терминале и в приложениях одновременно.</p></details>
 <details class="faq"><summary>Нужно ли что-то устанавливать?</summary><p>Нет. Ни клиента, ни расширения, ни сертификата. Меняется одно поле в настройках сети — адрес DNS-сервера.</p></details>
-<details class="faq"><summary>Работает ли это на iPhone и Android?</summary><p>По Wi-Fi — да: в свойствах сети укажите DNS-сервер вручную, как на компьютере. В мобильном интернете — нет: iOS и Android не дают задать DNS для сотовой сети, а поле «Приватный DNS» в Android принимает только имя хоста DNS-over-TLS, а не IP-адрес.</p></details>
+<details class="faq"><summary>Работает ли это на iPhone и Android?</summary><p>Да, и по Wi-Fi, и в мобильной сети. На iPhone и iPad скачайте и установите профиль конфигурации (.mobileconfig) во вкладке «iOS / iPadOS» — он включает DNS-over-TLS для всех сетей сразу. На Android 9+ откройте «Настройки» → «Сеть и интернет» → «Приватный DNS» (или «Частный DNS») и укажите имя хоста <code>{{domain}}</code>. По Wi-Fi также можно просто прописать адрес <code>{{ip}}</code> вручную в свойствах сети.</p></details>
 <details class="faq"><summary>Снизится ли скорость интернета?</summary><p>Только для доменов из списка — их трафик идёт через Казахстан, и к задержке добавляется путь до Алматы. Все остальные сайты, включая российские, подключаются напрямую и работают с прежней скоростью.</p></details>
 <details class="faq"><summary>Видит ли сервер мой трафик?</summary><p>Нет. TLS-соединение не расшифровывается: сервер читает только имя хоста, которое браузер и так передаёт открытым текстом, и пересылает соединение дальше байт в байт. Сертификат проверяет ваше устройство, и он настоящий — от Anthropic, Google или Netflix, а не подставной.</p></details>
 <details class="faq"><summary>Сервис всё равно пишет, что недоступен в моей стране. Почему?</summary><p>Три обычные причины. Первая: в браузере включён шифрованный DNS (DNS-over-HTTPS) и системные настройки игнорируются. Вторая: соединение прошло по IPv6, минуя подмену адреса. Третья: сервис проверяет не адрес, а страну аккаунта или платёжной карты — так работают лицензии JetBrains и подписки Adobe, и здесь прокси не поможет.</p></details>

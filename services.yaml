@@ -21,7 +21,7 @@
 
 meta:
   name: Перевал
-  origin: https://pereval.example
+  origin: https://pereval.portbuddy.tech
   date: '2026-08-05'
 dnsmasq_options:
   - listen-address=0.0.0.0
