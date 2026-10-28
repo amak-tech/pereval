@@ -3,7 +3,7 @@
 **Перевал** — это бесплатный умный DNS-сервер (Smart DNS), который помогает открывать сервисы с региональными ограничениями из России и Беларуси **без установки VPN-приложений**, без регистрации и без падения скорости интернета.
 
 👉 **Пошаговая инструкция по подключению и актуальные настройки:**  
-**[https://pereval.portbuddy.tech](https://pereval.portbuddy.tech)**
+**[https://pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=hero)**
 
 ---
 
@@ -23,7 +23,7 @@
 
 ## Какие сервисы работают через Перевал
 
-На сайте **[pereval.portbuddy.tech](https://pereval.portbuddy.tech)** поддерживается более **70 сервисов** (свыше 300 доменов) с удобным поиском и проверкой. Среди них:
+На сайте **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services)** поддерживается более **70 сервисов** (свыше 300 доменов) с удобным поиском и проверкой. Среди них:
 
 - **Нейросети и ИИ (AI):** ChatGPT и Sora (OpenAI), Claude (Anthropic), Google Gemini, AI Studio и NotebookLM, Grok (xAI), Microsoft Copilot, Cursor, Windsurf / Codeium, OpenRouter, Groq, ElevenLabs, Recraft, DeepL и другие.
 - **Разработка и работа:** JetBrains (IDE, AI Assistant, Toolbox, YouTrack), Notion, Jira / Confluence (Atlassian), HashiCorp (Terraform, Vagrant), Sentry, MongoDB, Redis, Grafana, Netlify, Framer, Ngrok, TeamViewer, VMware, Cisco, ClickUp, Zapier, WeTransfer.
@@ -32,7 +32,7 @@
 - **Игры и облачный гейминг:** Brawl Stars, Clash Royale, Clash of Clans, Squad Busters, Hay Day (Supercell), NVIDIA GeForce NOW, Marvel Snap, авторизация Xbox Live.
 - **Финансы, покупки и техника:** Patreon, Wise, Buy Me a Coffee, Upwork, IKEA, Nike, iHerb, Intel, Samsung Smart TV и многие другие.
 
-> Полный и всегда актуальный список поддерживаемых сайтов и доменных зон доступен на сайте: **[pereval.portbuddy.tech](https://pereval.portbuddy.tech)**.
+> Полный и всегда актуальный список поддерживаемых сайтов и доменных зон доступен на сайте: **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services_footer)**.
 
 ---
 
@@ -49,7 +49,7 @@
 
 ## Как подключиться
 
-Перейдите на официальный сайт **[https://pereval.portbuddy.tech](https://pereval.portbuddy.tech)** — там вы найдёте:
+Перейдите на официальный сайт **[https://pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=setup)** — там вы найдёте:
 
 1. **Актуальный адрес DNS-сервера** и кнопку установки профиля для iOS в один клик.
 2. **Подробные пошаговые инструкции** для каждой операционной системы (iOS, Android, macOS, Windows, Linux).
@@ -60,4 +60,4 @@
 
 ## Предложить новый сервис
 
-Если нужный вам зарубежный сервис блокирует доступ по региону (выдаёт ошибку региональной недоступности), но его ещё нет в списке на **[pereval.portbuddy.tech](https://pereval.portbuddy.tech)** — создайте обращение в разделе **Issues** этого репозитория и укажите адрес сайта или название приложения.
+Если нужный вам зарубежный сервис блокирует доступ по региону (выдаёт ошибку региональной недоступности), но его ещё нет в списке на **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=request)** — создайте обращение в разделе **[Issues](https://github.com/amak-tech/pereval/issues)** репозитория **[github.com/amak-tech/pereval](https://github.com/amak-tech/pereval)** и укажите адрес сайта или название приложения.
