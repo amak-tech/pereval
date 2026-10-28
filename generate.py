@@ -47,8 +47,10 @@ import ipaddress
 import json
 import re
 import sys
+import uuid
 from collections import OrderedDict
 from pathlib import Path
+from urllib.parse import urlparse
 
 try:
     import yaml
@@ -68,10 +70,11 @@ TEMPLATES = OrderedDict([
     ("nginx-sni-allow.map", "nginx-sni-allow.map"),
     ("nginx-host-allow.map", "nginx-host-allow.map"),
     ("index.html", "index.html"),
-])
-SEO_TEMPLATES = OrderedDict([
+    ("dns.mobileconfig", "dns.mobileconfig"),
     ("robots.txt", "robots.txt"),
     ("sitemap.xml", "sitemap.xml"),
+])
+SEO_TEMPLATES = OrderedDict([
     ("og-image.svg", "og-image.svg"),
 ])
 
@@ -300,7 +303,7 @@ def html_chips(domains):
     return "".join(f'<code class="d">{e(d)}</code>' for d in sorted(set(domains)))
 
 
-def faq_entities(template_text, template_name):
+def faq_entities(template_text, template_name, values):
     """Собирает mainEntity для FAQPage из блоков <details class="faq"> шаблона.
 
     Вопросы и ответы редактируются только в шаблоне — разметка для поисковиков
@@ -312,11 +315,18 @@ def faq_entities(template_text, template_name):
                          f'<details class="faq"><summary>…</summary><p>…</p></details>, '
                          f"а {{faq_entities}} в шаблоне используется")
     strip_tags = re.compile(r'<[^>]+>')
-    entities = [{"@type": "Question",
-                 "name": html.unescape(strip_tags.sub("", q)).strip(),
-                 "acceptedAnswer": {"@type": "Answer",
-                                    "text": html.unescape(strip_tags.sub("", a)).strip()}}
-                for q, a in items]
+    entities = []
+    for q, a in items:
+        q_sub = substitute(q, values, template_name)
+        a_sub = substitute(a, values, template_name)
+        entities.append({
+            "@type": "Question",
+            "name": html.unescape(strip_tags.sub("", q_sub)).strip(),
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": html.unescape(strip_tags.sub("", a_sub)).strip(),
+            },
+        })
     return json.dumps(entities, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -406,13 +416,36 @@ def substitute(text, values, where):
     return out
 
 
+def extract_domain(doc):
+    """Извлекает имя хоста (domain) из meta.domain или meta.origin."""
+    raw = (doc.meta.get("domain") or "").strip().lower()
+    if not raw:
+        origin = (doc.meta.get("origin") or "").strip()
+        if "://" in origin:
+            raw = (urlparse(origin).hostname or "").strip().lower()
+        else:
+            raw = origin.split("/")[0].split(":")[0].strip().lower()
+    if not raw or not DOMAIN_RE.match(raw):
+        raise ParseError(f"не удалось определить корректный домен из meta.origin / meta.domain "
+                         f"(получено: {raw!r}); укажите meta.origin в YAML или --domain")
+    return raw
+
+
 def build_values(doc, ip, source, templates_dir):
     """Все подстановки: скаляры из данных плюс собранные фрагменты."""
     idx = templates_dir / "index.html"
+    domain = extract_domain(doc)
+    profile_identifier = ".".join(reversed(domain.split("."))) + ".dns"
+    profile_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{domain}:profile")).upper()
+    dns_payload_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{domain}:dnsSettings")).upper()
     values = {
         "name": doc.meta.get("name", ""),
         "ip": ip,
         "origin": doc.meta.get("origin", "").rstrip("/"),
+        "domain": domain,
+        "profile_identifier": profile_identifier,
+        "profile_uuid": profile_uuid,
+        "dns_payload_uuid": dns_payload_uuid,
         "date": doc.meta.get("date", ""),
         "source": source,
         "total": str(doc.total),
@@ -436,7 +469,7 @@ def build_values(doc, ip, source, templates_dir):
     if idx.is_file():
         text = idx.read_text(encoding="utf-8")
         if re.search(r'\{\{\s*faq_entities\s*\}\}', text):
-            values["faq_entities"] = faq_entities(text, str(idx))
+            values["faq_entities"] = faq_entities(text, str(idx), values)
     return values
 
 
@@ -482,11 +515,12 @@ def main(argv=None):
                    help="каталог для результатов (по умолчанию — рядом с YAML)")
     p.add_argument("--name", help="название сервиса (переопределяет meta.name)")
     p.add_argument("--origin", help="адрес сайта (переопределяет meta.origin)")
+    p.add_argument("--domain", help="домен DNS-сервера (переопределяет хост из meta.origin)")
     p.add_argument("--date", help="дата обновления YYYY-MM-DD (переопределяет meta.date)")
     p.add_argument("--check", action="store_true",
                    help="только проверить данные и шаблоны, ничего не записывать")
     p.add_argument("--seo-extras", action="store_true",
-                   help="дополнительно собрать robots.txt, sitemap.xml и og-image.svg")
+                   help="дополнительно собрать og-image.svg")
     p.add_argument("-q", "--quiet", action="store_true", help="не печатать предупреждения")
     a = p.parse_args(argv)
 
@@ -509,7 +543,7 @@ def main(argv=None):
         print(f"ошибка разбора: {exc}", file=sys.stderr)
         return 2
 
-    for key, val in (("name", a.name), ("origin", a.origin), ("date", a.date)):
+    for key, val in (("name", a.name), ("origin", a.origin), ("domain", a.domain), ("date", a.date)):
         if val:
             doc.meta[key] = val
 

@@ -4,3 +4,7 @@
 /nginx.conf
 /nginx-host-allow.map
 /nginx-sni-allow.map
+.junie
+/dns.mobileconfig
+/robots.txt
+/sitemap.xml
