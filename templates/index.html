@@ -168,8 +168,10 @@ padding:14px 18px;margin:10px 0}
 table{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
-footer{border-top:1px solid var(--line);margin-top:60px;padding-top:22px;
+footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;
+border-top:1px solid var(--line);margin-top:60px;padding-top:22px;
 font-size:14px;color:var(--mute)}
+footer p{margin:0;flex:1;min-width:240px}
 .brand a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 .brand a:hover{color:var(--accent)}
 .creator-card{margin:44px 0 0;padding:24px 26px;background:var(--panel);
@@ -450,6 +452,7 @@ $ portbuddy tcp 5432</code></pre>
 
 <footer class="wrap">
   <p>Проект поддерживается командой <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=footer" target="_blank" rel="noopener" data-pb-placement="footer">Port Buddy</a> — публичные HTTP, TCP и UDP-туннели для локальной разработки. Обновлено {{date}}.</p>
+  <a href='https://ko-fi.com/S0D829QQHC' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi1.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 </footer>
 
 <script>
