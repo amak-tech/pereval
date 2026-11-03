@@ -21,7 +21,9 @@ set -euo pipefail
 DNSMASQ_CONF="dnsmasq-geoblock.conf"
 NGINX_CONF="nginx.conf"
 NGINX_MAPS=("nginx-sni-allow.map" "nginx-host-allow.map")
-WEB_FILES=("index.html" "terms.html" "privacy.html" "dns.mobileconfig" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
+SERVICE_MAP="service-map.json"
+STATS_COLLECTOR="stats_collector.py"
+WEB_FILES=("index.html" "stats.html" "terms.html" "privacy.html" "dns.mobileconfig" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
@@ -102,7 +104,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 step "Проверяю локальные файлы"
 
-LOCAL_FILES=("$DNSMASQ_CONF" "$NGINX_CONF" "${NGINX_MAPS[@]}" "${WEB_FILES[@]}")
+LOCAL_FILES=("$DNSMASQ_CONF" "$NGINX_CONF" "${NGINX_MAPS[@]}" "$SERVICE_MAP" "$STATS_COLLECTOR" "${WEB_FILES[@]}")
 missing=()
 for f in "${LOCAL_FILES[@]}"; do
 	[[ -f $f ]] || missing+=("$f")
@@ -121,7 +123,7 @@ fi
 
 # несведённые подстановки означают, что генератор падал на середине
 for f in "${LOCAL_FILES[@]}"; do
-	[[ $f == *.png ]] && continue
+	[[ $f == *.png || $f == "$STATS_COLLECTOR" ]] && continue
 	if grep -q '{{[a-z_]*}}' "$f"; then
 		die "в $f остались подстановки {{...}} — генератор не доработал"
 	fi
@@ -142,6 +144,7 @@ info "домен сервера: $DOMAIN"
 
 if [[ -f $SOURCE_YAML ]]; then
 	for f in "${LOCAL_FILES[@]}"; do
+		[[ $f == "$STATS_COLLECTOR" ]] && continue
 		if [[ $SOURCE_YAML -nt $f ]]; then
 			warn "$SOURCE_YAML новее, чем $f — возможно, забыли пересобрать"
 			((FORCE)) || die "перезапустите generate.py или добавьте --force"
@@ -221,11 +224,14 @@ if ((DRY_RUN)); then
 	for m in "${NGINX_MAPS[@]}"; do
 		printf '    %-24s -> %s\n' "$m" "/etc/nginx/geoblock/$m"
 	done
+	printf '    %-24s -> %s\n' "$SERVICE_MAP" "/etc/nginx/geoblock/$SERVICE_MAP"
+	printf '    %-24s -> %s\n' "$STATS_COLLECTOR" "/usr/local/bin/pereval-stats-collector.py"
+	printf '    %-24s -> %s\n' "pereval-stats.service" "/etc/systemd/system/pereval-stats.service"
 	for w in "${WEB_FILES[@]}"; do
 		printf '    %-24s -> %s\n' "$w" "/var/www/geoblock/$w"
 	done
 	printf '    %-24s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
-	printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, certbot (%s)\n' "$DOMAIN"
+	printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-stats, certbot (%s)\n' "$DOMAIN"
 	exit 0
 fi
 
@@ -265,17 +271,20 @@ MAP_DIR="/etc/nginx/geoblock"
 SSL_DIR="/etc/nginx/geoblock/ssl"
 WEB_DIR="/var/www/geoblock"
 SYSCTL_DST="/etc/sysctl.d/99-geoblock-highload.conf"
+COLLECTOR_DST="/usr/local/bin/pereval-stats-collector.py"
+STATS_UNIT_DST="/etc/systemd/system/pereval-stats.service"
+STATS_STATE_DIR="/var/lib/pereval-stats"
 
 say()  { printf '    %s\n' "$*"; }
 fail() { printf 'ошибка на сервере: %s\n' "$*" >&2; exit 1; }
 
-mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" /etc/sysctl.d
+mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" /etc/sysctl.d
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map index.html terms.html privacy.html dns.mobileconfig og-image.svg og-image.png robots.txt sitemap.xml; do
+for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map service-map.json stats_collector.py index.html stats.html terms.html privacy.html dns.mobileconfig og-image.svg og-image.png robots.txt sitemap.xml; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
-say "получено 12 файлов"
+say "получено 15 файлов"
 
 # --- проверка синтаксиса ДО того, как что-то тронуто -----------------------
 dnsmasq --test -C "$STAGE/dnsmasq-geoblock.conf" \
@@ -292,7 +301,11 @@ backup_one "$DNSMASQ_DST"                  dnsmasq.conf
 backup_one "$NGINX_DST"                    nginx.conf
 backup_one "$MAP_DIR/nginx-sni-allow.map"  nginx-sni-allow.map
 backup_one "$MAP_DIR/nginx-host-allow.map" nginx-host-allow.map
+backup_one "$MAP_DIR/service-map.json"     service-map.json
+backup_one "$COLLECTOR_DST"                pereval-stats-collector.py
+backup_one "$STATS_UNIT_DST"               pereval-stats.service
 backup_one "$WEB_DIR/index.html"           index.html
+backup_one "$WEB_DIR/stats.html"           stats.html
 backup_one "$WEB_DIR/terms.html"           terms.html
 backup_one "$WEB_DIR/privacy.html"         privacy.html
 backup_one "$WEB_DIR/dns.mobileconfig"     dns.mobileconfig
@@ -305,19 +318,23 @@ say "резервные копии: $BACKUP"
 
 restore() {
 	printf 'откатываю изменения\n' >&2
-	for name in dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map index.html terms.html privacy.html dns.mobileconfig og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
+	for name in dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map service-map.json pereval-stats-collector.py pereval-stats.service index.html stats.html terms.html privacy.html dns.mobileconfig og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
 		if [[ -f "$BACKUP/$name" ]]; then
 			case "$name" in
-				dnsmasq.conf)                                                                                         cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
-				nginx.conf)                                                                                           cp -a "$BACKUP/$name" "$NGINX_DST" ;;
-				99-geoblock-highload.conf)                                                                            cp -a "$BACKUP/$name" "$SYSCTL_DST" ;;
-				index.html|terms.html|privacy.html|dns.mobileconfig|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
-				*)                                                                                                    cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
+				dnsmasq.conf)                                                                                                    cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
+				nginx.conf)                                                                                                      cp -a "$BACKUP/$name" "$NGINX_DST" ;;
+				99-geoblock-highload.conf)                                                                                       cp -a "$BACKUP/$name" "$SYSCTL_DST" ;;
+				pereval-stats-collector.py)                                                                                      cp -a "$BACKUP/$name" "$COLLECTOR_DST" ;;
+				pereval-stats.service)                                                                                           cp -a "$BACKUP/$name" "$STATS_UNIT_DST" ;;
+				index.html|stats.html|terms.html|privacy.html|dns.mobileconfig|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
+				*)                                                                                                               cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
 			esac
 		fi
 	done
+	systemctl daemon-reload 2>/dev/null || true
 	systemctl restart dnsmasq 2>/dev/null || true
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+	systemctl restart pereval-stats.service 2>/dev/null || true
 }
 
 # --- тюнинг сетевого стека ядра под высокую нагрузку -----------------------
@@ -368,6 +385,7 @@ fi
 
 # --- статика сайта и профиль iOS ------------------------------------------
 install -m 0644 "$STAGE/index.html"       "$WEB_DIR/index.html"
+install -m 0644 "$STAGE/stats.html"       "$WEB_DIR/stats.html"
 install -m 0644 "$STAGE/terms.html"       "$WEB_DIR/terms.html"
 install -m 0644 "$STAGE/privacy.html"     "$WEB_DIR/privacy.html"
 install -m 0644 "$STAGE/dns.mobileconfig" "$WEB_DIR/dns.mobileconfig"
@@ -381,7 +399,34 @@ install -m 0644 "$STAGE/sitemap.xml"      "$WEB_DIR/sitemap.xml"
 # порядок именно такой.
 install -m 0644 "$STAGE/nginx-sni-allow.map"  "$MAP_DIR/nginx-sni-allow.map"
 install -m 0644 "$STAGE/nginx-host-allow.map" "$MAP_DIR/nginx-host-allow.map"
+install -m 0644 "$STAGE/service-map.json"     "$MAP_DIR/service-map.json"
 install -m 0644 "$STAGE/nginx.conf"           "$NGINX_DST"
+
+# --- коллектор статистики (pereval-stats.service) -------------------------
+install -m 0755 "$STAGE/stats_collector.py"   "$COLLECTOR_DST"
+cat >"$STATS_UNIT_DST" <<UNIT
+[Unit]
+Description=Pereval lightweight nginx proxy usage collector
+After=network.target nginx.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --output $WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $DOMAIN
+Restart=always
+RestartSec=5
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+chmod 0644 "$STATS_UNIT_DST"
+/usr/bin/python3 "$COLLECTOR_DST" \
+	--service-map "$MAP_DIR/service-map.json" \
+	--output "$WEB_DIR/stats.json" \
+	--state-file "$STATS_STATE_DIR/state.json" \
+	--self-domain "$DOMAIN" \
+	--once || true
 
 if ! nginx -t 2>/tmp/nginx-test.log; then
 	cat /tmp/nginx-test.log >&2
@@ -418,6 +463,15 @@ if ! systemctl reload nginx; then
 	fail "nginx не перезагрузился"
 fi
 say "nginx перезагружен"
+
+systemctl daemon-reload
+systemctl enable pereval-stats.service >/dev/null 2>&1 || true
+if ! systemctl restart pereval-stats.service; then
+	journalctl -u pereval-stats.service -n 20 --no-pager >&2 || true
+	restore
+	fail "pereval-stats.service не поднялся"
+fi
+say "коллектор статистики pereval-stats перезапущен"
 
 # --- выпуск и автопродление сертификата Let's Encrypt ---------------------
 if [[ $DOMAIN == *.example || $DOMAIN == *.invalid || $DOMAIN == *.localhost ]]; then
@@ -457,7 +511,7 @@ fi
 
 # --- проверка результата --------------------------------------------------
 sleep 1
-for unit in dnsmasq nginx; do
+for unit in dnsmasq nginx pereval-stats; do
 	systemctl is-active --quiet "$unit" || { restore; fail "$unit не активен после перезапуска"; }
 done
 

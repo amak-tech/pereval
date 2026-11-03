@@ -73,6 +73,7 @@ TEMPLATES = OrderedDict([
     ("nginx-sni-allow.map", "nginx-sni-allow.map"),
     ("nginx-host-allow.map", "nginx-host-allow.map"),
     ("index.html", "index.html"),
+    ("stats.html", "stats.html"),
     ("terms.html", "terms.html"),
     ("privacy.html", "privacy.html"),
     ("dns.mobileconfig", "dns.mobileconfig"),
@@ -384,6 +385,17 @@ def map_entries(doc, value):
     return "\n".join(out)
 
 
+def service_map_json(doc):
+    """Словарь {домен: {service, category}} для агрегации статистики."""
+    mapping = OrderedDict()
+    for d, c, s in doc.active():
+        mapping[d] = OrderedDict([
+            ("service", s.name),
+            ("category", c.name),
+        ])
+    return json.dumps(mapping, ensure_ascii=False, indent=2) + "\n"
+
+
 def conf_disabled(doc, ip):
     out = []
     for g in doc.disabled:
@@ -468,6 +480,7 @@ def build_values(doc, ip, source, templates_dir):
                                  for d in sorted(set(doc.passthrough.domains))),
         "sni_entries": map_entries(doc, "$ssl_preread_server_name:443"),
         "host_entries": map_entries(doc, "$host"),
+        "service_map_json": service_map_json(doc),
     }
     # FAQPage собирается из самой страницы, но только если шаблон его просит —
     # иначе отсутствие блоков FAQ маскировало бы настоящие ошибки шаблона.
@@ -616,6 +629,7 @@ def main(argv=None):
         values = build_values(doc, ip, src.name, tpl_dir)
         rendered = [(out_name, render(tpl_dir, tpl_name, values, doc, ip))
                     for tpl_name, out_name in wanted.items()]
+        rendered.append(("service-map.json", values["service_map_json"]))
     except ParseError as exc:
         print(f"ошибка шаблона: {exc}", file=sys.stderr)
         return 2

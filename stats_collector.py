@@ -1,0 +1,1086 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Lightweight real-time usage statistics collector for Перевал (pereval).
+
+Tails buffered nginx logs (/var/log/nginx/sni.log and /var/log/nginx/http-proxy.log),
+samples established connections from /proc/net/tcp, maps domains to logical services
+via service-map.json, and atomically writes /var/www/geoblock/stats.json every 5s.
+
+Also supports generating realistic mock data for local dashboard testing:
+    python3 stats_collector.py --mock --output stats.json
+"""
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import random
+import re
+import signal
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+# log_format sni '$remote_addr [$time_local] sni="$ssl_preread_server_name" '
+#                'up=$upstream_addr status=$status '
+#                'sent=$bytes_sent recv=$bytes_received dur=$session_time';
+SNI_LOG_RE = re.compile(
+    r'^(?P<ip>\S+)\s+\[(?P<time>[^\]]+)\]\s+'
+    r'sni="(?P<sni>[^"]*)"\s+'
+    r'up=(?P<up>.+?)\s+'
+    r'status=(?P<status>\d+)\s+'
+    r'sent=(?P<sent>\d+)\s+'
+    r'recv=(?P<recv>\d+)\s+'
+    r'dur=(?P<dur>[\d.]+)'
+)
+
+# log_format hostproxy '$remote_addr [$time_local] "$request" host="$host" '
+#                      '-> $upstream_addr $status $body_bytes_sent';
+HTTP_LOG_RE = re.compile(
+    r'^(?P<ip>\S+)\s+\[(?P<time>[^\]]+)\]\s+'
+    r'"(?P<req>[^"]*)"\s+'
+    r'host="(?P<host>[^"]*)"\s+'
+    r'->\s+(?P<up>.+?)\s+'
+    r'(?P<status>\d+)\s+'
+    r'(?P<sent>\d+)'
+)
+
+MONTHS = {
+    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4,
+    "May": 5, "Jun": 6, "Jul": 7, "Aug": 8,
+    "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+}
+
+
+def parse_nginx_time(raw: str) -> int:
+    """Parse nginx $time_local ('03/Nov/2026:19:55:12 +0500') into unix epoch seconds."""
+    try:
+        # Fast manual parse to avoid strptime locale issues
+        # Format: DD/Mon/YYYY:HH:MM:SS +ZZZZ
+        day = int(raw[0:2])
+        mon = MONTHS.get(raw[3:6], 1)
+        year = int(raw[7:11])
+        hour = int(raw[12:14])
+        minute = int(raw[15:17])
+        sec = int(raw[18:20])
+        tz_sign = -1 if raw[21] == "-" else 1
+        tz_hr = int(raw[22:24])
+        tz_min = int(raw[24:26])
+        tz_offset = tz_sign * (tz_hr * 3600 + tz_min * 60)
+
+        # Days from 1970-01-01
+        dt = datetime(year, mon, day, hour, minute, sec)
+        epoch_utc = int((dt - datetime(1970, 1, 1)).total_seconds())
+        return epoch_utc - tz_offset
+    except Exception:
+        return int(time.time())
+
+
+def load_service_map(path: Path) -> dict:
+    """Load domain -> {service, category} dictionary from service-map.json."""
+    if path and path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {k.lower().strip("."): v for k, v in data.items() if isinstance(v, dict)}
+        except Exception as exc:
+            print(f"[pereval-stats] warning: failed to load {path}: {exc}", file=sys.stderr)
+    return {}
+
+
+def normalize_domain(raw: str) -> str:
+    if not raw:
+        return ""
+    d = raw.strip().lower()
+    if ":" in d:
+        d = d.split(":", 1)[0]
+    return d.strip(".")
+
+
+def resolve_service(domain: str, service_map: dict) -> tuple:
+    """Map a domain or subdomain (e.g. api.anthropic.com) to (service_name, category_name)."""
+    if not domain:
+        return ("Неизвестно", "Другое")
+    if domain in service_map:
+        info = service_map[domain]
+        return (info.get("service", domain), info.get("category", "Другое"))
+    parts = domain.split(".")
+    for i in range(1, len(parts) - 1):
+        suffix = ".".join(parts[i:])
+        if suffix in service_map:
+            info = service_map[suffix]
+            return (info.get("service", suffix), info.get("category", "Другое"))
+    return (domain, "Другое")
+
+
+class Bucket:
+    """Aggregates metrics for a single time slice (1 minute or 1 hour)."""
+
+    __slots__ = ("ts", "requests", "bytes_sent", "bytes_recv", "users", "services", "domains")
+
+    def __init__(self, ts: int):
+        self.ts = ts
+        self.requests = 0
+        self.bytes_sent = 0
+        self.bytes_recv = 0
+        self.users = set()
+        self.services = {}  # service -> {"category": str, "requests": int, "bytes": int, "users": set}
+        self.domains = {}   # domain  -> {"service": str, "requests": int, "bytes": int, "users": set}
+
+    def add_event(self, ip_hash: int, domain: str, service: str, category: str,
+                  sent: int, recv: int):
+        self.requests += 1
+        self.bytes_sent += sent
+        self.bytes_recv += recv
+        self.users.add(ip_hash)
+
+        total_bytes = sent + recv
+        svc_entry = self.services.get(service)
+        if svc_entry is None:
+            svc_entry = {"category": category, "requests": 0, "bytes": 0, "users": set()}
+            self.services[service] = svc_entry
+        svc_entry["requests"] += 1
+        svc_entry["bytes"] += total_bytes
+        svc_entry["users"].add(ip_hash)
+
+        dom_entry = self.domains.get(domain)
+        if dom_entry is None:
+            dom_entry = {"service": service, "requests": 0, "bytes": 0, "users": set()}
+            self.domains[domain] = dom_entry
+        dom_entry["requests"] += 1
+        dom_entry["bytes"] += total_bytes
+        dom_entry["users"].add(ip_hash)
+
+    def to_dict(self) -> dict:
+        return {
+            "ts": self.ts,
+            "requests": self.requests,
+            "bytes_sent": self.bytes_sent,
+            "bytes_recv": self.bytes_recv,
+            "users": list(self.users),
+            "services": {
+                k: {
+                    "category": v["category"],
+                    "requests": v["requests"],
+                    "bytes": v["bytes"],
+                    "users": list(v["users"]),
+                }
+                for k, v in self.services.items()
+            },
+            "domains": {
+                k: {
+                    "service": v["service"],
+                    "requests": v["requests"],
+                    "bytes": v["bytes"],
+                    "users": list(v["users"]),
+                }
+                for k, v in self.domains.items()
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Bucket":
+        b = cls(int(data["ts"]))
+        b.requests = int(data.get("requests", 0))
+        b.bytes_sent = int(data.get("bytes_sent", 0))
+        b.bytes_recv = int(data.get("bytes_recv", 0))
+        b.users = set(int(u) for u in data.get("users", []))
+        for k, v in (data.get("services") or {}).items():
+            b.services[k] = {
+                "category": v.get("category", "Другое"),
+                "requests": int(v.get("requests", 0)),
+                "bytes": int(v.get("bytes", 0)),
+                "users": set(int(u) for u in v.get("users", [])),
+            }
+        for k, v in (data.get("domains") or {}).items():
+            b.domains[k] = {
+                "service": v.get("service", k),
+                "requests": int(v.get("requests", 0)),
+                "bytes": int(v.get("bytes", 0)),
+                "users": set(int(u) for u in v.get("users", [])),
+            }
+        return b
+
+
+class LogTailer:
+    """Tracks a single log file across rotation (st_ino changes) and truncation."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.fp = None
+        self.ino = None
+        self.offset = 0
+
+    def close(self):
+        if self.fp is not None:
+            try:
+                self.fp.close()
+            except Exception:
+                pass
+            self.fp = None
+
+    def open_at(self, offset: int = 0):
+        self.close()
+        if not self.path.is_file():
+            return False
+        try:
+            st = self.path.stat()
+            self.fp = self.path.open("r", encoding="utf-8", errors="replace")
+            if 0 < offset <= st.st_size:
+                self.fp.seek(offset)
+                self.offset = offset
+            else:
+                self.offset = 0
+            self.ino = st.st_ino
+            return True
+        except Exception:
+            self.close()
+            return False
+
+    def read_new_lines(self) -> list:
+        lines = []
+        if self.fp is None:
+            if not self.open_at(0):
+                return lines
+
+        lines.extend(self._drain_fp())
+
+        try:
+            st = self.path.stat()
+        except FileNotFoundError:
+            self.close()
+            return lines
+        except Exception:
+            return lines
+
+        if st.st_ino != self.ino or st.st_size < self.offset:
+            # File was rotated or truncated: drain old descriptor first, then reopen at 0
+            lines.extend(self._drain_fp())
+            if self.open_at(0):
+                lines.extend(self._drain_fp())
+
+        return lines
+
+    def _drain_fp(self) -> list:
+        out = []
+        if self.fp is None:
+            return out
+        while True:
+            pos = self.fp.tell()
+            line = self.fp.readline()
+            if not line:
+                break
+            if not line.endswith("\n"):
+                # Incomplete line being written; rewind and wait for next tick
+                self.fp.seek(pos)
+                break
+            self.offset = self.fp.tell()
+            out.append(line)
+        return out
+
+
+class StatsCollector:
+    """Collects and aggregates nginx proxy metrics over a 24-hour rolling window."""
+
+    def __init__(
+        self,
+        service_map_path: Path,
+        sni_log_path: Path,
+        http_log_path: Path,
+        output_path: Path,
+        state_path: Path = None,
+        proc_tcp_path: Path = Path("/proc/net/tcp"),
+        proc_tcp6_path: Path = Path("/proc/net/tcp6"),
+        self_domain: str = "pereval.portbuddy.tech",
+    ):
+        self.service_map_path = service_map_path
+        self.service_map = load_service_map(service_map_path)
+        self.service_map_mtime = (
+            service_map_path.stat().st_mtime if service_map_path and service_map_path.is_file() else 0
+        )
+        self.sni_log_path = sni_log_path
+        self.http_log_path = http_log_path
+        self.output_path = output_path
+        self.state_path = state_path
+        self.proc_tcp_path = proc_tcp_path
+        self.proc_tcp6_path = proc_tcp6_path
+        self.self_domain = normalize_domain(self_domain)
+
+        self.salt_day = int(time.time() // 86400)
+        self.salt = os.urandom(16).hex()
+
+        self.minute_buckets = {}  # minute_ts -> Bucket
+        self.hour_buckets = {}    # hour_ts   -> Bucket
+        self.recent_5m_users = {}  # ip_hash -> last_seen_ts
+        self.active_connections = 0
+
+        self.sni_tailer = LogTailer(sni_log_path) if sni_log_path else None
+        self.http_tailer = LogTailer(http_log_path) if http_log_path else None
+
+    def _rotate_salt_if_needed(self, now: int):
+        day = now // 86400
+        if day != self.salt_day:
+            self.salt_day = day
+            self.salt = os.urandom(16).hex()
+
+    def hash_ip(self, ip: str) -> int:
+        h = hashlib.blake2b(f"{self.salt}:{ip}".encode("utf-8"), digest_size=8).digest()
+        return int.from_bytes(h, "big")
+
+    def reload_service_map_if_changed(self):
+        if self.service_map_path and self.service_map_path.is_file():
+            try:
+                mtime = self.service_map_path.stat().st_mtime
+                if mtime != self.service_map_mtime:
+                    self.service_map = load_service_map(self.service_map_path)
+                    self.service_map_mtime = mtime
+            except Exception:
+                pass
+
+    def load_state(self, now: int = None) -> dict:
+        """Load persisted buckets and file cursors if state file is fresh (< 24h)."""
+        if now is None:
+            now = int(time.time())
+        if not self.state_path or not self.state_path.is_file():
+            return {}
+        try:
+            raw = json.loads(self.state_path.read_text(encoding="utf-8"))
+            saved_at = int(raw.get("saved_at", 0))
+            if now - saved_at > 86400:
+                return {}
+            if raw.get("salt"):
+                self.salt = str(raw["salt"])
+                self.salt_day = int(raw.get("salt_day", now // 86400))
+            for bdata in raw.get("minute_buckets", []):
+                b = Bucket.from_dict(bdata)
+                if b.ts >= ((now // 60) - 59) * 60:
+                    self.minute_buckets[b.ts] = b
+            for bdata in raw.get("hour_buckets", []):
+                b = Bucket.from_dict(bdata)
+                if b.ts >= ((now // 3600) - 23) * 3600:
+                    self.hour_buckets[b.ts] = b
+            for ip_hash_str, seen_ts in (raw.get("recent_5m_users") or {}).items():
+                if now - int(seen_ts) <= 300:
+                    self.recent_5m_users[int(ip_hash_str)] = int(seen_ts)
+            return raw.get("cursors") or {}
+        except Exception as exc:
+            print(f"[pereval-stats] warning: could not load state {self.state_path}: {exc}", file=sys.stderr)
+            return {}
+
+    def save_state(self, now: int = None):
+        if not self.state_path:
+            return
+        if now is None:
+            now = int(time.time())
+        cursors = {}
+        for key, tailer in (("sni", self.sni_tailer), ("http", self.http_tailer)):
+            if tailer and tailer.ino is not None:
+                cursors[key] = {
+                    "path": str(tailer.path),
+                    "ino": tailer.ino,
+                    "offset": tailer.offset,
+                }
+        payload = {
+            "saved_at": now,
+            "salt": self.salt,
+            "salt_day": self.salt_day,
+            "cursors": cursors,
+            "minute_buckets": [b.to_dict() for b in self.minute_buckets.values()],
+            "hour_buckets": [b.to_dict() for b in self.hour_buckets.values()],
+            "recent_5m_users": {str(k): v for k, v in self.recent_5m_users.items()},
+        }
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(self.state_path)
+        except Exception as exc:
+            print(f"[pereval-stats] warning: could not save state {self.state_path}: {exc}", file=sys.stderr)
+
+    def bootstrap_logs(self, cursors: dict, now: int = None):
+        """Backfill last 24h from rotated (.1) and current log files without double counting."""
+        if now is None:
+            now = int(time.time())
+        for key, tailer, parser in (
+            ("sni", self.sni_tailer, self.ingest_sni_line),
+            ("http", self.http_tailer, self.ingest_http_line),
+        ):
+            if tailer is None:
+                continue
+            cur = cursors.get(key)
+            path = tailer.path
+            rotated = Path(f"{path}.1")
+
+            if cur and path.is_file():
+                try:
+                    st = path.stat()
+                    saved_ino = cur.get("ino")
+                    saved_off = int(cur.get("offset", 0))
+                    if st.st_ino == saved_ino and st.st_size >= saved_off:
+                        tailer.open_at(saved_off)
+                        for line in tailer.read_new_lines():
+                            parser(line, now)
+                        continue
+                    # Check if rotated .1 matches saved_ino
+                    if rotated.is_file():
+                        rst = rotated.stat()
+                        if rst.st_ino == saved_ino and rst.st_size > saved_off:
+                            self._read_file_from(rotated, saved_off, parser, now)
+                            tailer.open_at(0)
+                            for line in tailer.read_new_lines():
+                                parser(line, now)
+                            continue
+                except Exception:
+                    pass
+
+            # Fresh backfill: read .1 if recent, then current file from 0
+            if rotated.is_file():
+                try:
+                    if now - rotated.stat().st_mtime <= 86400:
+                        self._read_file_from(rotated, 0, parser, now)
+                except Exception:
+                    pass
+            if path.is_file():
+                tailer.open_at(0)
+                for line in tailer.read_new_lines():
+                    parser(line, now)
+
+    def _read_file_from(self, path: Path, offset: int, parser, now: int):
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as fp:
+                if offset > 0:
+                    fp.seek(offset)
+                for line in fp:
+                    parser(line, now)
+        except Exception:
+            pass
+
+    def _is_ignored_event(self, ip: str, domain: str, upstream: str, status: int) -> bool:
+        if not ip or ip in ("127.0.0.1", "::1"):
+            return True
+        if not domain or domain == "-" or domain == self.self_domain:
+            return True
+        if self.self_domain and domain.endswith("." + self.self_domain):
+            return True
+        up_clean = (upstream or "").strip()
+        if not up_clean or up_clean == "-" or "127.0.0.1:9" in up_clean or "127.0.0.1:8443" in up_clean:
+            return True
+        if status == 403 and up_clean == "-":
+            return True
+        return False
+
+    def record_event(self, ip: str, ts: int, domain: str, sent: int, recv: int, now: int = None):
+        if now is None:
+            now = int(time.time())
+        if ts < now - 86400 or ts > now + 300:
+            return
+
+        ip_hash = self.hash_ip(ip)
+        service, category = resolve_service(domain, self.service_map)
+
+        hour_ts = (ts // 3600) * 3600
+        min_hour_ts = ((now // 3600) - 23) * 3600
+        if hour_ts >= min_hour_ts:
+            hb = self.hour_buckets.get(hour_ts)
+            if hb is None:
+                hb = Bucket(hour_ts)
+                self.hour_buckets[hour_ts] = hb
+            hb.add_event(ip_hash, domain, service, category, sent, recv)
+
+        min_ts = (ts // 60) * 60
+        min_window_ts = ((now // 60) - 59) * 60
+        if min_ts >= min_window_ts:
+            mb = self.minute_buckets.get(min_ts)
+            if mb is None:
+                mb = Bucket(min_ts)
+                self.minute_buckets[min_ts] = mb
+            mb.add_event(ip_hash, domain, service, category, sent, recv)
+
+        if ts >= now - 300:
+            prev = self.recent_5m_users.get(ip_hash, 0)
+            if ts > prev:
+                self.recent_5m_users[ip_hash] = ts
+
+    def ingest_sni_line(self, line: str, now: int = None):
+        m = SNI_LOG_RE.match(line.strip())
+        if not m:
+            return
+        ip = m.group("ip")
+        domain = normalize_domain(m.group("sni"))
+        upstream = m.group("up")
+        status = int(m.group("status"))
+        if self._is_ignored_event(ip, domain, upstream, status):
+            return
+        ts = parse_nginx_time(m.group("time"))
+        sent = int(m.group("sent"))
+        recv = int(m.group("recv"))
+        self.record_event(ip, ts, domain, sent, recv, now=now)
+
+    def ingest_http_line(self, line: str, now: int = None):
+        m = HTTP_LOG_RE.match(line.strip())
+        if not m:
+            return
+        ip = m.group("ip")
+        domain = normalize_domain(m.group("host"))
+        upstream = m.group("up")
+        status = int(m.group("status"))
+        if self._is_ignored_event(ip, domain, upstream, status):
+            return
+        ts = parse_nginx_time(m.group("time"))
+        sent = int(m.group("sent"))
+        req = m.group("req") or ""
+        recv = len(req) + len(domain) + 64
+        self.record_event(ip, ts, domain, sent, recv, now=now)
+
+    def sample_proc_net_tcp(self, now: int = None):
+        """Inspect /proc/net/tcp for ESTABLISHED (01) sockets on local ports 443 (01BB) and 80 (0050)."""
+        if now is None:
+            now = int(time.time())
+        active_conns = 0
+        active_ips = set()
+
+        for path in (self.proc_tcp_path, self.proc_tcp6_path):
+            if not path or not path.is_file():
+                continue
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception:
+                continue
+            for line in lines[1:]:
+                parts = line.split()
+                if len(parts) < 4:
+                    continue
+                local_addr = parts[1]
+                rem_addr = parts[2]
+                state = parts[3]
+                if state != "01":  # 01 = TCP_ESTABLISHED
+                    continue
+                if ":" not in local_addr or ":" not in rem_addr:
+                    continue
+                _, lport_hex = local_addr.split(":", 1)
+                if lport_hex.upper() not in ("01BB", "0050"):
+                    continue
+                rhost_hex, _ = rem_addr.split(":", 1)
+                ip_str = self._decode_proc_ip(rhost_hex)
+                if not ip_str or ip_str.startswith("127.") or ip_str == "::1":
+                    continue
+                active_conns += 1
+                active_ips.add(ip_str)
+
+        self.active_connections = active_conns
+        min_ts = (now // 60) * 60
+        hour_ts = (now // 3600) * 3600
+        for ip_str in active_ips:
+            ip_hash = self.hash_ip(ip_str)
+            self.recent_5m_users[ip_hash] = now
+            mb = self.minute_buckets.get(min_ts)
+            if mb is None:
+                mb = Bucket(min_ts)
+                self.minute_buckets[min_ts] = mb
+            mb.users.add(ip_hash)
+            hb = self.hour_buckets.get(hour_ts)
+            if hb is None:
+                hb = Bucket(hour_ts)
+                self.hour_buckets[hour_ts] = hb
+            hb.users.add(ip_hash)
+
+    @staticmethod
+    def _decode_proc_ip(hex_ip: str) -> str:
+        try:
+            if len(hex_ip) == 8:
+                b = bytes.fromhex(hex_ip)
+                # Little-endian 32-bit IPv4 on x86/ARM Linux
+                return f"{b[3]}.{b[2]}.{b[1]}.{b[0]}"
+            if len(hex_ip) == 32:
+                # Check IPv4-mapped IPv6 address (0000000000000000FFFF0000xxxxxxxx)
+                if hex_ip[:24].upper() in ("0000000000000000FFFF0000", "00000000000000000000FFFF"):
+                    b = bytes.fromhex(hex_ip[24:])
+                    return f"{b[3]}.{b[2]}.{b[1]}.{b[0]}"
+                return hex_ip.lower()
+        except Exception:
+            pass
+        return ""
+
+    def prune(self, now: int = None):
+        if now is None:
+            now = int(time.time())
+        self._rotate_salt_if_needed(now)
+
+        min_cutoff = ((now // 60) - 59) * 60
+        for k in [k for k in self.minute_buckets if k < min_cutoff]:
+            del self.minute_buckets[k]
+
+        hour_cutoff = ((now // 3600) - 23) * 3600
+        for k in [k for k in self.hour_buckets if k < hour_cutoff]:
+            del self.hour_buckets[k]
+
+        for k in [k for k, ts in self.recent_5m_users.items() if now - ts > 300]:
+            del self.recent_5m_users[k]
+
+    def tick(self, now: int = None):
+        if now is None:
+            now = int(time.time())
+        self.reload_service_map_if_changed()
+
+        if self.sni_tailer:
+            for line in self.sni_tailer.read_new_lines():
+                self.ingest_sni_line(line, now)
+        if self.http_tailer:
+            for line in self.http_tailer.read_new_lines():
+                self.ingest_http_line(line, now)
+
+        self.sample_proc_net_tcp(now)
+        self.prune(now)
+
+    @staticmethod
+    def _aggregate_top(buckets, attr: str, key_name: str, extra_field: str, limit: int = 25) -> list:
+        agg = {}
+        for b in buckets:
+            source = getattr(b, attr)
+            for name, item in source.items():
+                entry = agg.get(name)
+                if entry is None:
+                    entry = {
+                        extra_field: item[extra_field],
+                        "requests": 0,
+                        "bytes": 0,
+                        "users": set(),
+                    }
+                    agg[name] = entry
+                entry["requests"] += item["requests"]
+                entry["bytes"] += item["bytes"]
+                entry["users"].update(item["users"])
+
+        ranked = sorted(
+            agg.items(),
+            key=lambda kv: (kv[1]["requests"], len(kv[1]["users"]), kv[1]["bytes"]),
+            reverse=True,
+        )[:limit]
+
+        return [
+            {
+                key_name: name,
+                extra_field: data[extra_field],
+                "requests": data["requests"],
+                "unique_users": len(data["users"]),
+                "bytes": data["bytes"],
+            }
+            for name, data in ranked
+        ]
+
+    def build_payload(self, now: int = None) -> dict:
+        if now is None:
+            now = int(time.time())
+        now_min = (now // 60) * 60
+        now_hour = (now // 3600) * 3600
+
+        per_minute = []
+        users_1h = set()
+        users_5m = set(self.recent_5m_users.keys())
+        requests_1h = 0
+        bytes_1h = 0
+        active_min_buckets = []
+
+        for i in range(59, -1, -1):
+            ts = now_min - i * 60
+            b = self.minute_buckets.get(ts)
+            if b is not None:
+                active_min_buckets.append(b)
+                reqs = b.requests
+                u_cnt = len(b.users)
+                b_tot = b.bytes_sent + b.bytes_recv
+                users_1h.update(b.users)
+                if i < 5:
+                    users_5m.update(b.users)
+                requests_1h += reqs
+                bytes_1h += b_tot
+            else:
+                reqs = 0
+                u_cnt = 0
+                b_tot = 0
+            per_minute.append({
+                "ts": ts,
+                "requests": reqs,
+                "unique_users": u_cnt,
+                "bytes": b_tot,
+            })
+
+        per_hour = []
+        users_24h = set(users_1h)
+        requests_24h = 0
+        bytes_24h = 0
+        bytes_sent_24h = 0
+        bytes_recv_24h = 0
+        active_hour_buckets = []
+
+        for i in range(23, -1, -1):
+            ts = now_hour - i * 3600
+            b = self.hour_buckets.get(ts)
+            if b is not None:
+                active_hour_buckets.append(b)
+                reqs = b.requests
+                u_cnt = len(b.users)
+                b_tot = b.bytes_sent + b.bytes_recv
+                users_24h.update(b.users)
+                requests_24h += reqs
+                bytes_24h += b_tot
+                bytes_sent_24h += b.bytes_sent
+                bytes_recv_24h += b.bytes_recv
+            else:
+                reqs = 0
+                u_cnt = 0
+                b_tot = 0
+            per_hour.append({
+                "ts": ts,
+                "requests": reqs,
+                "unique_users": u_cnt,
+                "bytes": b_tot,
+            })
+
+        curr_min_bucket = self.minute_buckets.get(now_min)
+        prev_min_bucket = self.minute_buckets.get(now_min - 60)
+        if curr_min_bucket and curr_min_bucket.requests > 0:
+            requests_current_min = curr_min_bucket.requests
+        elif (now - now_min) < 15 and prev_min_bucket:
+            requests_current_min = prev_min_bucket.requests
+        else:
+            requests_current_min = curr_min_bucket.requests if curr_min_bucket else 0
+
+        peak_requests_1m = max((m["requests"] for m in per_minute), default=0)
+        peak_requests_1h = max((h["requests"] for h in per_hour), default=0)
+
+        top_services_24h = self._aggregate_top(
+            active_hour_buckets, "services", "service", "category", limit=25
+        )
+        top_domains_24h = self._aggregate_top(
+            active_hour_buckets, "domains", "domain", "service", limit=30
+        )
+        top_services_1h = self._aggregate_top(
+            active_min_buckets, "services", "service", "category", limit=25
+        )
+        top_domains_1h = self._aggregate_top(
+            active_min_buckets, "domains", "domain", "service", limit=30
+        )
+
+        return {
+            "generated_at": now,
+            "window_seconds": 86400,
+            "live": {
+                "active_connections": self.active_connections,
+                "online_users_5m": len(users_5m),
+                "unique_users_1h": len(users_1h),
+                "unique_users_24h": len(users_24h),
+                "requests_current_min": requests_current_min,
+                "peak_requests_1m": peak_requests_1m,
+                "requests_1h": requests_1h,
+                "peak_requests_1h": peak_requests_1h,
+                "requests_24h": requests_24h,
+                "bytes_1h": bytes_1h,
+                "bytes_24h": bytes_24h,
+                "bytes_sent_24h": bytes_sent_24h,
+                "bytes_recv_24h": bytes_recv_24h,
+            },
+            "per_minute": per_minute,
+            "per_hour": per_hour,
+            "top_services_24h": top_services_24h,
+            "top_domains_24h": top_domains_24h,
+            "top_services_1h": top_services_1h,
+            "top_domains_1h": top_domains_1h,
+        }
+
+    def write_output(self, now: int = None):
+        payload = self.build_payload(now=now)
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.output_path.parent / f".{self.output_path.name}.tmp"
+        tmp_path.write_text(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(self.output_path)
+        return payload
+
+
+def generate_mock_payload(service_map_path: Path, now: int = None, seed: int = 42) -> dict:
+    """Synthesize a realistic 24h / 60m stats.json dataset using real services from service-map.json."""
+    if now is None:
+        now = int(time.time())
+    rng = random.Random(seed)
+    service_map = load_service_map(service_map_path)
+
+    # Group domains by service from service-map.json
+    svc_domains = {}
+    svc_categories = {}
+    for dom, info in service_map.items():
+        svc = info.get("service", dom)
+        cat = info.get("category", "ИИ и языковые модели")
+        svc_categories[svc] = cat
+        svc_domains.setdefault(svc, []).append(dom)
+
+    preferred_weights = [
+        ("OpenAI / ChatGPT", 0.31, ["chatgpt.com", "ab.chatgpt.com", "oaistatic.com", "api.openai.com"]),
+        ("Anthropic / Claude", 0.24, ["claude.ai", "api.anthropic.com", "assets.anthropic.com"]),
+        ("Google — Gemini, AI Studio и антигравити", 0.14, ["gemini.google.com", "aistudio.google.com", "generativelanguage.googleapis.com"]),
+        ("JetBrains — AI, Junie и облако IDE", 0.10, ["api.jetbrains.ai", "jetbrains.com", "junie.jetbrains.com"]),
+        ("xAI / Grok", 0.06, ["grok.com", "x.ai", "assets.grok.com"]),
+        ("Perplexity", 0.05, ["perplexity.ai", "pplx.ai"]),
+        ("ElevenLabs", 0.03, ["elevenlabs.io", "api.elevenlabs.io"]),
+        ("GitHub Copilot", 0.03, ["api.githubcopilot.com", "copilot-proxy.githubusercontent.com"]),
+        ("Notion", 0.02, ["notion.so", "msgstore.www.notion.so"]),
+        ("Figma", 0.02, ["figma.com", "static.figma.com"]),
+    ]
+
+    active_profiles = []
+    for svc_name, weight, sample_doms in preferred_weights:
+        cat = svc_categories.get(svc_name, "ИИ и языковые модели")
+        doms = svc_domains.get(svc_name) or sample_doms
+        # Put realistic primary/API subdomains first
+        merged_doms = list(dict.fromkeys(sample_doms + doms))[:4]
+        active_profiles.append((svc_name, cat, weight, merged_doms))
+
+    now_min = (now // 60) * 60
+    now_hour = (now // 3600) * 3600
+
+    per_hour = []
+    requests_24h = 0
+    bytes_24h = 0
+    bytes_sent_24h = 0
+    bytes_recv_24h = 0
+
+    for i in range(23, -1, -1):
+        ts = now_hour - i * 3600
+        # Diurnal wave peaking in daytime/evening
+        hour_of_day = ((ts + 3 * 3600) // 3600) % 24
+        wave = 0.45 + 0.55 * math.sin(math.pi * max(0, hour_of_day - 5) / 18.0) ** 1.4
+        reqs = int((1850 + rng.randint(-180, 220)) * wave)
+        users = max(8, int((38 + rng.randint(-5, 7)) * (0.55 + 0.45 * wave)))
+        b_tot = reqs * rng.randint(58000, 92000)
+        b_sent = int(b_tot * 0.22)
+        b_recv = b_tot - b_sent
+
+        requests_24h += reqs
+        bytes_24h += b_tot
+        bytes_sent_24h += b_sent
+        bytes_recv_24h += b_recv
+        per_hour.append({
+            "ts": ts,
+            "requests": reqs,
+            "unique_users": users,
+            "bytes": b_tot,
+        })
+
+    per_minute = []
+    requests_1h = 0
+    bytes_1h = 0
+    for i in range(59, -1, -1):
+        ts = now_min - i * 60
+        wave = 0.75 + 0.25 * math.sin(i / 7.5) + rng.uniform(-0.12, 0.15)
+        reqs = max(12, int(62 * wave))
+        users = max(5, int(14 * (0.7 + 0.3 * wave) + rng.randint(-2, 2)))
+        b_tot = reqs * rng.randint(54000, 88000)
+        requests_1h += reqs
+        bytes_1h += b_tot
+        per_minute.append({
+            "ts": ts,
+            "requests": reqs,
+            "unique_users": users,
+            "bytes": b_tot,
+        })
+
+    # Reconcile current hour with 1h sum so numbers are consistent
+    if per_hour:
+        per_hour[-1]["requests"] = max(per_hour[-1]["requests"], int(requests_1h * 0.85))
+        per_hour[-1]["bytes"] = max(per_hour[-1]["bytes"], int(bytes_1h * 0.85))
+
+    unique_users_24h = 284
+    unique_users_1h = 58
+    online_users_5m = 19
+    active_connections = 46
+
+    top_services_24h = []
+    top_domains_24h = []
+    top_services_1h = []
+    top_domains_1h = []
+
+    for svc_name, cat, weight, doms in active_profiles:
+        svc_reqs_24h = max(40, int(requests_24h * weight * rng.uniform(0.94, 1.06)))
+        svc_users_24h = min(unique_users_24h, max(6, int(unique_users_24h * (weight ** 0.68))))
+        svc_bytes_24h = int(bytes_24h * weight * rng.uniform(0.92, 1.08))
+        top_services_24h.append({
+            "service": svc_name,
+            "category": cat,
+            "requests": svc_reqs_24h,
+            "unique_users": svc_users_24h,
+            "bytes": svc_bytes_24h,
+        })
+
+        svc_reqs_1h = max(4, int(requests_1h * weight * rng.uniform(0.9, 1.1)))
+        svc_users_1h = min(unique_users_1h, max(2, int(unique_users_1h * (weight ** 0.7))))
+        svc_bytes_1h = int(bytes_1h * weight * rng.uniform(0.9, 1.1))
+        top_services_1h.append({
+            "service": svc_name,
+            "category": cat,
+            "requests": svc_reqs_1h,
+            "unique_users": svc_users_1h,
+            "bytes": svc_bytes_1h,
+        })
+
+        dom_shares = [0.54, 0.26, 0.13, 0.07][:len(doms)]
+        share_sum = sum(dom_shares) or 1.0
+        for d_idx, dom in enumerate(doms):
+            share = dom_shares[d_idx] / share_sum
+            d_reqs_24h = max(12, int(svc_reqs_24h * share))
+            d_users_24h = max(3, int(svc_users_24h * min(1.0, share * 1.45)))
+            d_bytes_24h = max(40960, int(svc_bytes_24h * share))
+            top_domains_24h.append({
+                "domain": dom,
+                "service": svc_name,
+                "requests": d_reqs_24h,
+                "unique_users": d_users_24h,
+                "bytes": d_bytes_24h,
+            })
+
+            d_reqs_1h = max(2, int(svc_reqs_1h * share))
+            d_users_1h = max(1, int(svc_users_1h * min(1.0, share * 1.45)))
+            d_bytes_1h = max(8192, int(svc_bytes_1h * share))
+            top_domains_1h.append({
+                "domain": dom,
+                "service": svc_name,
+                "requests": d_reqs_1h,
+                "unique_users": d_users_1h,
+                "bytes": d_bytes_1h,
+            })
+
+    top_services_24h.sort(key=lambda x: x["requests"], reverse=True)
+    top_domains_24h.sort(key=lambda x: x["requests"], reverse=True)
+    top_services_1h.sort(key=lambda x: x["requests"], reverse=True)
+    top_domains_1h.sort(key=lambda x: x["requests"], reverse=True)
+
+    return {
+        "generated_at": now,
+        "window_seconds": 86400,
+        "mock": True,
+        "live": {
+            "active_connections": active_connections,
+            "online_users_5m": online_users_5m,
+            "unique_users_1h": unique_users_1h,
+            "unique_users_24h": unique_users_24h,
+            "requests_current_min": per_minute[-1]["requests"],
+            "peak_requests_1m": max(m["requests"] for m in per_minute),
+            "requests_1h": requests_1h,
+            "peak_requests_1h": max(h["requests"] for h in per_hour),
+            "requests_24h": requests_24h,
+            "bytes_1h": bytes_1h,
+            "bytes_24h": bytes_24h,
+            "bytes_sent_24h": bytes_sent_24h,
+            "bytes_recv_24h": bytes_recv_24h,
+        },
+        "per_minute": per_minute,
+        "per_hour": per_hour,
+        "top_services_24h": top_services_24h[:20],
+        "top_domains_24h": top_domains_24h[:25],
+        "top_services_1h": top_services_1h[:20],
+        "top_domains_1h": top_domains_1h[:25],
+    }
+
+
+def resolve_default_service_map() -> Path:
+    prod = Path("/etc/nginx/geoblock/service-map.json")
+    if prod.is_file():
+        return prod
+    local = Path(__file__).resolve().parent / "service-map.json"
+    return local
+
+
+def main(argv=None) -> int:
+    p = argparse.ArgumentParser(
+        description="Собирает метрики nginx (sni.log / http-proxy.log) в stats.json."
+    )
+    p.add_argument("--sni-log", default="/var/log/nginx/sni.log",
+                   help="путь к /var/log/nginx/sni.log")
+    p.add_argument("--http-log", default="/var/log/nginx/http-proxy.log",
+                   help="путь к /var/log/nginx/http-proxy.log")
+    p.add_argument("--service-map", default=None,
+                   help="путь к service-map.json")
+    p.add_argument("--output", default="/var/www/geoblock/stats.json",
+                   help="путь для атомарной записи stats.json")
+    p.add_argument("--state-file", default="/var/lib/pereval-stats/state.json",
+                   help="путь для сохранения состояния между перезапусками")
+    p.add_argument("--proc-tcp", default="/proc/net/tcp",
+                   help="путь к /proc/net/tcp")
+    p.add_argument("--proc-tcp6", default="/proc/net/tcp6",
+                   help="путь к /proc/net/tcp6")
+    p.add_argument("--self-domain", default="pereval.portbuddy.tech",
+                   help="собственный домен сервиса (исключается из прокси-метрик)")
+    p.add_argument("--interval", type=float, default=5.0,
+                   help="интервал обновления в секундах (по умолчанию 5)")
+    p.add_argument("--now", type=int, default=None,
+                   help="фиксированное время unix epoch (для тестирования)")
+    p.add_argument("--once", action="store_true",
+                   help="обработать логи один раз, записать stats.json и выйти")
+    p.add_argument("--mock", action="store_true",
+                   help="сгенерировать реалистичные демо-данные stats.json для локальной проверки")
+    args = p.parse_args(argv)
+
+    service_map_path = Path(args.service_map) if args.service_map else resolve_default_service_map()
+    output_path = Path(args.output)
+
+    if args.mock:
+        payload = generate_mock_payload(service_map_path, now=args.now)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"записан демо-файл {output_path} ({output_path.stat().st_size:,} байт)".replace(",", " "))
+        return 0
+
+    collector = StatsCollector(
+        service_map_path=service_map_path,
+        sni_log_path=Path(args.sni_log) if args.sni_log else None,
+        http_log_path=Path(args.http_log) if args.http_log else None,
+        output_path=output_path,
+        state_path=Path(args.state_file) if args.state_file else None,
+        proc_tcp_path=Path(args.proc_tcp) if args.proc_tcp else None,
+        proc_tcp6_path=Path(args.proc_tcp6) if args.proc_tcp6 else None,
+        self_domain=args.self_domain,
+    )
+
+    now = args.now if args.now is not None else int(time.time())
+    cursors = collector.load_state(now=now)
+    collector.bootstrap_logs(cursors, now=now)
+    collector.tick(now=now)
+    collector.write_output(now=now)
+    collector.save_state(now=now)
+
+    if args.once:
+        return 0
+
+    stop_requested = False
+
+    def handle_signal(signum, _frame):
+        nonlocal stop_requested
+        stop_requested = True
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    last_state_save = time.time()
+    while not stop_requested:
+        time.sleep(max(0.5, args.interval))
+        if stop_requested:
+            break
+        tick_now = int(time.time())
+        collector.tick(now=tick_now)
+        collector.write_output(now=tick_now)
+        if tick_now - last_state_save >= 60:
+            collector.save_state(now=tick_now)
+            last_state_save = tick_now
+
+    collector.save_state(now=int(time.time()))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
