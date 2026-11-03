@@ -14,7 +14,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика и нагрузка — {{name}} ({{domain}})</title>
 <meta name="description" content="Публичный мониторинг нагрузки DNS и SNI-прокси {{name}} ({{domain}}) в реальном времени: уникальные пользователи, запросы в минуту и час, популярные сервисы.">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="index, follow">
 <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="{{origin}}/stats.html">
@@ -120,8 +120,11 @@ padding:14px 18px;margin:28px 0 0;font-size:13.5px}
 
 footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;
 border-top:1px solid var(--line);margin-top:44px;padding-top:20px;font-size:13.5px;color:var(--mute)}
-footer p{margin:0}
+footer p{margin:0;flex:1;min-width:240px}
 footer a{color:var(--accent)}
+footer nav.legal-links{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:18px;font-size:13px}
+footer nav.legal-links a{color:var(--mute);text-decoration:underline;text-underline-offset:3px}
+footer nav.legal-links a:hover{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -270,7 +273,15 @@ footer a{color:var(--accent)}
 
 <footer class="wrap">
   <p><a href="/">{{name}}</a> ({{domain}}) · Отслеживается {{total}} доменов в {{category_count}} категориях · Обновлено {{date}}</p>
-  <p><a href="/privacy.html"> Политика конфиденциальности</a> · <a href="/terms.html">Условия использования</a></p>
+  <nav class="legal-links" aria-label="Правовые документы и контакты">
+    <a href="/">Главная</a>
+    <a href="/stats.html" aria-current="page">Статистика и нагрузка</a>
+    <a href="/terms.html">Пользовательское соглашение</a>
+    <a href="/privacy.html">Политика конфиденциальности</a>
+    <a href="https://github.com/amak-tech/pereval" target="_blank" rel="noopener">GitHub</a>
+    <span>Support: <a href="mailto:support@portbuddy.dev">support@portbuddy.dev</a></span>
+    <span>Abuse: <a href="mailto:abuse@portbuddy.dev">abuse@portbuddy.dev</a></span>
+  </nav>
 </footer>
 
 <script>
