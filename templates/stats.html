@@ -107,7 +107,7 @@ padding:6px 8px 9px;border-bottom:1px solid var(--line);font-weight:600}
 .stat-table th.num,.stat-table td.num{text-align:right;white-space:nowrap}
 .stat-table td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .stat-table tr:last-child td{border-bottom:0}
-.name-cell{width:100%;max-width:520px}
+.name-cell{width:100%;max-width:0;min-width:110px}
 .item-title{font-weight:600;color:var(--ink);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item-sub{font-size:11.5px;color:var(--mute);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar-wrap{height:5px;background:var(--code);border-radius:3px;overflow:hidden;margin-top:5px}
@@ -115,16 +115,31 @@ padding:6px 8px 9px;border-bottom:1px solid var(--line);font-weight:600}
 .empty-row{text-align:center;color:var(--mute);padding:24px 8px!important}
 
 .privacy-box{border-left:3px solid var(--ok);background:var(--okbg);border-radius:0 10px 10px 0;
-padding:14px 18px;margin:28px 0 0;font-size:13.5px}
+padding:14px 18px;margin:28px 0 0;font-size:13.5px;overflow-wrap:break-word}
 .privacy-box strong{color:var(--ok)}
 
 footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;
 border-top:1px solid var(--line);margin-top:44px;padding-top:20px;font-size:13.5px;color:var(--mute)}
-footer p{margin:0;flex:1;min-width:240px}
+footer p{margin:0;flex:1;min-width:200px}
 footer a{color:var(--accent)}
 footer nav.legal-links{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:18px;font-size:13px}
 footer nav.legal-links a{color:var(--mute);text-decoration:underline;text-underline-offset:3px}
 footer nav.legal-links a:hover{color:var(--accent)}
+@media (max-width:600px){
+.wrap{padding:0 14px 52px}
+header .wrap{padding:22px 14px 20px}
+.panel{padding:15px 14px}
+.kpi-card{padding:14px 16px}
+.kpi-val{font-size:26px}
+.chart-box{height:195px}
+.chart-svg .axis-txt{font-size:10px}
+.stat-table{font-size:12.5px}
+.stat-table th{font-size:10.5px;padding:6px 5px 8px;letter-spacing:.03em}
+.stat-table td{padding:8px 5px}
+.stat-table th:first-child,.stat-table td:first-child{padding-left:0}
+.stat-table th:last-child,.stat-table td:last-child{padding-right:0}
+.privacy-box{padding:12px 14px}
+}
 </style>
 </head>
 <body>
@@ -210,7 +225,7 @@ footer nav.legal-links a:hover{color:var(--accent)}
         </div>
       </div>
       <div class="chart-box" id="chart-minute-box">
-        <svg class="chart-svg" id="chart-minute" viewBox="0 0 960 220" preserveAspectRatio="none" aria-label="График за 60 минут"></svg>
+        <svg class="chart-svg" id="chart-minute" viewBox="0 0 960 220" aria-label="График за 60 минут"></svg>
         <div class="chart-tooltip" id="tt-minute"></div>
       </div>
     </div>
@@ -227,7 +242,7 @@ footer nav.legal-links a:hover{color:var(--accent)}
         </div>
       </div>
       <div class="chart-box" id="chart-hour-box">
-        <svg class="chart-svg" id="chart-hour" viewBox="0 0 960 220" preserveAspectRatio="none" aria-label="График за 24 часа"></svg>
+        <svg class="chart-svg" id="chart-hour" viewBox="0 0 960 220" aria-label="График за 24 часа"></svg>
         <div class="chart-tooltip" id="tt-hour"></div>
       </div>
     </div>
@@ -323,14 +338,17 @@ footer nav.legal-links a:hover{color:var(--accent)}
     var box = document.getElementById(boxId);
     if (!svg || !points || !points.length) return;
 
-    var W = 960;
-    var H = 220;
-    var padL = 46;
-    var padR = 42;
+    var W = Math.max(260, Math.round((box && box.clientWidth) || 960));
+    var H = Math.max(170, Math.round((box && box.clientHeight) || 220));
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+    var isCompact = W < 520;
+    var padL = isCompact ? 36 : 46;
+    var padR = isCompact ? 30 : 42;
     var padT = 14;
-    var padB = 28;
-    var plotW = W - padL - padR;
-    var plotH = H - padT - padB;
+    var padB = isCompact ? 24 : 28;
+    var plotW = Math.max(100, W - padL - padR);
+    var plotH = Math.max(80, H - padT - padB);
 
     var maxReq = 1;
     var maxUsers = 1;
@@ -343,19 +361,23 @@ footer nav.legal-links a:hover{color:var(--accent)}
 
     var n = points.length;
     var step = plotW / n;
-    var barW = Math.max(3, Math.min(24, step * 0.66));
+    var barW = Math.max(2, Math.min(24, step * 0.66));
 
     var out = [];
 
     // Horizontal grid lines (3 steps)
+    var axisOff = isCompact ? 5 : 8;
     for (var g = 0; g <= 3; g++) {
       var gy = padT + plotH - (g / 3) * plotH;
       var reqLabel = Math.round((g / 3) * maxReq);
       var usrLabel = Math.round((g / 3) * maxUsers);
       out.push('<line class="grid-line" x1="' + padL + '" y1="' + gy.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + gy.toFixed(1) + '"/>');
-      out.push('<text class="axis-txt" x="' + (padL - 8) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="end">' + formatNumber(reqLabel) + '</text>');
-      out.push('<text class="axis-txt" x="' + (W - padR + 8) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="start">' + formatNumber(usrLabel) + '</text>');
+      out.push('<text class="axis-txt" x="' + (padL - axisOff) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="end">' + formatNumber(reqLabel) + '</text>');
+      out.push('<text class="axis-txt" x="' + (W - padR + axisOff) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="start">' + formatNumber(usrLabel) + '</text>');
     }
+
+    var labelEvery = isHourly ? (W < 420 ? 6 : W < 640 ? 4 : 3) : (W < 420 ? 15 : W < 640 ? 12 : 10);
+    var minGapToLast = Math.ceil(labelEvery * 0.55);
 
     var lineCoords = [];
     for (var idx = 0; idx < n; idx++) {
@@ -371,9 +393,8 @@ footer nav.legal-links a:hover{color:var(--accent)}
       lineCoords.push(cx.toFixed(1) + ',' + uy.toFixed(1));
 
       // X-axis time labels
-      var labelEvery = isHourly ? 3 : 10;
-      if (idx % labelEvery === 0 || idx === n - 1) {
-        out.push('<text class="axis-txt" x="' + cx.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + formatHHMM(pt.ts) + '</text>');
+      if ((idx % labelEvery === 0 && (n - 1 - idx) >= minGapToLast) || idx === n - 1) {
+        out.push('<text class="axis-txt" x="' + cx.toFixed(1) + '" y="' + (H - 5) + '" text-anchor="middle">' + formatHHMM(pt.ts) + '</text>');
       }
     }
 
@@ -381,11 +402,12 @@ footer nav.legal-links a:hover{color:var(--accent)}
       out.push('<polyline class="u-line" points="' + lineCoords.join(' ') + '"/>');
     }
 
+    var dotR = (!isHourly && isCompact) ? 1.8 : (isCompact ? 2.4 : 3);
     for (var dIdx = 0; dIdx < n; dIdx++) {
       var dpt = points[dIdx];
       var dcx = padL + dIdx * step + step / 2;
       var duy = padT + plotH - (dpt.unique_users / maxUsers) * plotH;
-      out.push('<circle class="u-dot" cx="' + dcx.toFixed(1) + '" cy="' + duy.toFixed(1) + '" r="3"/>');
+      out.push('<circle class="u-dot" cx="' + dcx.toFixed(1) + '" cy="' + duy.toFixed(1) + '" r="' + dotR + '"/>');
       out.push('<rect class="hover-col" data-idx="' + dIdx + '" x="' + (padL + dIdx * step).toFixed(1) + '" y="' + padT + '" width="' + step.toFixed(1) + '" height="' + plotH + '"/>');
     }
 
@@ -394,7 +416,7 @@ footer nav.legal-links a:hover{color:var(--accent)}
     var cols = svg.querySelectorAll('.hover-col');
     var bars = svg.querySelectorAll('.bar');
 
-    function showTip(idx, evt) {
+    function showTip(idx, clientX) {
       var item = points[idx];
       if (!item) return;
       for (var k = 0; k < bars.length; k++) {
@@ -411,13 +433,15 @@ footer nav.legal-links a:hover{color:var(--accent)}
       tt.style.display = 'block';
 
       var rect = box.getBoundingClientRect();
-      var relX = evt.clientX - rect.left;
+      var ttW = tt.offsetWidth || 175;
+      var relX = clientX - rect.left;
       var left = relX + 14;
-      if (left + 185 > rect.width) {
-        left = Math.max(8, relX - 190);
+      if (left + ttW > rect.width - 4) {
+        left = relX - ttW - 14;
       }
+      left = Math.max(4, Math.min(left, rect.width - ttW - 4));
       tt.style.left = left + 'px';
-      tt.style.top = '12px';
+      tt.style.top = '10px';
     }
 
     function hideTip() {
@@ -429,10 +453,22 @@ footer nav.legal-links a:hover{color:var(--accent)}
 
     for (var c = 0; c < cols.length; c++) {
       (function (index) {
-        cols[index].addEventListener('mousemove', function (e) { showTip(index, e); });
+        cols[index].addEventListener('mousemove', function (e) { showTip(index, e.clientX); });
         cols[index].addEventListener('mouseleave', hideTip);
       })(c);
     }
+
+    svg.onpointerdown = function (e) {
+      if (e.pointerType === 'mouse') return;
+      var rect = svg.getBoundingClientRect();
+      var relX = e.clientX - rect.left;
+      var idx = Math.floor((relX - padL) / step);
+      if (idx >= 0 && idx < n) {
+        showTip(idx, e.clientX);
+      } else {
+        hideTip();
+      }
+    };
   }
 
   function escapeHtml(s) {
@@ -561,6 +597,16 @@ footer nav.legal-links a:hover{color:var(--accent)}
 
   document.getElementById('refresh-btn').addEventListener('click', function () {
     fetchStats();
+  });
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (!lastPayload) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      renderChart('chart-minute', 'tt-minute', 'chart-minute-box', lastPayload.per_minute || [], false);
+      renderChart('chart-hour', 'tt-hour', 'chart-hour-box', lastPayload.per_hour || [], true);
+    }, 120);
   });
 
   fetchStats();
