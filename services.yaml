@@ -180,6 +180,8 @@ categories:
           - api.app.prod.grazie.aws.intellij.net
           - api.ai.jetbrains.com.cn
           - jb.gg
+          - ingrazzio-cloud-prod.labs.jb.gg
+          - junie.jetbrains.com
       - name: HashiCorp
         domains:
           - hashicorp.com
