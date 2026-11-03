@@ -5,17 +5,12 @@
 Tails buffered nginx logs (/var/log/nginx/sni.log and /var/log/nginx/http-proxy.log),
 samples established connections from /proc/net/tcp, maps domains to logical services
 via service-map.json, and atomically writes /var/www/geoblock/stats.json every 5s.
-
-Also supports generating realistic mock data for local dashboard testing:
-    python3 stats_collector.py --mock --output stats.json
 """
 
 import argparse
 import hashlib
 import json
-import math
 import os
-import random
 import re
 import signal
 import sys
@@ -118,7 +113,7 @@ def resolve_service(domain: str, service_map: dict) -> tuple:
 class Bucket:
     """Aggregates metrics for a single time slice (1 minute or 1 hour)."""
 
-    __slots__ = ("ts", "requests", "bytes_sent", "bytes_recv", "users", "services", "domains")
+    __slots__ = ("ts", "requests", "bytes_sent", "bytes_recv", "users", "services")
 
     def __init__(self, ts: int):
         self.ts = ts
@@ -127,9 +122,8 @@ class Bucket:
         self.bytes_recv = 0
         self.users = set()
         self.services = {}  # service -> {"category": str, "requests": int, "bytes": int, "users": set}
-        self.domains = {}   # domain  -> {"service": str, "requests": int, "bytes": int, "users": set}
 
-    def add_event(self, ip_hash: int, domain: str, service: str, category: str,
+    def add_event(self, ip_hash: int, service: str, category: str,
                   sent: int, recv: int):
         self.requests += 1
         self.bytes_sent += sent
@@ -144,14 +138,6 @@ class Bucket:
         svc_entry["requests"] += 1
         svc_entry["bytes"] += total_bytes
         svc_entry["users"].add(ip_hash)
-
-        dom_entry = self.domains.get(domain)
-        if dom_entry is None:
-            dom_entry = {"service": service, "requests": 0, "bytes": 0, "users": set()}
-            self.domains[domain] = dom_entry
-        dom_entry["requests"] += 1
-        dom_entry["bytes"] += total_bytes
-        dom_entry["users"].add(ip_hash)
 
     def to_dict(self) -> dict:
         return {
@@ -169,15 +155,6 @@ class Bucket:
                 }
                 for k, v in self.services.items()
             },
-            "domains": {
-                k: {
-                    "service": v["service"],
-                    "requests": v["requests"],
-                    "bytes": v["bytes"],
-                    "users": list(v["users"]),
-                }
-                for k, v in self.domains.items()
-            },
         }
 
     @classmethod
@@ -190,13 +167,6 @@ class Bucket:
         for k, v in (data.get("services") or {}).items():
             b.services[k] = {
                 "category": v.get("category", "Другое"),
-                "requests": int(v.get("requests", 0)),
-                "bytes": int(v.get("bytes", 0)),
-                "users": set(int(u) for u in v.get("users", [])),
-            }
-        for k, v in (data.get("domains") or {}).items():
-            b.domains[k] = {
-                "service": v.get("service", k),
                 "requests": int(v.get("requests", 0)),
                 "bytes": int(v.get("bytes", 0)),
                 "users": set(int(u) for u in v.get("users", [])),
@@ -487,7 +457,7 @@ class StatsCollector:
             if hb is None:
                 hb = Bucket(hour_ts)
                 self.hour_buckets[hour_ts] = hb
-            hb.add_event(ip_hash, domain, service, category, sent, recv)
+            hb.add_event(ip_hash, service, category, sent, recv)
 
         min_ts = (ts // 60) * 60
         min_window_ts = ((now // 60) - 59) * 60
@@ -496,7 +466,7 @@ class StatsCollector:
             if mb is None:
                 mb = Bucket(min_ts)
                 self.minute_buckets[min_ts] = mb
-            mb.add_event(ip_hash, domain, service, category, sent, recv)
+            mb.add_event(ip_hash, service, category, sent, recv)
 
         if ts >= now - 300:
             prev = self.recent_5m_users.get(ip_hash, 0)
@@ -754,14 +724,8 @@ class StatsCollector:
         top_services_24h = self._aggregate_top(
             active_hour_buckets, "services", "service", "category", limit=25
         )
-        top_domains_24h = self._aggregate_top(
-            active_hour_buckets, "domains", "domain", "service", limit=30
-        )
         top_services_1h = self._aggregate_top(
             active_min_buckets, "services", "service", "category", limit=25
-        )
-        top_domains_1h = self._aggregate_top(
-            active_min_buckets, "domains", "domain", "service", limit=30
         )
 
         return {
@@ -785,9 +749,7 @@ class StatsCollector:
             "per_minute": per_minute,
             "per_hour": per_hour,
             "top_services_24h": top_services_24h,
-            "top_domains_24h": top_domains_24h,
             "top_services_1h": top_services_1h,
-            "top_domains_1h": top_domains_1h,
         }
 
     def write_output(self, now: int = None):
@@ -800,189 +762,6 @@ class StatsCollector:
         )
         tmp_path.replace(self.output_path)
         return payload
-
-
-def generate_mock_payload(service_map_path: Path, now: int = None, seed: int = 42) -> dict:
-    """Synthesize a realistic 24h / 60m stats.json dataset using real services from service-map.json."""
-    if now is None:
-        now = int(time.time())
-    rng = random.Random(seed)
-    service_map = load_service_map(service_map_path)
-
-    # Group domains by service from service-map.json
-    svc_domains = {}
-    svc_categories = {}
-    for dom, info in service_map.items():
-        svc = info.get("service", dom)
-        cat = info.get("category", "ИИ и языковые модели")
-        svc_categories[svc] = cat
-        svc_domains.setdefault(svc, []).append(dom)
-
-    preferred_weights = [
-        ("OpenAI / ChatGPT", 0.31, ["chatgpt.com", "ab.chatgpt.com", "oaistatic.com", "api.openai.com"]),
-        ("Anthropic / Claude", 0.24, ["claude.ai", "api.anthropic.com", "assets.anthropic.com"]),
-        ("Google — Gemini, AI Studio и антигравити", 0.14, ["gemini.google.com", "aistudio.google.com", "generativelanguage.googleapis.com"]),
-        ("JetBrains — AI, Junie и облако IDE", 0.10, ["api.jetbrains.ai", "jetbrains.com", "junie.jetbrains.com"]),
-        ("xAI / Grok", 0.06, ["grok.com", "x.ai", "assets.grok.com"]),
-        ("Perplexity", 0.05, ["perplexity.ai", "pplx.ai"]),
-        ("ElevenLabs", 0.03, ["elevenlabs.io", "api.elevenlabs.io"]),
-        ("GitHub Copilot", 0.03, ["api.githubcopilot.com", "copilot-proxy.githubusercontent.com"]),
-        ("Notion", 0.02, ["notion.so", "msgstore.www.notion.so"]),
-        ("Figma", 0.02, ["figma.com", "static.figma.com"]),
-    ]
-
-    active_profiles = []
-    for svc_name, weight, sample_doms in preferred_weights:
-        cat = svc_categories.get(svc_name, "ИИ и языковые модели")
-        doms = svc_domains.get(svc_name) or sample_doms
-        # Put realistic primary/API subdomains first
-        merged_doms = list(dict.fromkeys(sample_doms + doms))[:4]
-        active_profiles.append((svc_name, cat, weight, merged_doms))
-
-    now_min = (now // 60) * 60
-    now_hour = (now // 3600) * 3600
-
-    per_hour = []
-    requests_24h = 0
-    bytes_24h = 0
-    bytes_sent_24h = 0
-    bytes_recv_24h = 0
-
-    for i in range(23, -1, -1):
-        ts = now_hour - i * 3600
-        # Diurnal wave peaking in daytime/evening
-        hour_of_day = ((ts + 3 * 3600) // 3600) % 24
-        wave = 0.45 + 0.55 * math.sin(math.pi * max(0, hour_of_day - 5) / 18.0) ** 1.4
-        reqs = int((1850 + rng.randint(-180, 220)) * wave)
-        users = max(8, int((38 + rng.randint(-5, 7)) * (0.55 + 0.45 * wave)))
-        b_tot = reqs * rng.randint(58000, 92000)
-        b_sent = int(b_tot * 0.22)
-        b_recv = b_tot - b_sent
-
-        requests_24h += reqs
-        bytes_24h += b_tot
-        bytes_sent_24h += b_sent
-        bytes_recv_24h += b_recv
-        per_hour.append({
-            "ts": ts,
-            "requests": reqs,
-            "unique_users": users,
-            "bytes": b_tot,
-        })
-
-    per_minute = []
-    requests_1h = 0
-    bytes_1h = 0
-    for i in range(59, -1, -1):
-        ts = now_min - i * 60
-        wave = 0.75 + 0.25 * math.sin(i / 7.5) + rng.uniform(-0.12, 0.15)
-        reqs = max(12, int(62 * wave))
-        users = max(5, int(14 * (0.7 + 0.3 * wave) + rng.randint(-2, 2)))
-        b_tot = reqs * rng.randint(54000, 88000)
-        requests_1h += reqs
-        bytes_1h += b_tot
-        per_minute.append({
-            "ts": ts,
-            "requests": reqs,
-            "unique_users": users,
-            "bytes": b_tot,
-        })
-
-    # Reconcile current hour with 1h sum so numbers are consistent
-    if per_hour:
-        per_hour[-1]["requests"] = max(per_hour[-1]["requests"], int(requests_1h * 0.85))
-        per_hour[-1]["bytes"] = max(per_hour[-1]["bytes"], int(bytes_1h * 0.85))
-
-    unique_users_24h = 284
-    unique_users_1h = 58
-    online_users_5m = 19
-    active_connections = 46
-
-    top_services_24h = []
-    top_domains_24h = []
-    top_services_1h = []
-    top_domains_1h = []
-
-    for svc_name, cat, weight, doms in active_profiles:
-        svc_reqs_24h = max(40, int(requests_24h * weight * rng.uniform(0.94, 1.06)))
-        svc_users_24h = min(unique_users_24h, max(6, int(unique_users_24h * (weight ** 0.68))))
-        svc_bytes_24h = int(bytes_24h * weight * rng.uniform(0.92, 1.08))
-        top_services_24h.append({
-            "service": svc_name,
-            "category": cat,
-            "requests": svc_reqs_24h,
-            "unique_users": svc_users_24h,
-            "bytes": svc_bytes_24h,
-        })
-
-        svc_reqs_1h = max(4, int(requests_1h * weight * rng.uniform(0.9, 1.1)))
-        svc_users_1h = min(unique_users_1h, max(2, int(unique_users_1h * (weight ** 0.7))))
-        svc_bytes_1h = int(bytes_1h * weight * rng.uniform(0.9, 1.1))
-        top_services_1h.append({
-            "service": svc_name,
-            "category": cat,
-            "requests": svc_reqs_1h,
-            "unique_users": svc_users_1h,
-            "bytes": svc_bytes_1h,
-        })
-
-        dom_shares = [0.54, 0.26, 0.13, 0.07][:len(doms)]
-        share_sum = sum(dom_shares) or 1.0
-        for d_idx, dom in enumerate(doms):
-            share = dom_shares[d_idx] / share_sum
-            d_reqs_24h = max(12, int(svc_reqs_24h * share))
-            d_users_24h = max(3, int(svc_users_24h * min(1.0, share * 1.45)))
-            d_bytes_24h = max(40960, int(svc_bytes_24h * share))
-            top_domains_24h.append({
-                "domain": dom,
-                "service": svc_name,
-                "requests": d_reqs_24h,
-                "unique_users": d_users_24h,
-                "bytes": d_bytes_24h,
-            })
-
-            d_reqs_1h = max(2, int(svc_reqs_1h * share))
-            d_users_1h = max(1, int(svc_users_1h * min(1.0, share * 1.45)))
-            d_bytes_1h = max(8192, int(svc_bytes_1h * share))
-            top_domains_1h.append({
-                "domain": dom,
-                "service": svc_name,
-                "requests": d_reqs_1h,
-                "unique_users": d_users_1h,
-                "bytes": d_bytes_1h,
-            })
-
-    top_services_24h.sort(key=lambda x: x["requests"], reverse=True)
-    top_domains_24h.sort(key=lambda x: x["requests"], reverse=True)
-    top_services_1h.sort(key=lambda x: x["requests"], reverse=True)
-    top_domains_1h.sort(key=lambda x: x["requests"], reverse=True)
-
-    return {
-        "generated_at": now,
-        "window_seconds": 86400,
-        "mock": True,
-        "live": {
-            "active_connections": active_connections,
-            "online_users_5m": online_users_5m,
-            "unique_users_1h": unique_users_1h,
-            "unique_users_24h": unique_users_24h,
-            "requests_current_min": per_minute[-1]["requests"],
-            "peak_requests_1m": max(m["requests"] for m in per_minute),
-            "requests_1h": requests_1h,
-            "peak_requests_1h": max(h["requests"] for h in per_hour),
-            "requests_24h": requests_24h,
-            "bytes_1h": bytes_1h,
-            "bytes_24h": bytes_24h,
-            "bytes_sent_24h": bytes_sent_24h,
-            "bytes_recv_24h": bytes_recv_24h,
-        },
-        "per_minute": per_minute,
-        "per_hour": per_hour,
-        "top_services_24h": top_services_24h[:20],
-        "top_domains_24h": top_domains_24h[:25],
-        "top_services_1h": top_services_1h[:20],
-        "top_domains_1h": top_domains_1h[:25],
-    }
 
 
 def resolve_default_service_map() -> Path:
@@ -1019,22 +798,10 @@ def main(argv=None) -> int:
                    help="фиксированное время unix epoch (для тестирования)")
     p.add_argument("--once", action="store_true",
                    help="обработать логи один раз, записать stats.json и выйти")
-    p.add_argument("--mock", action="store_true",
-                   help="сгенерировать реалистичные демо-данные stats.json для локальной проверки")
     args = p.parse_args(argv)
 
     service_map_path = Path(args.service_map) if args.service_map else resolve_default_service_map()
     output_path = Path(args.output)
-
-    if args.mock:
-        payload = generate_mock_payload(service_map_path, now=args.now)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        print(f"записан демо-файл {output_path} ({output_path.stat().st_size:,} байт)".replace(",", " "))
-        return 0
 
     collector = StatsCollector(
         service_map_path=service_map_path,

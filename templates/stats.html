@@ -13,7 +13,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статистика и нагрузка — {{name}} ({{domain}})</title>
-<meta name="description" content="Публичный мониторинг нагрузки DNS и SNI-прокси {{name}} ({{domain}}) в реальном времени: уникальные пользователи, запросы в минуту и час, популярные сервисы и домены.">
+<meta name="description" content="Публичный мониторинг нагрузки DNS и SNI-прокси {{name}} ({{domain}}) в реальном времени: уникальные пользователи, запросы в минуту и час, популярные сервисы.">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
@@ -21,10 +21,10 @@
 <style>
 :root{--bg:#fbfbfa;--panel:#fff;--ink:#1a1a19;--mute:#6b6b68;--line:#e6e5e2;
 --accent:#0b5cff;--accent2:#eef3ff;--ok:#0f7b3e;--okbg:#e8f6ee;
---warn:#8a5300;--warnbg:#fff8e6;--code:#f4f4f2;--users:#0f7b3e}
+--code:#f4f4f2;--users:#0f7b3e}
 @media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1c1c1a;--ink:#eeeeec;
 --mute:#a3a29e;--line:#2e2e2b;--accent:#7aa2ff;--accent2:#1f2637;
---ok:#55c27d;--okbg:#17291e;--warn:#e0b055;--warnbg:#2a2318;--code:#232320;--users:#55c27d}}
+--ok:#55c27d;--okbg:#17291e;--code:#232320;--users:#55c27d}}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -40,7 +40,6 @@ header .wrap{padding:30px 20px 26px}
 .status-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 .live-pill{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;
 padding:5px 12px;border-radius:99px;background:var(--okbg);color:var(--ok);border:1px solid transparent}
-.live-pill.mock{background:var(--warnbg);color:var(--warn)}
 .live-pill.err{background:var(--code);color:var(--mute);border-color:var(--line)}
 .dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;
 animation:pulse 2s infinite ease-in-out}
@@ -54,8 +53,6 @@ padding-top:14px;border-top:1px solid var(--line);font-size:13px;color:var(--mut
 .btn-sm{font:inherit;font-size:12.5px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);
 background:var(--bg);color:var(--ink);cursor:pointer}
 .btn-sm:hover{border-color:var(--accent);color:var(--accent)}
-.btn-sm.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-@media (prefers-color-scheme:dark){.btn-sm.active{color:#141413}}
 
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0}
 @media (max-width:920px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
@@ -104,15 +101,13 @@ z-index:10;display:none;min-width:165px;font-variant-numeric:tabular-nums}
 background:transparent;color:var(--mute);cursor:pointer}
 .seg-btn.active{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
 
-.tables-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-@media (max-width:860px){.tables-grid{grid-template-columns:1fr}}
 .stat-table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
 .stat-table th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);
 padding:6px 8px 9px;border-bottom:1px solid var(--line);font-weight:600}
 .stat-table th.num,.stat-table td.num{text-align:right;white-space:nowrap}
 .stat-table td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 .stat-table tr:last-child td{border-bottom:0}
-.name-cell{max-width:260px}
+.name-cell{width:100%;max-width:520px}
 .item-title{font-weight:600;color:var(--ink);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .item-sub{font-size:11.5px;color:var(--mute);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar-wrap{height:5px;background:var(--code);border-radius:3px;overflow:hidden;margin-top:5px}
@@ -141,11 +136,10 @@ footer a{color:var(--accent)}
     </div>
     <p class="brand">{{name}} · {{domain}} · Мониторинг узла</p>
     <h1>Статистика и нагрузка в реальном времени</h1>
-    <p class="lede">Сводка по трафику SNI/HTTP-прокси (<code>{{ip}}</code>): число уникальных пользователей, интенсивность запросов в минуту и в час, а также распределение по сервисам и доменам за последние 24 часа.</p>
+    <p class="lede">Сводка по трафику SNI/HTTP-прокси (<code>{{ip}}</code>): число уникальных пользователей, интенсивность запросов в минуту и в час, а также распределение по сервисам за последние 24 часа.</p>
     <div class="meta-row">
       <span id="updated-at">Обновление каждые 5 секунд</span>
       <div class="meta-actions">
-        <button type="button" id="toggle-mock-btn" class="btn-sm" title="Переключить между реальными данными сервера и демо-режимом">Демо-данные</button>
         <button type="button" id="refresh-btn" class="btn-sm">Обновить сейчас</button>
       </div>
     </div>
@@ -237,19 +231,19 @@ footer a{color:var(--accent)}
   </section>
 
   <div class="section-bar">
-    <h2>Распределение по сервисам и доменам</h2>
+    <h2>Популярные сервисы</h2>
     <div class="seg-group" role="tablist" aria-label="Период детализации">
       <button type="button" class="seg-btn active" data-window="24h">За 24 часа</button>
       <button type="button" class="seg-btn" data-window="1h">За 1 час</button>
     </div>
   </div>
 
-  <section class="tables-grid" aria-label="Рейтинг сервисов и доменов">
+  <section aria-label="Рейтинг сервисов">
     <div class="panel">
       <div class="panel-head">
         <div>
-          <h2>Популярные сервисы</h2>
-          <span class="panel-sub">Агрегация по сервисам из <code>services.yaml</code> ({{service_count}} сервисов)</span>
+          <h2>Агрегация по сервисам</h2>
+          <span class="panel-sub">Группировка обращений по сервисам из <code>services.yaml</code> ({{service_count}} сервисов)</span>
         </div>
       </div>
       <table class="stat-table">
@@ -262,28 +256,6 @@ footer a{color:var(--accent)}
           </tr>
         </thead>
         <tbody id="services-tbody">
-          <tr><td colspan="4" class="empty-row">Загрузка данных…</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>Популярные домены (SNI / Host)</h2>
-          <span class="panel-sub">Прямые обращения по именам хостов из белого списка ({{total}} доменов)</span>
-        </div>
-      </div>
-      <table class="stat-table">
-        <thead>
-          <tr>
-            <th>Домен</th>
-            <th class="num">Польз.</th>
-            <th class="num">Запросы</th>
-            <th class="num">Трафик</th>
-          </tr>
-        </thead>
-        <tbody id="domains-tbody">
           <tr><td colspan="4" class="empty-row">Загрузка данных…</td></tr>
         </tbody>
       </table>
@@ -303,8 +275,6 @@ footer a{color:var(--accent)}
 
 <script>
 (function () {
-  var params = new URLSearchParams(window.location.search);
-  var forceMock = params.get('mock') === '1' || window.location.protocol === 'file:';
   var selectedWindow = '24h';
   var lastPayload = null;
 
@@ -334,112 +304,6 @@ footer a{color:var(--accent)}
   function formatHHMM(epochSec) {
     var d = new Date(epochSec * 1000);
     return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-  }
-
-  function buildEmbeddedMock() {
-    var now = Math.floor(Date.now() / 1000);
-    var nowMin = Math.floor(now / 60) * 60;
-    var nowHour = Math.floor(now / 3600) * 3600;
-
-    var perMinute = [];
-    var reqs1h = 0;
-    var bytes1h = 0;
-    for (var i = 59; i >= 0; i--) {
-      var ts = nowMin - i * 60;
-      var wave = 0.78 + 0.22 * Math.sin(i / 6.5) + 0.08 * Math.cos(i / 2.3);
-      var reqs = Math.max(14, Math.round(64 * wave));
-      var users = Math.max(5, Math.round(15 * (0.72 + 0.28 * wave)));
-      var b = reqs * 72400;
-      reqs1h += reqs;
-      bytes1h += b;
-      perMinute.push({ ts: ts, requests: reqs, unique_users: users, bytes: b });
-    }
-
-    var perHour = [];
-    var reqs24h = 0;
-    var bytes24h = 0;
-    for (var j = 23; j >= 0; j--) {
-      var hts = nowHour - j * 3600;
-      var hourOfDay = new Date(hts * 1000).getHours();
-      var hwave = 0.42 + 0.58 * Math.pow(Math.max(0, Math.sin(Math.PI * Math.max(0, hourOfDay - 4) / 19)), 1.3);
-      var hreqs = Math.round(2100 * hwave);
-      var husers = Math.max(9, Math.round(42 * (0.55 + 0.45 * hwave)));
-      var hb = hreqs * 74000;
-      reqs24h += hreqs;
-      bytes24h += hb;
-      perHour.push({ ts: hts, requests: hreqs, unique_users: husers, bytes: hb });
-    }
-
-    var services24h = [
-      { service: 'OpenAI / ChatGPT', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.32), unique_users: 164, bytes: Math.round(bytes24h * 0.34) },
-      { service: 'Anthropic / Claude', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.25), unique_users: 138, bytes: Math.round(bytes24h * 0.26) },
-      { service: 'Google — Gemini, AI Studio и антигравити', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.14), unique_users: 89, bytes: Math.round(bytes24h * 0.14) },
-      { service: 'JetBrains — AI, Junie и облако IDE', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.10), unique_users: 64, bytes: Math.round(bytes24h * 0.09) },
-      { service: 'xAI / Grok', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.06), unique_users: 41, bytes: Math.round(bytes24h * 0.06) },
-      { service: 'Perplexity', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.05), unique_users: 35, bytes: Math.round(bytes24h * 0.04) },
-      { service: 'GitHub Copilot', category: 'ИИ и языковые модели', requests: Math.round(reqs24h * 0.04), unique_users: 29, bytes: Math.round(bytes24h * 0.04) },
-      { service: 'Notion', category: 'Разработка, дизайн и работа', requests: Math.round(reqs24h * 0.04), unique_users: 24, bytes: Math.round(bytes24h * 0.03) }
-    ];
-
-    var domains24h = [
-      { domain: 'chatgpt.com', service: 'OpenAI / ChatGPT', requests: Math.round(reqs24h * 0.18), unique_users: 152, bytes: Math.round(bytes24h * 0.20) },
-      { domain: 'claude.ai', service: 'Anthropic / Claude', requests: Math.round(reqs24h * 0.15), unique_users: 126, bytes: Math.round(bytes24h * 0.16) },
-      { domain: 'api.anthropic.com', service: 'Anthropic / Claude', requests: Math.round(reqs24h * 0.10), unique_users: 74, bytes: Math.round(bytes24h * 0.10) },
-      { domain: 'ab.chatgpt.com', service: 'OpenAI / ChatGPT', requests: Math.round(reqs24h * 0.08), unique_users: 118, bytes: Math.round(bytes24h * 0.06) },
-      { domain: 'gemini.google.com', service: 'Google — Gemini, AI Studio и антигравити', requests: Math.round(reqs24h * 0.08), unique_users: 68, bytes: Math.round(bytes24h * 0.08) },
-      { domain: 'oaistatic.com', service: 'OpenAI / ChatGPT', requests: Math.round(reqs24h * 0.06), unique_users: 134, bytes: Math.round(bytes24h * 0.08) },
-      { domain: 'api.jetbrains.ai', service: 'JetBrains — AI, Junie и облако IDE', requests: Math.round(reqs24h * 0.06), unique_users: 51, bytes: Math.round(bytes24h * 0.05) },
-      { domain: 'grok.com', service: 'xAI / Grok', requests: Math.round(reqs24h * 0.05), unique_users: 38, bytes: Math.round(bytes24h * 0.05) },
-      { domain: 'perplexity.ai', service: 'Perplexity', requests: Math.round(reqs24h * 0.04), unique_users: 32, bytes: Math.round(bytes24h * 0.03) },
-      { domain: 'api.githubcopilot.com', service: 'GitHub Copilot', requests: Math.round(reqs24h * 0.04), unique_users: 27, bytes: Math.round(bytes24h * 0.03) }
-    ];
-
-    var scale1h = reqs1h / Math.max(1, reqs24h);
-    var services1h = services24h.map(function (s) {
-      return {
-        service: s.service,
-        category: s.category,
-        requests: Math.max(3, Math.round(s.requests * scale1h)),
-        unique_users: Math.max(2, Math.round(s.unique_users * 0.24)),
-        bytes: Math.max(10240, Math.round(s.bytes * scale1h))
-      };
-    });
-    var domains1h = domains24h.map(function (d) {
-      return {
-        domain: d.domain,
-        service: d.service,
-        requests: Math.max(2, Math.round(d.requests * scale1h)),
-        unique_users: Math.max(1, Math.round(d.unique_users * 0.24)),
-        bytes: Math.max(8192, Math.round(d.bytes * scale1h))
-      };
-    });
-
-    return {
-      generated_at: now,
-      window_seconds: 86400,
-      mock: true,
-      live: {
-        active_connections: 44,
-        online_users_5m: 19,
-        unique_users_1h: 58,
-        unique_users_24h: 276,
-        requests_current_min: perMinute[perMinute.length - 1].requests,
-        peak_requests_1m: Math.max.apply(null, perMinute.map(function (m) { return m.requests; })),
-        requests_1h: reqs1h,
-        peak_requests_1h: Math.max.apply(null, perHour.map(function (h) { return h.requests; })),
-        requests_24h: reqs24h,
-        bytes_1h: bytes1h,
-        bytes_24h: bytes24h,
-        bytes_sent_24h: Math.round(bytes24h * 0.22),
-        bytes_recv_24h: Math.round(bytes24h * 0.78)
-      },
-      per_minute: perMinute,
-      per_hour: perHour,
-      top_services_24h: services24h,
-      top_domains_24h: domains24h,
-      top_services_1h: services1h,
-      top_domains_1h: domains1h
-    };
   }
 
   function renderChart(svgId, ttId, boxId, points, isHourly) {
@@ -585,7 +449,7 @@ footer a{color:var(--accent)}
       htmlRows.push(
         '<tr>' +
           '<td class="name-cell">' +
-            '<span class="item-title">' + (primaryKey === 'domain' ? '<code>' + title + '</code>' : title) + '</span>' +
+            '<span class="item-title">' + title + '</span>' +
             '<span class="item-sub">' + sub + '</span>' +
             '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
           '</td>' +
@@ -604,15 +468,11 @@ footer a{color:var(--accent)}
     var svcs = (is1h && data.top_services_1h && data.top_services_1h.length)
       ? data.top_services_1h
       : (data.top_services_24h || []);
-    var doms = (is1h && data.top_domains_1h && data.top_domains_1h.length)
-      ? data.top_domains_1h
-      : (data.top_domains_24h || []);
 
     renderTable('services-tbody', svcs, 'service', 'category');
-    renderTable('domains-tbody', doms, 'domain', 'service');
   }
 
-  function renderPayload(data, sourceLabel) {
+  function renderPayload(data) {
     lastPayload = data;
     var live = data.live || {};
 
@@ -621,8 +481,8 @@ footer a{color:var(--accent)}
     var peak1h = live.peak_requests_1h || Math.max.apply(null, (data.per_hour || []).map(function (h) { return h.requests || 0; }).concat([0]));
     var bytes24h = live.bytes_24h || 0;
     var bytes1h = live.bytes_1h || (data.per_minute || []).reduce(function (acc, m) { return acc + (m.bytes || 0); }, 0);
-    var sent24h = live.bytes_sent_24h !== undefined ? live.bytes_sent_24h : Math.round(bytes24h * 0.22);
-    var recv24h = live.bytes_recv_24h !== undefined ? live.bytes_recv_24h : (bytes24h - sent24h);
+    var sent24h = live.bytes_sent_24h !== undefined ? live.bytes_sent_24h : 0;
+    var recv24h = live.bytes_recv_24h !== undefined ? live.bytes_recv_24h : 0;
 
     document.getElementById('kpi-online').textContent = formatNumber(live.online_users_5m);
     document.getElementById('kpi-users-1h').textContent = formatNumber(live.unique_users_1h);
@@ -647,45 +507,28 @@ footer a{color:var(--accent)}
 
     var pill = document.getElementById('live-pill');
     var liveText = document.getElementById('live-text');
-    var mockBtn = document.getElementById('toggle-mock-btn');
-    var isMock = Boolean(data.mock || forceMock);
-
-    if (isMock) {
-      pill.className = 'live-pill mock';
-      liveText.textContent = sourceLabel || 'Демо-данные (локальный предпросмотр)';
-      mockBtn.classList.add('active');
-    } else {
-      pill.className = 'live-pill';
-      liveText.textContent = 'В сети · обновление каждые 5 сек';
-      mockBtn.classList.remove('active');
-    }
+    pill.className = 'live-pill';
+    liveText.textContent = 'В сети · обновление каждые 5 сек';
 
     if (data.generated_at) {
       var d = new Date(data.generated_at * 1000);
       document.getElementById('updated-at').textContent =
         'Обновлено в ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) +
-        (isMock ? ' · демонстрационный набор данных' : ' · автообновление каждые 5 сек');
+        ' · автообновление каждые 5 сек';
     }
   }
 
   function fetchStats() {
-    if (forceMock) {
-      renderPayload(buildEmbeddedMock(), 'Демо-режим (?mock=1)');
-      return;
-    }
     fetch('stats.json?_=' + Date.now(), { cache: 'no-store' })
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
       .then(function (data) {
-        renderPayload(data, data.mock ? 'Демо-данные (stats.json)' : '');
+        renderPayload(data);
       })
       .catch(function () {
-        var host = window.location.hostname;
-        if (!host || host === 'localhost' || host === '127.0.0.1') {
-          renderPayload(buildEmbeddedMock(), 'Демо-данные (локальный fallback)');
-        } else if (!lastPayload) {
+        if (!lastPayload) {
           var pill = document.getElementById('live-pill');
           var liveText = document.getElementById('live-text');
           pill.className = 'live-pill err';
@@ -704,11 +547,6 @@ footer a{color:var(--accent)}
       renderTablesForWindow(lastPayload);
     });
   }
-
-  document.getElementById('toggle-mock-btn').addEventListener('click', function () {
-    forceMock = !forceMock;
-    fetchStats();
-  });
 
   document.getElementById('refresh-btn').addEventListener('click', function () {
     fetchStats();
