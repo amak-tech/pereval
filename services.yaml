@@ -98,10 +98,29 @@ categories:
           - gemini.google.com
           - aistudio.google.com
           - makersuite.google.com
+          - ai.studio
+          - ai.dev
           - bard.google.com
           - ai.google.dev
           - generativeai.google
           - generativelanguage.googleapis.com
+          - alkalimakersuite-pa.clients6.google.com
+          - alkalimakersuite-pa.googleapis.com
+          - alkalimakersuiteapplets.pa.clients6.google.com
+          - alkalimakersuiteapplets.pa.googleapis.com
+          - webchannel-alkalimakersuite-pa.clients6.google.com
+          - webchannel-alkalimakersuite-pa.googleapis.com
+          - alkalicore-pa.clients6.google.com
+          - alkalicore-pa.googleapis.com
+          - makersuite-pa.clients6.google.com
+          - makersuite-pa.googleapis.com
+          - waa-pa.clients6.google.com
+          - waa-pa.googleapis.com
+          - cloudconsole-pa.clients6.google.com
+          - people-pa.clients6.google.com
+          - notifications-pa.clients6.google.com
+          - scf.usercontent.goog
+          - safecontentframe.static.usercontent.goog
           - notebooklm.google
           - notebook.google
           - notebook.google.com
