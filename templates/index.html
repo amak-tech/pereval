@@ -227,7 +227,7 @@ td:last-child{color:var(--mute)}
 
 <header>
   <div class="wrap">
-    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span>DNS-прокси · Казахстан · <a href="/stats.html">Статистика</a> · от создателей <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=header" target="_blank" rel="noopener" data-pb-placement="header">Port Buddy</a></span></p>
+    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span>DNS-прокси · Казахстан · <a href="/stats.html">Статистика</a> · <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a> · от создателей <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=header" target="_blank" rel="noopener" data-pb-placement="header">Port Buddy</a></span></p>
     <h1>{{name}} — DNS-прокси для зарубежных ИИ и инструментов разработки</h1>
     <p class="lede">Если ChatGPT отвечает «not available in your country», Claude
     не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не
@@ -499,11 +499,14 @@ $ portbuddy tcp 5432</code></pre>
 
 <h2 id="request">Не нашли нужный сервис?</h2>
 <p>Если зарубежный сайт или приложение закрывает доступ по региону, но его ещё нет в списке выше —
-предложите добавить его через <strong>Issues</strong> в нашем репозитории на GitHub:
+напишите в наш <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a> или предложите добавить его через <strong>Issues</strong> в репозитории на GitHub:
 <a href="https://github.com/amak-tech/pereval" target="_blank" rel="noopener">github.com/amak-tech/pereval</a>.
 Укажите название сервиса и основной домен (а если знаете — также домены API или статики),
 и мы добавим его в конфигурацию.</p>
-<p><a class="btn" href="https://github.com/amak-tech/pereval/issues/new" target="_blank" rel="noopener">Создать Issue на GitHub →</a></p>
+<div class="creator-actions">
+  <a class="btn" href="https://t.me/pereval_dns" target="_blank" rel="noopener">Написать в Telegram-чат →</a>
+  <a class="creator-link" href="https://github.com/amak-tech/pereval/issues/new" target="_blank" rel="noopener">Создать Issue на GitHub →</a>
+</div>
 
 <h2 id="faq">Частые вопросы</h2>
 <details class="faq"><summary>Чем это отличается от VPN?</summary><p>VPN направляет через себя весь трафик и обычно заметно снижает скорость. Здесь через сервер идут только соединения с доменами из списка — всё остальное подключается напрямую, как и раньше. Ничего не нужно включать и выключать: настроили один раз в свойствах сети, и оно работает в браузере, в терминале и в приложениях одновременно.</p></details>
@@ -513,7 +516,7 @@ $ portbuddy tcp 5432</code></pre>
 <details class="faq"><summary>Снизится ли скорость интернета?</summary><p>Только для доменов из списка — их трафик идёт через Казахстан, и к задержке добавляется путь до Алматы. Все остальные сайты, включая российские, подключаются напрямую и работают с прежней скоростью.</p></details>
 <details class="faq"><summary>Видит ли сервер мой трафик?</summary><p>Нет. TLS-соединение не расшифровывается: сервер читает только имя хоста, которое браузер и так передаёт открытым текстом, и пересылает соединение дальше байт в байт. Сертификат проверяет ваше устройство, и он настоящий — от Anthropic, OpenAI или Google, а не подставной.</p></details>
 <details class="faq"><summary>Сервис всё равно пишет, что недоступен в моей стране. Почему?</summary><p>Три обычные причины. Первая: вы настроили DNS в системе, но в браузере включён сторонний DNS-over-HTTPS (Cloudflare / Google) — отключите его или укажите в браузере <code>{{origin}}/dns-query</code>. Вторая: соединение прошло по IPv6, минуя подмену адреса. Третья: сервис проверяет не адрес, а страну аккаунта или платёжной карты — так работают лицензии JetBrains, и здесь прокси не поможет.</p></details>
-<details class="faq"><summary>Нужного домена нет в списке. Что делать?</summary><p>Он будет разрешаться обычным образом и продолжит выдавать ошибку регионального доступа со стороны сервиса (останется недоступным из вашего региона). Создайте Issue в репозитории <a href="https://github.com/amak-tech/pereval/issues" target="_blank" rel="noopener">github.com/amak-tech/pereval</a> с адресом сайта — домен добавляется в список за пару минут, вместе со всеми поддоменами.</p></details>
+<details class="faq"><summary>Нужного домена нет в списке. Что делать?</summary><p>Он будет разрешаться обычным образом и продолжит выдавать ошибку регионального доступа со стороны сервиса (останется недоступным из вашего региона). Напишите в <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a> или создайте Issue в репозитории <a href="https://github.com/amak-tech/pereval/issues" target="_blank" rel="noopener">github.com/amak-tech/pereval</a> с адресом сайта — домен добавляется в список за пару минут, вместе со всеми поддоменами.</p></details>
 
 <h2 id="off">Отключено намеренно</h2>
 {{disabled}}
@@ -532,7 +535,8 @@ $ portbuddy tcp 5432</code></pre>
   <tr><td>Мобильные приложения с закреплением сертификата (pinning)</td>
       <td>Работают: сертификат настоящий, соединение сквозное</td></tr>
   <tr><td>Домена нет в списке</td>
-      <td>Он разрешается обычным образом и остаётся недоступным из вашего региона (продолжит выдавать ошибку регионального доступа со стороны сервиса). Предложите его через
+      <td>Он разрешается обычным образом и остаётся недоступным из вашего региона (продолжит выдавать ошибку регионального доступа со стороны сервиса). Предложите его в
+          <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чате</a> или через
           <a href="https://github.com/amak-tech/pereval/issues" target="_blank" rel="noopener">GitHub Issues</a> — добавим</td></tr>
   <tr><td>Ресурсы, доступ к которым ограничен законодательством РФ или РБ</td>
       <td>Не входит в задачу. Сервис восстанавливает доступ только к зарубежным ИИ и инструментам разработки, ограничивающим российские и белорусские IP-адреса по геолокации со своей стороны</td></tr>
@@ -549,6 +553,7 @@ $ portbuddy tcp 5432</code></pre>
     <a href="/stats.html">Статистика и нагрузка</a>
     <a href="/terms.html">Пользовательское соглашение (Условия использования)</a>
     <a href="/privacy.html">Политика конфиденциальности</a>
+    <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a>
     <a href="https://github.com/amak-tech/pereval" target="_blank" rel="noopener">GitHub</a>
     <span>Support: <a href="mailto:support@portbuddy.dev">support@portbuddy.dev</a></span>
     <span>Abuse: <a href="mailto:abuse@portbuddy.dev">abuse@portbuddy.dev</a></span>

@@ -13,6 +13,9 @@
 👉 **Пошаговая инструкция по подключению и актуальные настройки:**  
 **[https://pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=hero)**
 
+💬 **Telegram-чат пользователей (помощь с настройкой и предложения новых доменов):**  
+**[https://t.me/pereval_dns](https://t.me/pereval_dns)**
+
 ---
 
 ## Зачем нужен Перевал
@@ -122,9 +125,9 @@ python3 update_hosts.py --hosts-file ./hosts.preview
 
 ---
 
-## Предложить новый сервис
+## Предложить новый сервис или задать вопрос
 
-Если нужный вам зарубежный сервис ограничивает доступ по региону (выдаёт ошибку региональной недоступности), но его ещё нет в списке на **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=request)** — создайте обращение в разделе **[Issues](https://github.com/amak-tech/pereval/issues)** репозитория **[github.com/amak-tech/pereval](https://github.com/amak-tech/pereval)** и укажите адрес сайта или название приложения.
+Если нужный вам зарубежный сервис ограничивает доступ по региону (выдаёт ошибку региональной недоступности), но его ещё нет в списке на **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=request)** — напишите в наш **[Telegram-чат @pereval_dns](https://t.me/pereval_dns)** или создайте обращение в разделе **[Issues](https://github.com/amak-tech/pereval/issues)** репозитория **[github.com/amak-tech/pereval](https://github.com/amak-tech/pereval)** и укажите адрес сайта или название приложения.
 
 ---
 
