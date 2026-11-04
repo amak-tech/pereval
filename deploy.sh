@@ -23,7 +23,8 @@ NGINX_CONF="nginx.conf"
 NGINX_MAPS=("nginx-sni-allow.map" "nginx-host-allow.map")
 SERVICE_MAP="service-map.json"
 STATS_COLLECTOR="stats_collector.py"
-WEB_FILES=("index.html" "stats.html" "terms.html" "privacy.html" "dns.mobileconfig" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
+DOH_PROXY="doh_proxy.py"
+WEB_FILES=("index.html" "stats.html" "terms.html" "privacy.html" "dns.mobileconfig" "favicon.svg" "favicon.ico" "apple-touch-icon.png" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
@@ -104,7 +105,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 step "Проверяю локальные файлы"
 
-LOCAL_FILES=("$DNSMASQ_CONF" "$NGINX_CONF" "${NGINX_MAPS[@]}" "$SERVICE_MAP" "$STATS_COLLECTOR" "${WEB_FILES[@]}")
+LOCAL_FILES=("$DNSMASQ_CONF" "$NGINX_CONF" "${NGINX_MAPS[@]}" "$SERVICE_MAP" "$STATS_COLLECTOR" "$DOH_PROXY" "${WEB_FILES[@]}")
 missing=()
 for f in "${LOCAL_FILES[@]}"; do
 	[[ -f $f ]] || missing+=("$f")
@@ -123,7 +124,7 @@ fi
 
 # несведённые подстановки означают, что генератор падал на середине
 for f in "${LOCAL_FILES[@]}"; do
-	[[ $f == *.png || $f == "$STATS_COLLECTOR" ]] && continue
+	[[ $f == *.png || $f == *.ico || $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" ]] && continue
 	if grep -q '{{[a-z_]*}}' "$f"; then
 		die "в $f остались подстановки {{...}} — генератор не доработал"
 	fi
@@ -144,7 +145,7 @@ info "домен сервера: $DOMAIN"
 
 if [[ -f $SOURCE_YAML ]]; then
 	for f in "${LOCAL_FILES[@]}"; do
-		[[ $f == "$STATS_COLLECTOR" ]] && continue
+		[[ $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" ]] && continue
 		if [[ $SOURCE_YAML -nt $f ]]; then
 			warn "$SOURCE_YAML новее, чем $f — возможно, забыли пересобрать"
 			((FORCE)) || die "перезапустите generate.py или добавьте --force"
@@ -227,11 +228,13 @@ if ((DRY_RUN)); then
 	printf '    %-24s -> %s\n' "$SERVICE_MAP" "/etc/nginx/geoblock/$SERVICE_MAP"
 	printf '    %-24s -> %s\n' "$STATS_COLLECTOR" "/usr/local/bin/pereval-stats-collector.py"
 	printf '    %-24s -> %s\n' "pereval-stats.service" "/etc/systemd/system/pereval-stats.service"
+	printf '    %-24s -> %s\n' "$DOH_PROXY" "/usr/local/bin/pereval-doh-proxy.py"
+	printf '    %-24s -> %s\n' "pereval-doh.service" "/etc/systemd/system/pereval-doh.service"
 	for w in "${WEB_FILES[@]}"; do
 		printf '    %-24s -> %s\n' "$w" "/var/www/geoblock/$w"
 	done
 	printf '    %-24s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
-	printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-stats, certbot (%s)\n' "$DOMAIN"
+	printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, certbot (%s)\n' "$DOMAIN"
 	exit 0
 fi
 
@@ -274,6 +277,8 @@ SYSCTL_DST="/etc/sysctl.d/99-geoblock-highload.conf"
 COLLECTOR_DST="/usr/local/bin/pereval-stats-collector.py"
 STATS_UNIT_DST="/etc/systemd/system/pereval-stats.service"
 STATS_STATE_DIR="/var/lib/pereval-stats"
+DOH_DST="/usr/local/bin/pereval-doh-proxy.py"
+DOH_UNIT_DST="/etc/systemd/system/pereval-doh.service"
 
 say()  { printf '    %s\n' "$*"; }
 fail() { printf 'ошибка на сервере: %s\n' "$*" >&2; exit 1; }
@@ -281,10 +286,10 @@ fail() { printf 'ошибка на сервере: %s\n' "$*" >&2; exit 1; }
 mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" /etc/sysctl.d
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map service-map.json stats_collector.py index.html stats.html terms.html privacy.html dns.mobileconfig og-image.svg og-image.png robots.txt sitemap.xml; do
+for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map service-map.json stats_collector.py doh_proxy.py index.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
-say "получено 15 файлов"
+say "получено 19 файлов"
 
 # --- проверка синтаксиса ДО того, как что-то тронуто -----------------------
 dnsmasq --test -C "$STAGE/dnsmasq-geoblock.conf" \
@@ -304,11 +309,16 @@ backup_one "$MAP_DIR/nginx-host-allow.map" nginx-host-allow.map
 backup_one "$MAP_DIR/service-map.json"     service-map.json
 backup_one "$COLLECTOR_DST"                pereval-stats-collector.py
 backup_one "$STATS_UNIT_DST"               pereval-stats.service
+backup_one "$DOH_DST"                      pereval-doh-proxy.py
+backup_one "$DOH_UNIT_DST"                 pereval-doh.service
 backup_one "$WEB_DIR/index.html"           index.html
 backup_one "$WEB_DIR/stats.html"           stats.html
 backup_one "$WEB_DIR/terms.html"           terms.html
 backup_one "$WEB_DIR/privacy.html"         privacy.html
 backup_one "$WEB_DIR/dns.mobileconfig"     dns.mobileconfig
+backup_one "$WEB_DIR/favicon.svg"          favicon.svg
+backup_one "$WEB_DIR/favicon.ico"          favicon.ico
+backup_one "$WEB_DIR/apple-touch-icon.png" apple-touch-icon.png
 backup_one "$WEB_DIR/og-image.svg"         og-image.svg
 backup_one "$WEB_DIR/og-image.png"         og-image.png
 backup_one "$WEB_DIR/robots.txt"           robots.txt
@@ -318,7 +328,7 @@ say "резервные копии: $BACKUP"
 
 restore() {
 	printf 'откатываю изменения\n' >&2
-	for name in dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map service-map.json pereval-stats-collector.py pereval-stats.service index.html stats.html terms.html privacy.html dns.mobileconfig og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
+	for name in dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map service-map.json pereval-stats-collector.py pereval-stats.service pereval-doh-proxy.py pereval-doh.service index.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
 		if [[ -f "$BACKUP/$name" ]]; then
 			case "$name" in
 				dnsmasq.conf)                                                                                                    cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
@@ -326,7 +336,9 @@ restore() {
 				99-geoblock-highload.conf)                                                                                       cp -a "$BACKUP/$name" "$SYSCTL_DST" ;;
 				pereval-stats-collector.py)                                                                                      cp -a "$BACKUP/$name" "$COLLECTOR_DST" ;;
 				pereval-stats.service)                                                                                           cp -a "$BACKUP/$name" "$STATS_UNIT_DST" ;;
-				index.html|stats.html|terms.html|privacy.html|dns.mobileconfig|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
+				pereval-doh-proxy.py)                                                                                            cp -a "$BACKUP/$name" "$DOH_DST" ;;
+				pereval-doh.service)                                                                                             cp -a "$BACKUP/$name" "$DOH_UNIT_DST" ;;
+				index.html|stats.html|terms.html|privacy.html|dns.mobileconfig|favicon.svg|favicon.ico|apple-touch-icon.png|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
 				*)                                                                                                               cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
 			esac
 		fi
@@ -334,6 +346,7 @@ restore() {
 	systemctl daemon-reload 2>/dev/null || true
 	systemctl restart dnsmasq 2>/dev/null || true
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+	systemctl restart pereval-doh.service 2>/dev/null || true
 	systemctl restart pereval-stats.service 2>/dev/null || true
 }
 
@@ -389,6 +402,9 @@ install -m 0644 "$STAGE/stats.html"       "$WEB_DIR/stats.html"
 install -m 0644 "$STAGE/terms.html"       "$WEB_DIR/terms.html"
 install -m 0644 "$STAGE/privacy.html"     "$WEB_DIR/privacy.html"
 install -m 0644 "$STAGE/dns.mobileconfig" "$WEB_DIR/dns.mobileconfig"
+install -m 0644 "$STAGE/favicon.svg"      "$WEB_DIR/favicon.svg"
+install -m 0644 "$STAGE/favicon.ico"      "$WEB_DIR/favicon.ico"
+install -m 0644 "$STAGE/apple-touch-icon.png" "$WEB_DIR/apple-touch-icon.png"
 install -m 0644 "$STAGE/og-image.svg"     "$WEB_DIR/og-image.svg"
 install -m 0644 "$STAGE/og-image.png"     "$WEB_DIR/og-image.png"
 install -m 0644 "$STAGE/robots.txt"       "$WEB_DIR/robots.txt"
@@ -401,6 +417,25 @@ install -m 0644 "$STAGE/nginx-sni-allow.map"  "$MAP_DIR/nginx-sni-allow.map"
 install -m 0644 "$STAGE/nginx-host-allow.map" "$MAP_DIR/nginx-host-allow.map"
 install -m 0644 "$STAGE/service-map.json"     "$MAP_DIR/service-map.json"
 install -m 0644 "$STAGE/nginx.conf"           "$NGINX_DST"
+
+# --- DNS-over-HTTPS прокси (pereval-doh.service) --------------------------
+install -m 0755 "$STAGE/doh_proxy.py"         "$DOH_DST"
+cat >"$DOH_UNIT_DST" <<UNIT
+[Unit]
+Description=Pereval high-performance DNS-over-HTTPS (DoH, RFC 8484) proxy
+After=network.target dnsmasq.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $DOH_DST --listen-host 127.0.0.1 --listen-port 8053 --upstream-host 127.0.0.1 --upstream-port 53
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+chmod 0644 "$DOH_UNIT_DST"
 
 # --- коллектор статистики (pereval-stats.service) -------------------------
 install -m 0755 "$STAGE/stats_collector.py"   "$COLLECTOR_DST"
@@ -465,6 +500,14 @@ fi
 say "nginx перезагружен"
 
 systemctl daemon-reload
+systemctl enable pereval-doh.service >/dev/null 2>&1 || true
+if ! systemctl restart pereval-doh.service; then
+	journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
+	restore
+	fail "pereval-doh.service не поднялся"
+fi
+say "DNS-over-HTTPS прокси pereval-doh перезапущен"
+
 systemctl enable pereval-stats.service >/dev/null 2>&1 || true
 if ! systemctl restart pereval-stats.service; then
 	journalctl -u pereval-stats.service -n 20 --no-pager >&2 || true
@@ -511,7 +554,7 @@ fi
 
 # --- проверка результата --------------------------------------------------
 sleep 1
-for unit in dnsmasq nginx pereval-stats; do
+for unit in dnsmasq nginx pereval-doh pereval-stats; do
 	systemctl is-active --quiet "$unit" || { restore; fail "$unit не активен после перезапуска"; }
 done
 
@@ -529,7 +572,7 @@ else
 	say "ВНИМАНИЕ: claude.ai -> ${got:-пусто}, ожидался $SERVER_IP"
 fi
 
-for port in 80 443 853; do
+for port in 80 443 853 8053; do
 	if ss -tlnH "sport = :$port" | grep -q .; then
 		say "порт $port слушается"
 	else

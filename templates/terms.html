@@ -17,6 +17,9 @@
 <meta name="robots" content="index, follow">
 <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="canonical" href="{{origin}}/terms.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="{{name}}">
@@ -36,7 +39,8 @@ font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-ser
 .wrap{max-width:940px;margin:0 auto;padding:0 20px 80px}
 header{border-bottom:1px solid var(--line);background:var(--panel)}
 header .wrap{padding:36px 20px 30px}
-.brand{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mute);margin:0 0 8px}
+.brand{display:flex;align-items:center;gap:8px;max-width:none;font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--mute);margin:0 0 8px}
+.brand-logo{width:22px;height:22px;border-radius:5px;flex-shrink:0;display:block}
 .brand a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 .brand a:hover{color:var(--accent)}
 h1{font-size:clamp(22px,5vw,32px);line-height:1.2;margin:0 0 10px;letter-spacing:-.02em;overflow-wrap:break-word}
@@ -76,7 +80,7 @@ ul,ol{padding-left:18px}
 <header>
   <div class="wrap">
     <a class="back" href="/">← На главную страницу {{name}}</a>
-    <p class="brand"><a href="/">{{name}}</a> · Правовая информация</p>
+    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span><a href="/">{{name}}</a> · Правовая информация</span></p>
     <h1>Пользовательское соглашение (Условия использования)</h1>
     <p class="lede">Редакция от {{date}}. Настоящий документ является юридически обязывающим соглашением между Пользователем и владельцами (администрацией) сервиса «{{name}}».</p>
   </div>

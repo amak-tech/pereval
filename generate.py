@@ -47,8 +47,10 @@ import ipaddress
 import json
 import re
 import shutil
+import struct
 import subprocess
 import sys
+import tempfile
 import uuid
 from collections import OrderedDict
 from datetime import date
@@ -77,11 +79,13 @@ TEMPLATES = OrderedDict([
     ("terms.html", "terms.html"),
     ("privacy.html", "privacy.html"),
     ("dns.mobileconfig", "dns.mobileconfig"),
+    ("favicon.svg", "favicon.svg"),
     ("og-image.svg", "og-image.svg"),
     ("robots.txt", "robots.txt"),
     ("sitemap.xml", "sitemap.xml"),
 ])
 SEO_TEMPLATES = OrderedDict([
+    ("favicon.svg", "favicon.svg"),
     ("og-image.svg", "og-image.svg"),
 ])
 
@@ -507,22 +511,27 @@ def render(templates_dir, tpl_name, values, doc, ip):
     return substitute(path.read_text(encoding="utf-8"), local, str(path))
 
 
-def render_og_png(svg_path, png_path):
-    """Растеризует og-image.svg в og-image.png (1200x630), необходимый для X / Open Graph."""
+def render_svg_png(svg_path, png_path, width, height):
+    """Растеризует SVG в PNG заданного размера (width x height)."""
     cmds = []
     if shutil.which("rsvg-convert"):
-        cmds.append(["rsvg-convert", "-w", "1200", "-h", "630", str(svg_path), "-o", str(png_path)])
+        cmds.append(["rsvg-convert", "-w", str(width), "-h", str(height),
+                     str(svg_path), "-o", str(png_path)])
     if shutil.which("resvg"):
-        cmds.append(["resvg", "-w", "1200", "-h", "630", str(svg_path), str(png_path)])
+        cmds.append(["resvg", "-w", str(width), "-h", str(height),
+                     str(svg_path), str(png_path)])
     if shutil.which("sips"):
-        cmds.append(["sips", "-s", "format", "png", str(svg_path), "--out", str(png_path)])
+        cmds.append(["sips", "-s", "format", "png", "-z", str(height), str(width),
+                     str(svg_path), "--out", str(png_path)])
     if shutil.which("inkscape"):
         cmds.append(["inkscape", "--export-type=png", f"--export-filename={png_path}",
-                     "-w", "1200", "-h", "630", str(svg_path)])
+                     "-w", str(width), "-h", str(height), str(svg_path)])
     if shutil.which("magick"):
-        cmds.append(["magick", str(svg_path), str(png_path)])
+        cmds.append(["magick", "-background", "none", str(svg_path),
+                     "-resize", f"{width}x{height}!", str(png_path)])
     if shutil.which("convert"):
-        cmds.append(["convert", str(svg_path), str(png_path)])
+        cmds.append(["convert", "-background", "none", str(svg_path),
+                     "-resize", f"{width}x{height}!", str(png_path)])
     for cmd in cmds:
         png_path.unlink(missing_ok=True)
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -531,7 +540,8 @@ def render_og_png(svg_path, png_path):
     try:
         import cairosvg
         png_path.unlink(missing_ok=True)
-        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path), output_width=1200, output_height=630)
+        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path),
+                         output_width=width, output_height=height)
         if png_path.is_file() and png_path.stat().st_size > 0:
             return True
     except Exception:
@@ -539,13 +549,53 @@ def render_og_png(svg_path, png_path):
     try:
         import resvg_py
         png_path.unlink(missing_ok=True)
-        png_bytes = resvg_py.svg_to_bytes(svg_path=str(svg_path), width=1200, height=630)
+        png_bytes = resvg_py.svg_to_bytes(svg_path=str(svg_path), width=width, height=height)
         if png_bytes:
             png_path.write_bytes(bytes(png_bytes))
             return True
     except Exception:
         pass
     return False
+
+
+def render_og_png(svg_path, png_path):
+    """Растеризует og-image.svg в og-image.png (1200x630), необходимый для X / Open Graph."""
+    return render_svg_png(svg_path, png_path, 1200, 630)
+
+
+def render_apple_touch_icon(favicon_svg_path, png_path):
+    """Собирает apple-touch-icon.png (180x180) без скругления углов (iOS применяет свою маску)."""
+    svg_text = favicon_svg_path.read_text(encoding="utf-8")
+    full_bleed = re.sub(r'<rect[^>]*stroke="#2e3342"[^>]*/>\s*', '', svg_text)
+    full_bleed = full_bleed.replace('rx="112"', 'rx="0"')
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_svg = Path(tmp) / "apple-touch.svg"
+        tmp_svg.write_text(full_bleed, encoding="utf-8")
+        return render_svg_png(tmp_svg, png_path, 180, 180)
+
+
+def render_favicon_ico(favicon_svg_path, ico_path, sizes=(16, 32, 48)):
+    """Собирает мультиразмерный favicon.ico (16x16, 32x32, 48x48) из favicon.svg."""
+    frames = []
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        for sz in sizes:
+            png_file = tmp_dir / f"icon-{sz}.png"
+            if not render_svg_png(favicon_svg_path, png_file, sz, sz):
+                return False
+            frames.append((sz, sz, png_file.read_bytes()))
+    header = struct.pack("<HHH", 0, 1, len(frames))
+    offset = 6 + 16 * len(frames)
+    entries = []
+    payloads = []
+    for w, h, data in frames:
+        bw = 0 if w >= 256 else w
+        bh = 0 if h >= 256 else h
+        entries.append(struct.pack("<BBBBHHII", bw, bh, 0, 0, 1, 32, len(data), offset))
+        payloads.append(data)
+        offset += len(data)
+    ico_path.write_bytes(header + b"".join(entries) + b"".join(payloads))
+    return ico_path.is_file() and ico_path.stat().st_size > 0
 
 
 # --------------------------------------------------------------------- CLI
@@ -648,6 +698,14 @@ def main(argv=None):
     for fname, body in rendered:
         (out / fname).write_text(body, encoding="utf-8")
         print(f"  записан {out / fname} ({len(body):,} байт)".replace(",", " "))
+    fav_svg = out / "favicon.svg"
+    if fav_svg.is_file():
+        ico_out = out / "favicon.ico"
+        if render_favicon_ico(fav_svg, ico_out):
+            print(f"  записан {ico_out} ({ico_out.stat().st_size:,} байт)".replace(",", " "))
+        touch_out = out / "apple-touch-icon.png"
+        if render_apple_touch_icon(fav_svg, touch_out):
+            print(f"  записан {touch_out} ({touch_out.stat().st_size:,} байт)".replace(",", " "))
     svg_out = out / "og-image.svg"
     png_out = out / "og-image.png"
     if svg_out.is_file():

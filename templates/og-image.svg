@@ -1,5 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="ogLogoBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b1e26"/>
+      <stop offset="100%" stop-color="#121316"/>
+    </linearGradient>
+    <radialGradient id="ogGlow" cx="50%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#2b6eff" stop-opacity="0.48"/>
+      <stop offset="60%" stop-color="#0b5cff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ogBgGlow" cx="82%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#0b5cff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ogLeftLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="ogLeftShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8fa2c4"/>
+      <stop offset="100%" stop-color="#485775"/>
+    </linearGradient>
+    <linearGradient id="ogRightLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="ogRightShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8498ba"/>
+      <stop offset="100%" stop-color="#404f6b"/>
+    </linearGradient>
+    <linearGradient id="ogRoad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#9ec0ff"/>
+      <stop offset="32%" stop-color="#4585ff"/>
+      <stop offset="100%" stop-color="#0b5cff"/>
+    </linearGradient>
+    <linearGradient id="ogSpark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#8cb4ff"/>
+      <stop offset="100%" stop-color="#3b7bff"/>
+    </linearGradient>
+  </defs>
   <rect width="1200" height="630" fill="#141413"/>
+  <rect width="1200" height="630" fill="url(#ogBgGlow)"/>
   <rect x="0" y="0" width="1200" height="6" fill="#7aa2ff"/>
   <text x="80" y="150" fill="#a3a29e" font-family="Helvetica,Arial,sans-serif"
         font-size="24" letter-spacing="4">DNS-ПРОКСИ · КАЗАХСТАН</text>
@@ -13,4 +55,19 @@
   <text x="104" y="516" fill="#eeeeec" font-family="Menlo,monospace" font-size="30">{{ip}}</text>
   <text x="80" y="590" fill="#6b6b68" font-family="Helvetica,Arial,sans-serif"
         font-size="22">{{total}} доменов · {{category_count}} категории</text>
+
+  <!-- Brand Emblem on Right -->
+  <g transform="translate(796, 145) scale(0.6640625)">
+    <rect width="512" height="512" rx="112" fill="url(#ogLogoBg)"/>
+    <rect width="512" height="512" rx="112" fill="url(#ogGlow)"/>
+    <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#2e3342" stroke-width="6"/>
+    <polygon points="44,404 152,150 152,404" fill="url(#ogLeftLit)"/>
+    <polygon points="152,150 228,270 166,404 152,404" fill="url(#ogLeftShade)"/>
+    <polygon points="360,124 284,270 346,404 360,404" fill="url(#ogRightShade)"/>
+    <polygon points="360,124 468,404 360,404" fill="url(#ogRightLit)"/>
+    <path d="M 245 244 Q 256 233 267 244 L 332 390 Q 338 404 323 404 L 189 404 Q 174 404 180 390 Z" fill="url(#ogRoad)"/>
+    <line x1="256" y1="264" x2="256" y2="300" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.92"/>
+    <line x1="256" y1="328" x2="256" y2="380" stroke="#ffffff" stroke-width="12" stroke-linecap="round" opacity="0.98"/>
+    <path d="M 256 72 Q 256 142 326 142 Q 256 142 256 212 Q 256 142 186 142 Q 256 142 256 72 Z" fill="url(#ogSpark)"/>
+  </g>
 </svg>

@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./logos/logo-horizontal-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./logos/logo-horizontal-light.svg">
+    <img alt="Перевал — Умный DNS-прокси в Казахстане" src="./logos/logo-horizontal-dark.svg" width="760">
+  </picture>
+</p>
+
 # Перевал — бесплатный DNS-прокси для доступа к ChatGPT, Claude, Gemini и инструментам разработки
 
 **Перевал** — это бесплатный умный DNS-сервер (Smart DNS), который восстанавливает доступ к зарубежным ИИ и инструментам разработки, ограничивающим российские и белорусские IP-адреса по геолокации, **без установки VPN-приложений**, без регистрации и без падения скорости интернета.
@@ -36,6 +44,7 @@
 
 Подключить **Перевал** можно практически на любом устройстве:
 
+- **Браузеры (Firefox, Chrome, Brave, Edge, Яндекс.Браузер)** — через встроенный «DNS через HTTPS» (DNS-over-HTTPS / DoH) по адресу `https://pereval.portbuddy.tech/dns-query`, без изменения системных настроек ОС.
 - **iPhone и iPad (iOS / iPadOS)** — через готовый профиль конфигурации (работает и в Wi-Fi, и в мобильной сети).
 - **Android** — через встроенную функцию «Частный DNS» (Private DNS) в настройках системы.
 - **Компьютеры и ноутбуки** — macOS, Windows 10/11, Linux.

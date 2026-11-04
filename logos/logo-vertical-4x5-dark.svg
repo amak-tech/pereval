@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#171920"/>
+      <stop offset="100%" stop-color="#101114"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="28%" r="45%">
+      <stop offset="0%" stop-color="#0b5cff" stop-opacity="0.36"/>
+      <stop offset="65%" stop-color="#0b5cff" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="iconBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f232e"/>
+      <stop offset="100%" stop-color="#14161c"/>
+    </linearGradient>
+    <radialGradient id="iconGlow" cx="50%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#2b6eff" stop-opacity="0.48"/>
+      <stop offset="60%" stop-color="#0b5cff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="leftLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8fa2c4"/>
+      <stop offset="100%" stop-color="#485775"/>
+    </linearGradient>
+    <linearGradient id="rightLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="rightShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8498ba"/>
+      <stop offset="100%" stop-color="#404f6b"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#9ec0ff"/>
+      <stop offset="32%" stop-color="#4585ff"/>
+      <stop offset="100%" stop-color="#0b5cff"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#8cb4ff"/>
+      <stop offset="100%" stop-color="#3b7bff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1080" height="1350" fill="url(#bg)"/>
+  <rect width="1080" height="1350" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1080" height="8" fill="#7aa2ff"/>
+
+  <g transform="translate(320, 110) scale(0.859375)">
+    <rect width="512" height="512" rx="112" fill="url(#iconBg)"/>
+    <rect width="512" height="512" rx="112" fill="url(#iconGlow)"/>
+    <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#343a4a" stroke-width="5"/>
+    <polygon points="44,404 152,150 152,404" fill="url(#leftLit)"/>
+    <polygon points="152,150 228,270 166,404 152,404" fill="url(#leftShade)"/>
+    <polygon points="360,124 284,270 346,404 360,404" fill="url(#rightShade)"/>
+    <polygon points="360,124 468,404 360,404" fill="url(#rightLit)"/>
+    <path d="M 245 244 Q 256 233 267 244 L 332 390 Q 338 404 323 404 L 189 404 Q 174 404 180 390 Z" fill="url(#road)"/>
+    <line x1="256" y1="264" x2="256" y2="300" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.92"/>
+    <line x1="256" y1="328" x2="256" y2="380" stroke="#ffffff" stroke-width="12" stroke-linecap="round" opacity="0.98"/>
+    <path d="M 256 72 Q 256 142 326 142 Q 256 142 256 212 Q 256 142 186 142 Q 256 142 256 72 Z" fill="url(#spark)"/>
+  </g>
+
+  <text x="540" y="640" text-anchor="middle" fill="#7aa2ff" font-family="Helvetica,Arial,sans-serif" font-size="26" font-weight="600" letter-spacing="5">УМНЫЙ DNS-ПРОКСИ · КАЗАХСТАН</text>
+  <text x="540" y="766" text-anchor="middle" fill="#eeeeec" font-family="Helvetica,Arial,sans-serif" font-size="116" font-weight="700">Перевал</text>
+  <text x="540" y="846" text-anchor="middle" fill="#eeeeec" font-family="Helvetica,Arial,sans-serif" font-size="38" font-weight="600">ChatGPT · Claude · Gemini · Cursor · JetBrains</text>
+  <text x="540" y="904" text-anchor="middle" fill="#a3a29e" font-family="Helvetica,Arial,sans-serif" font-size="32">Без VPN-клиента, без регистрации и без падения скорости</text>
+
+  <!-- 3 Feature Cards -->
+  <g transform="translate(110, 964)">
+    <rect x="0" y="0" width="860" height="76" rx="16" fill="#1d2028" stroke="#2e3342" stroke-width="2"/>
+    <circle cx="48" cy="38" r="16" fill="#0b5cff"/>
+    <text x="48" y="45" text-anchor="middle" fill="#ffffff" font-family="Helvetica,Arial,sans-serif" font-size="20" font-weight="700">1</text>
+    <text x="86" y="46" fill="#eeeeec" font-family="Helvetica,Arial,sans-serif" font-size="25">Укажите DNS 153.80.200.170 или профиль для iOS / Android</text>
+
+    <rect x="0" y="94" width="860" height="76" rx="16" fill="#1d2028" stroke="#2e3342" stroke-width="2"/>
+    <circle cx="48" cy="132" r="16" fill="#0b5cff"/>
+    <text x="48" y="139" text-anchor="middle" fill="#ffffff" font-family="Helvetica,Arial,sans-serif" font-size="20" font-weight="700">2</text>
+    <text x="86" y="140" fill="#eeeeec" font-family="Helvetica,Arial,sans-serif" font-size="25">183 домена ИИ и разработки идут через Казахстан</text>
+
+    <rect x="0" y="188" width="860" height="76" rx="16" fill="#1d2028" stroke="#2e3342" stroke-width="2"/>
+    <circle cx="48" cy="226" r="16" fill="#0b5cff"/>
+    <text x="48" y="233" text-anchor="middle" fill="#ffffff" font-family="Helvetica,Arial,sans-serif" font-size="20" font-weight="700">3</text>
+    <text x="86" y="234" fill="#eeeeec" font-family="Helvetica,Arial,sans-serif" font-size="25">Все остальные сайты и банки работают напрямую</text>
+  </g>
+
+  <text x="540" y="1296" text-anchor="middle" fill="#7aa2ff" font-family="Menlo,monospace" font-size="30" font-weight="700">pereval.portbuddy.tech</text>
+</svg>

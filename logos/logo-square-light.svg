@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f3f5fa"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="34%" r="48%">
+      <stop offset="0%" stop-color="#0b5cff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="iconBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b1e26"/>
+      <stop offset="100%" stop-color="#121316"/>
+    </linearGradient>
+    <radialGradient id="iconGlow" cx="50%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#2b6eff" stop-opacity="0.48"/>
+      <stop offset="60%" stop-color="#0b5cff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="leftLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8fa2c4"/>
+      <stop offset="100%" stop-color="#485775"/>
+    </linearGradient>
+    <linearGradient id="rightLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="rightShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8498ba"/>
+      <stop offset="100%" stop-color="#404f6b"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#9ec0ff"/>
+      <stop offset="32%" stop-color="#4585ff"/>
+      <stop offset="100%" stop-color="#0b5cff"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#8cb4ff"/>
+      <stop offset="100%" stop-color="#3b7bff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1080" height="1080" fill="url(#bg)"/>
+  <rect width="1080" height="1080" fill="url(#glow)"/>
+  <rect x="0" y="0" width="1080" height="8" fill="#0b5cff"/>
+
+  <!-- Centered Emblem -->
+  <g transform="translate(330, 120) scale(0.8203125)">
+    <rect width="512" height="512" rx="112" fill="url(#iconBg)"/>
+    <rect width="512" height="512" rx="112" fill="url(#iconGlow)"/>
+    <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#2e3342" stroke-width="5"/>
+    <polygon points="44,404 152,150 152,404" fill="url(#leftLit)"/>
+    <polygon points="152,150 228,270 166,404 152,404" fill="url(#leftShade)"/>
+    <polygon points="360,124 284,270 346,404 360,404" fill="url(#rightShade)"/>
+    <polygon points="360,124 468,404 360,404" fill="url(#rightLit)"/>
+    <path d="M 245 244 Q 256 233 267 244 L 332 390 Q 338 404 323 404 L 189 404 Q 174 404 180 390 Z" fill="url(#road)"/>
+    <line x1="256" y1="264" x2="256" y2="300" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.92"/>
+    <line x1="256" y1="328" x2="256" y2="380" stroke="#ffffff" stroke-width="12" stroke-linecap="round" opacity="0.98"/>
+    <path d="M 256 72 Q 256 142 326 142 Q 256 142 256 212 Q 256 142 186 142 Q 256 142 256 72 Z" fill="url(#spark)"/>
+  </g>
+
+  <text x="540" y="636" text-anchor="middle" fill="#0b5cff" font-family="Helvetica,Arial,sans-serif" font-size="24" font-weight="600" letter-spacing="5">SMART DNS · КАЗАХСТАН</text>
+  <text x="540" y="756" text-anchor="middle" fill="#1a1a19" font-family="Helvetica,Arial,sans-serif" font-size="108" font-weight="700">Перевал</text>
+  <text x="540" y="832" text-anchor="middle" fill="#575754" font-family="Helvetica,Arial,sans-serif" font-size="34">Доступ к ChatGPT, Claude, Gemini и Cursor</text>
+  <text x="540" y="882" text-anchor="middle" fill="#575754" font-family="Helvetica,Arial,sans-serif" font-size="34">без VPN-клиента и падения скорости</text>
+
+  <rect x="290" y="936" width="500" height="68" rx="34" fill="#eef2fa" stroke="#d5dce8" stroke-width="2"/>
+  <text x="540" y="980" text-anchor="middle" fill="#0b5cff" font-family="Menlo,monospace" font-size="28" font-weight="600">pereval.portbuddy.tech</text>
+</svg>

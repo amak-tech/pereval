@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f2f5fc"/>
+    </linearGradient>
+    <radialGradient id="glowRight" cx="76%" cy="50%" r="44%">
+      <stop offset="0%" stop-color="#0b5cff" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="iconBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b1e26"/>
+      <stop offset="100%" stop-color="#121316"/>
+    </linearGradient>
+    <radialGradient id="iconGlow" cx="50%" cy="38%" r="52%">
+      <stop offset="0%" stop-color="#2b6eff" stop-opacity="0.48"/>
+      <stop offset="60%" stop-color="#0b5cff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#0b5cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="leftLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8fa2c4"/>
+      <stop offset="100%" stop-color="#485775"/>
+    </linearGradient>
+    <linearGradient id="rightLit" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d8dce6"/>
+    </linearGradient>
+    <linearGradient id="rightShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8498ba"/>
+      <stop offset="100%" stop-color="#404f6b"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#9ec0ff"/>
+      <stop offset="32%" stop-color="#4585ff"/>
+      <stop offset="100%" stop-color="#0b5cff"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#8cb4ff"/>
+      <stop offset="100%" stop-color="#3b7bff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#glowRight)"/>
+  <rect x="0" y="0" width="1920" height="10" fill="#0b5cff"/>
+
+  <text x="120" y="210" fill="#0b5cff" font-family="Helvetica,Arial,sans-serif" font-size="30" font-weight="600" letter-spacing="6">УМНЫЙ DNS-ПРОКСИ · КАЗАХСТАН</text>
+  <text x="120" y="380" fill="#1a1a19" font-family="Helvetica,Arial,sans-serif" font-size="148" font-weight="700">Перевал</text>
+
+  <text x="120" y="485" fill="#1a1a19" font-family="Helvetica,Arial,sans-serif" font-size="41" font-weight="600">Доступ к ChatGPT, Claude, Gemini, Cursor и JetBrains</text>
+  <text x="120" y="550" fill="#575754" font-family="Helvetica,Arial,sans-serif" font-size="36">Без VPN-клиента, без регистрации и без потери скорости</text>
+
+  <!-- Feature Pills -->
+  <g transform="translate(120, 635)">
+    <rect x="0" y="0" width="320" height="68" rx="34" fill="#eef3ff" stroke="#c8d8ff" stroke-width="2"/>
+    <text x="160" y="43" text-anchor="middle" fill="#0b5cff" font-family="Helvetica,Arial,sans-serif" font-size="25" font-weight="600">183 домена в списке</text>
+
+    <rect x="340" y="0" width="320" height="68" rx="34" fill="#eef3ff" stroke="#c8d8ff" stroke-width="2"/>
+    <text x="500" y="43" text-anchor="middle" fill="#0b5cff" font-family="Helvetica,Arial,sans-serif" font-size="25" font-weight="600">Сквозной HTTPS/TLS</text>
+
+    <rect x="680" y="0" width="380" height="68" rx="34" fill="#eef3ff" stroke="#c8d8ff" stroke-width="2"/>
+    <text x="870" y="43" text-anchor="middle" fill="#0b5cff" font-family="Helvetica,Arial,sans-serif" font-size="25" font-weight="600">iOS · Android · ПК · Роутер</text>
+  </g>
+
+  <!-- DNS Box -->
+  <rect x="120" y="785" width="940" height="114" rx="20" fill="#ffffff" stroke="#d8deeb" stroke-width="2"/>
+  <text x="160" y="832" fill="#6b6b68" font-family="Helvetica,Arial,sans-serif" font-size="21" font-weight="600" letter-spacing="2">АДРЕС DNS И ИНСТРУКЦИЯ</text>
+  <text x="160" y="876" fill="#1a1a19" font-family="Menlo,monospace" font-size="34" font-weight="700">153.80.200.170 · pereval.portbuddy.tech</text>
+
+  <!-- Right Emblem -->
+  <g transform="translate(1260, 250) scale(1.09375)">
+    <rect width="512" height="512" rx="112" fill="url(#iconBg)"/>
+    <rect width="512" height="512" rx="112" fill="url(#iconGlow)"/>
+    <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#2e3342" stroke-width="4"/>
+    <polygon points="44,404 152,150 152,404" fill="url(#leftLit)"/>
+    <polygon points="152,150 228,270 166,404 152,404" fill="url(#leftShade)"/>
+    <polygon points="360,124 284,270 346,404 360,404" fill="url(#rightShade)"/>
+    <polygon points="360,124 468,404 360,404" fill="url(#rightLit)"/>
+    <path d="M 245 244 Q 256 233 267 244 L 332 390 Q 338 404 323 404 L 189 404 Q 174 404 180 390 Z" fill="url(#road)"/>
+    <line x1="256" y1="264" x2="256" y2="300" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.92"/>
+    <line x1="256" y1="328" x2="256" y2="380" stroke="#ffffff" stroke-width="12" stroke-linecap="round" opacity="0.98"/>
+    <path d="M 256 72 Q 256 142 326 142 Q 256 142 256 212 Q 256 142 186 142 Q 256 142 256 72 Z" fill="url(#spark)"/>
+  </g>
+</svg>
