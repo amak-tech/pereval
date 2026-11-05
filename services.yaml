@@ -207,7 +207,6 @@ categories:
           - youtrack.cloud
           - toolbox.app
           - qodana.cloud
-          - gvt1.com
           - dvxdiz880bm14.cloudfront.net
           - d1do0znm134sif.cloudfront.net
           - api.app.prod.grazie.aws.intellij.net
@@ -298,6 +297,7 @@ disabled:
     domains:
       - clients6.google.com
       - firebaseinstallations.googleapis.com
+      - gvt1.com
       - lookerstudio.google.com
       - news.google.com
       - suggestqueries.google.com
