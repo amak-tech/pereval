@@ -92,7 +92,7 @@ categories:
           - openai.qualtrics.com
           - ct.sendgrid.net
           - js.intercomcdn.com
-      - name: Google Gemini / AI Studio / NotebookLM / Jules / Antigravity / Flow
+      - name: Google Gemini / AI Studio / NotebookLM / Jules / Antigravity
         domains:
           - gemini.google
           - gemini.google.com
@@ -127,8 +127,6 @@ categories:
           - notebooklm.google.com
           - jules.google
           - jules.google.com
-          - flow.google
-          - flow.google.com
           - labs.google
           - deepmind.google
           - deepmind.com
@@ -150,11 +148,6 @@ categories:
           - businessaicode.googleapis.com
           - jetski-webchannel.googleapis.com
           - aisandbox-pa.googleapis.com
-          - aisandbox-pa.clients6.google.com
-          - aisandbox-pa-webchannel.clients6.google.com
-          - aisandbox-pa-webchannel.googleapis.com
-          - webchannel-aisandbox-pa.clients6.google.com
-          - webchannel-aisandbox-pa.googleapis.com
           - aida.googleapis.com
           - geller-pa.googleapis.com
           - proactivebackend-pa.googleapis.com
