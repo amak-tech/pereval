@@ -39,6 +39,13 @@ jobs:
           SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
           SUTTON_SSH_KEY: ${{ secrets.SUTTON_SSH_KEY }}
           SUTTON_SSH_USER: ${{ secrets.SUTTON_SSH_USER }}
+          # Optional per-worker secrets (referenced via ssh_user_env / ssh_key_env in services.yaml):
+#          WORKER1_SSH_USER: ${{ secrets.WORKER1_SSH_USER }}
+#          WORKER1_SSH_KEY: ${{ secrets.WORKER1_SSH_KEY }}
+#          WORKER2_SSH_USER: ${{ secrets.WORKER2_SSH_USER }}
+#          WORKER2_SSH_KEY: ${{ secrets.WORKER2_SSH_KEY }}
+#          WORKER3_SSH_USER: ${{ secrets.WORKER3_SSH_USER }}
+#          WORKER3_SSH_KEY: ${{ secrets.WORKER3_SSH_KEY }}
         run: |
           SSH_KEY_FILE="$(mktemp)"
           trap 'rm -f "$SSH_KEY_FILE"' EXIT

@@ -14,3 +14,6 @@
 /og-image.png
 /stats.html
 /service-map.json
+/cluster-nodes.json
+/nginx-workers-stream.conf
+/nginx-workers-http.conf
