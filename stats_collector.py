@@ -8,6 +8,7 @@ via service-map.json, and atomically writes /var/www/geoblock/stats.json every 5
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ import re
 import signal
 import sys
 import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -85,6 +87,30 @@ def load_service_map(path: Path) -> dict:
     return {}
 
 
+def load_cluster_config(path: Path) -> dict:
+    """Load cluster topology (primary, domain, workers) from cluster-nodes.json."""
+    if path and path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception as exc:
+            print(f"[pereval-stats] warning: failed to load {path}: {exc}", file=sys.stderr)
+    return {}
+
+
+def extract_ip_only(raw: str) -> str:
+    """Extract clean IP address from 'ip' or 'ip:port' string."""
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    if s.startswith("[") and "]" in s:
+        return s[1:s.index("]")]
+    if s.count(":") == 1:
+        return s.split(":", 1)[0].strip()
+    return s
+
+
 def normalize_domain(raw: str) -> str:
     if not raw:
         return ""
@@ -138,6 +164,43 @@ class Bucket:
         svc_entry["requests"] += 1
         svc_entry["bytes"] += total_bytes
         svc_entry["users"].add(ip_hash)
+
+    def clone(self) -> "Bucket":
+        b = Bucket(self.ts)
+        b.requests = self.requests
+        b.bytes_sent = self.bytes_sent
+        b.bytes_recv = self.bytes_recv
+        b.users = set(self.users)
+        for k, v in self.services.items():
+            b.services[k] = {
+                "category": v["category"],
+                "requests": v["requests"],
+                "bytes": v["bytes"],
+                "users": set(v["users"]),
+            }
+        return b
+
+    def merge(self, other: "Bucket"):
+        """Merge another Bucket into this one (sum counters, set-union user hashes)."""
+        if other is None:
+            return
+        self.requests += other.requests
+        self.bytes_sent += other.bytes_sent
+        self.bytes_recv += other.bytes_recv
+        self.users.update(other.users)
+        for svc_name, other_svc in other.services.items():
+            svc_entry = self.services.get(svc_name)
+            if svc_entry is None:
+                self.services[svc_name] = {
+                    "category": other_svc.get("category", "Другое"),
+                    "requests": int(other_svc.get("requests", 0)),
+                    "bytes": int(other_svc.get("bytes", 0)),
+                    "users": set(other_svc.get("users", [])),
+                }
+            else:
+                svc_entry["requests"] += int(other_svc.get("requests", 0))
+                svc_entry["bytes"] += int(other_svc.get("bytes", 0))
+                svc_entry["users"].update(other_svc.get("users", []))
 
     def to_dict(self) -> dict:
         return {
@@ -264,6 +327,12 @@ class StatsCollector:
         proc_tcp_path: Path = Path("/proc/net/tcp"),
         proc_tcp6_path: Path = Path("/proc/net/tcp6"),
         self_domain: str = "pereval.portbuddy.tech",
+        cluster_config_path: Path = None,
+        node_output_path: Path = None,
+        role: str = "auto",
+        salt_seed: str = None,
+        worker_timeout: float = 2.0,
+        worker_stale_ttl: int = 60,
     ):
         self.service_map_path = service_map_path
         self.service_map = load_service_map(service_map_path)
@@ -273,13 +342,32 @@ class StatsCollector:
         self.sni_log_path = sni_log_path
         self.http_log_path = http_log_path
         self.output_path = output_path
+        self.node_output_path = node_output_path
         self.state_path = state_path
         self.proc_tcp_path = proc_tcp_path
         self.proc_tcp6_path = proc_tcp6_path
         self.self_domain = normalize_domain(self_domain)
+        self.role = (role or "auto").strip().lower()
+        self.custom_salt_seed = salt_seed
+        self.worker_timeout = max(0.2, float(worker_timeout))
+        self.worker_stale_ttl = max(0, int(worker_stale_ttl))
+        self.worker_snapshot_cache = {}  # worker_key -> {"fetched_at": int, "data": dict}
+
+        self.cluster_config_path = cluster_config_path
+        self.cluster_config_mtime = 0
+        self.cluster_primary_ip = ""
+        self.cluster_workers = []
+        self.ignored_ips = {"127.0.0.1", "::1"}
+        self.salt_seed = self.custom_salt_seed or self.self_domain or "pereval.portbuddy.tech"
+        self._apply_cluster_config(load_cluster_config(cluster_config_path))
+        if cluster_config_path and cluster_config_path.is_file():
+            try:
+                self.cluster_config_mtime = cluster_config_path.stat().st_mtime
+            except Exception:
+                pass
 
         self.salt_day = int(time.time() // 86400)
-        self.salt = os.urandom(16).hex()
+        self.salt = self._compute_daily_salt(self.salt_day)
 
         self.minute_buckets = {}  # minute_ts -> Bucket
         self.hour_buckets = {}    # hour_ts   -> Bucket
@@ -289,11 +377,54 @@ class StatsCollector:
         self.sni_tailer = LogTailer(sni_log_path) if sni_log_path else None
         self.http_tailer = LogTailer(http_log_path) if http_log_path else None
 
+    def _apply_cluster_config(self, cfg: dict):
+        primary_ip = extract_ip_only(cfg.get("primary") or "")
+        cfg_domain = normalize_domain(cfg.get("domain") or "")
+        if cfg_domain and not self.self_domain:
+            self.self_domain = cfg_domain
+        self.cluster_primary_ip = primary_ip
+
+        ignored = {"127.0.0.1", "::1"}
+        if primary_ip:
+            ignored.add(primary_ip)
+
+        workers = []
+        for item in cfg.get("workers") or []:
+            if isinstance(item, str):
+                raw_ip = item.strip()
+                clean_ip = extract_ip_only(raw_ip)
+                if clean_ip:
+                    ignored.add(clean_ip)
+                    workers.append({"ip": raw_ip, "clean_ip": clean_ip, "name": clean_ip})
+            elif isinstance(item, dict):
+                raw_ip = str(item.get("ip") or "").strip()
+                clean_ip = extract_ip_only(raw_ip)
+                if clean_ip:
+                    ignored.add(clean_ip)
+                    w_entry = dict(item)
+                    w_entry["ip"] = raw_ip
+                    w_entry["clean_ip"] = clean_ip
+                    workers.append(w_entry)
+
+        self.cluster_workers = workers
+        self.ignored_ips = ignored
+
+        if self.custom_salt_seed:
+            self.salt_seed = self.custom_salt_seed
+        else:
+            dom = cfg_domain or self.self_domain or "pereval.portbuddy.tech"
+            self.salt_seed = f"{dom}:{primary_ip}" if primary_ip else dom
+
+    def _compute_daily_salt(self, day: int) -> str:
+        raw = f"pereval-stats-v1:{self.salt_seed}:{day}".encode("utf-8")
+        return hashlib.blake2b(raw, digest_size=16).hexdigest()
+
     def _rotate_salt_if_needed(self, now: int):
         day = now // 86400
-        if day != self.salt_day:
+        expected_salt = self._compute_daily_salt(day)
+        if day != self.salt_day or self.salt != expected_salt:
             self.salt_day = day
-            self.salt = os.urandom(16).hex()
+            self.salt = expected_salt
 
     def hash_ip(self, ip: str) -> int:
         h = hashlib.blake2b(f"{self.salt}:{ip}".encode("utf-8"), digest_size=8).digest()
@@ -308,11 +439,21 @@ class StatsCollector:
                     self.service_map_mtime = mtime
             except Exception:
                 pass
+        if self.cluster_config_path and self.cluster_config_path.is_file():
+            try:
+                mtime = self.cluster_config_path.stat().st_mtime
+                if mtime != self.cluster_config_mtime:
+                    self._apply_cluster_config(load_cluster_config(self.cluster_config_path))
+                    self.cluster_config_mtime = mtime
+                    self.salt = self._compute_daily_salt(self.salt_day)
+            except Exception:
+                pass
 
     def load_state(self, now: int = None) -> dict:
         """Load persisted buckets and file cursors if state file is fresh (< 24h)."""
         if now is None:
             now = int(time.time())
+        self._rotate_salt_if_needed(now)
         if not self.state_path or not self.state_path.is_file():
             return {}
         try:
@@ -320,9 +461,6 @@ class StatsCollector:
             saved_at = int(raw.get("saved_at", 0))
             if now - saved_at > 86400:
                 return {}
-            if raw.get("salt"):
-                self.salt = str(raw["salt"])
-                self.salt_day = int(raw.get("salt_day", now // 86400))
             for bdata in raw.get("minute_buckets", []):
                 b = Bucket.from_dict(bdata)
                 if b.ts >= ((now // 60) - 59) * 60:
@@ -373,6 +511,7 @@ class StatsCollector:
         """Backfill last 24h from rotated (.1) and current log files without double counting."""
         if now is None:
             now = int(time.time())
+        self._rotate_salt_if_needed(now)
         for key, tailer, parser in (
             ("sni", self.sni_tailer, self.ingest_sni_line),
             ("http", self.http_tailer, self.ingest_http_line),
@@ -428,7 +567,7 @@ class StatsCollector:
             pass
 
     def _is_ignored_event(self, ip: str, domain: str, upstream: str, status: int) -> bool:
-        if not ip or ip in ("127.0.0.1", "::1"):
+        if not ip or ip in self.ignored_ips or ip.startswith("127."):
             return True
         if not domain or domain == "-" or domain == self.self_domain:
             return True
@@ -444,6 +583,7 @@ class StatsCollector:
     def record_event(self, ip: str, ts: int, domain: str, sent: int, recv: int, now: int = None):
         if now is None:
             now = int(time.time())
+        self._rotate_salt_if_needed(now)
         if ts < now - 86400 or ts > now + 300:
             return
 
@@ -534,12 +674,13 @@ class StatsCollector:
                     continue
                 rhost_hex, _ = rem_addr.split(":", 1)
                 ip_str = self._decode_proc_ip(rhost_hex)
-                if not ip_str or ip_str.startswith("127.") or ip_str == "::1":
+                if not ip_str or ip_str.startswith("127.") or ip_str == "::1" or ip_str in self.ignored_ips:
                     continue
                 active_conns += 1
                 active_ips.add(ip_str)
 
         self.active_connections = active_conns
+        self._rotate_salt_if_needed(now)
         min_ts = (now // 60) * 60
         hour_ts = (now // 3600) * 3600
         for ip_str in active_ips:
@@ -640,22 +781,149 @@ class StatsCollector:
             for name, data in ranked
         ]
 
+    def _should_pull_workers(self) -> bool:
+        if self.role == "worker":
+            return False
+        return bool(self.cluster_workers)
+
+    def _worker_stats_url(self, worker: dict) -> str:
+        if worker.get("stats_url"):
+            return str(worker["stats_url"])
+        raw_ip = str(worker.get("ip") or "").strip()
+        if raw_ip.startswith(("http://", "https://")):
+            return raw_ip
+        if worker.get("stats_port"):
+            return f"http://{worker['clean_ip']}:{worker['stats_port']}/node-stats.json"
+        return f"http://{raw_ip}/node-stats.json"
+
+    def _fetch_single_worker_snapshot(self, worker: dict) -> tuple:
+        w_key = str(worker.get("ip") or worker.get("clean_ip") or "")
+        url = self._worker_stats_url(worker)
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "pereval-stats/1.0",
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.worker_timeout) as resp:
+                if getattr(resp, "status", 200) != 200:
+                    return (w_key, None)
+                body = resp.read().decode("utf-8", errors="replace")
+            data = json.loads(body)
+            if isinstance(data, dict):
+                return (w_key, data)
+        except Exception:
+            pass
+        return (w_key, None)
+
+    def fetch_worker_snapshots(self, now: int = None) -> list:
+        """Poll /node-stats.json from all configured workers in parallel."""
+        if not self._should_pull_workers():
+            return []
+        if now is None:
+            now = int(time.time())
+
+        workers = list(self.cluster_workers)
+        max_workers = min(16, max(1, len(workers)))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            results = list(pool.map(self._fetch_single_worker_snapshot, workers))
+
+        snapshots = []
+        for w_key, data in results:
+            if data is not None:
+                self.worker_snapshot_cache[w_key] = {
+                    "fetched_at": now,
+                    "data": data,
+                }
+                snapshots.append(data)
+            else:
+                cached = self.worker_snapshot_cache.get(w_key)
+                if cached and (now - int(cached.get("fetched_at", 0))) <= self.worker_stale_ttl:
+                    stale_copy = dict(cached["data"])
+                    stale_copy["active_connections"] = 0
+                    snapshots.append(stale_copy)
+                elif cached:
+                    del self.worker_snapshot_cache[w_key]
+        return snapshots
+
+    def _merged_cluster_state(self, now: int) -> tuple:
+        """Merge local buckets with all fetched worker snapshots without mutating local state."""
+        if not self._should_pull_workers():
+            return (
+                self.minute_buckets,
+                self.hour_buckets,
+                self.recent_5m_users,
+                self.active_connections,
+            )
+
+        merged_min = {ts: b.clone() for ts, b in self.minute_buckets.items()}
+        merged_hour = {ts: b.clone() for ts, b in self.hour_buckets.items()}
+        merged_5m = dict(self.recent_5m_users)
+        total_active_conns = self.active_connections
+
+        worker_snapshots = self.fetch_worker_snapshots(now=now)
+        for snap in worker_snapshots:
+            try:
+                total_active_conns += max(0, int(snap.get("active_connections", 0)))
+            except Exception:
+                pass
+
+            for ip_hash_str, seen_ts in (snap.get("recent_5m_users") or {}).items():
+                try:
+                    seen_int = int(seen_ts)
+                    if now - seen_int <= 300:
+                        ip_h = int(ip_hash_str)
+                        if seen_int > merged_5m.get(ip_h, 0):
+                            merged_5m[ip_h] = seen_int
+                except Exception:
+                    continue
+
+            for bdata in snap.get("minute_buckets") or []:
+                try:
+                    wb = Bucket.from_dict(bdata)
+                except Exception:
+                    continue
+                existing = merged_min.get(wb.ts)
+                if existing is None:
+                    merged_min[wb.ts] = wb
+                else:
+                    existing.merge(wb)
+
+            for bdata in snap.get("hour_buckets") or []:
+                try:
+                    wb = Bucket.from_dict(bdata)
+                except Exception:
+                    continue
+                existing = merged_hour.get(wb.ts)
+                if existing is None:
+                    merged_hour[wb.ts] = wb
+                else:
+                    existing.merge(wb)
+
+        return (merged_min, merged_hour, merged_5m, total_active_conns)
+
     def build_payload(self, now: int = None) -> dict:
         if now is None:
             now = int(time.time())
         now_min = (now // 60) * 60
         now_hour = (now // 3600) * 3600
 
+        minute_buckets, hour_buckets, recent_5m_users, active_connections = (
+            self._merged_cluster_state(now)
+        )
+
         per_minute = []
         users_1h = set()
-        users_5m = set(self.recent_5m_users.keys())
+        users_5m = set(recent_5m_users.keys())
         requests_1h = 0
         bytes_1h = 0
         active_min_buckets = []
 
         for i in range(59, -1, -1):
             ts = now_min - i * 60
-            b = self.minute_buckets.get(ts)
+            b = minute_buckets.get(ts)
             if b is not None:
                 active_min_buckets.append(b)
                 reqs = b.requests
@@ -687,7 +955,7 @@ class StatsCollector:
 
         for i in range(23, -1, -1):
             ts = now_hour - i * 3600
-            b = self.hour_buckets.get(ts)
+            b = hour_buckets.get(ts)
             if b is not None:
                 active_hour_buckets.append(b)
                 reqs = b.requests
@@ -709,8 +977,8 @@ class StatsCollector:
                 "bytes": b_tot,
             })
 
-        curr_min_bucket = self.minute_buckets.get(now_min)
-        prev_min_bucket = self.minute_buckets.get(now_min - 60)
+        curr_min_bucket = minute_buckets.get(now_min)
+        prev_min_bucket = minute_buckets.get(now_min - 60)
         if curr_min_bucket and curr_min_bucket.requests > 0:
             requests_current_min = curr_min_bucket.requests
         elif (now - now_min) < 15 and prev_min_bucket:
@@ -732,7 +1000,7 @@ class StatsCollector:
             "generated_at": now,
             "window_seconds": 86400,
             "live": {
-                "active_connections": self.active_connections,
+                "active_connections": active_connections,
                 "online_users_5m": len(users_5m),
                 "unique_users_1h": len(users_1h),
                 "unique_users_24h": len(users_24h),
@@ -752,7 +1020,40 @@ class StatsCollector:
             "top_services_1h": top_services_1h,
         }
 
+    def build_node_snapshot(self, now: int = None) -> dict:
+        """Build per-node local bucket snapshot for cluster-wide aggregation."""
+        if now is None:
+            now = int(time.time())
+        self._rotate_salt_if_needed(now)
+        return {
+            "generated_at": now,
+            "salt_day": self.salt_day,
+            "active_connections": self.active_connections,
+            "recent_5m_users": {str(k): v for k, v in self.recent_5m_users.items()},
+            "minute_buckets": [b.to_dict() for b in sorted(self.minute_buckets.values(), key=lambda x: x.ts)],
+            "hour_buckets": [b.to_dict() for b in sorted(self.hour_buckets.values(), key=lambda x: x.ts)],
+        }
+
+    def write_node_snapshot(self, now: int = None):
+        """Atomically write local node snapshot to /var/www/geoblock/node-stats.json."""
+        if not self.node_output_path:
+            return None
+        snapshot = self.build_node_snapshot(now=now)
+        try:
+            self.node_output_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.node_output_path.parent / f".{self.node_output_path.name}.tmp"
+            tmp_path.write_text(
+                json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            tmp_path.replace(self.node_output_path)
+        except Exception as exc:
+            print(f"[pereval-stats] warning: could not write node snapshot {self.node_output_path}: {exc}", file=sys.stderr)
+        return snapshot
+
     def write_output(self, now: int = None):
+        if self.node_output_path:
+            self.write_node_snapshot(now=now)
         payload = self.build_payload(now=now)
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.output_path.parent / f".{self.output_path.name}.tmp"
@@ -772,6 +1073,14 @@ def resolve_default_service_map() -> Path:
     return local
 
 
+def resolve_default_cluster_config() -> Path:
+    prod = Path("/etc/nginx/geoblock/cluster-nodes.json")
+    if prod.is_file():
+        return prod
+    local = Path(__file__).resolve().parent / "cluster-nodes.json"
+    return local
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         description="Собирает метрики nginx (sni.log / http-proxy.log) в stats.json."
@@ -782,6 +1091,10 @@ def main(argv=None) -> int:
                    help="путь к /var/log/nginx/http-proxy.log")
     p.add_argument("--service-map", default=None,
                    help="путь к service-map.json")
+    p.add_argument("--cluster-config", default=None,
+                   help="путь к cluster-nodes.json")
+    p.add_argument("--node-output", default="/var/www/geoblock/node-stats.json",
+                   help="путь для атомарной записи локального снимка node-stats.json")
     p.add_argument("--output", default="/var/www/geoblock/stats.json",
                    help="путь для атомарной записи stats.json")
     p.add_argument("--state-file", default="/var/lib/pereval-stats/state.json",
@@ -792,6 +1105,14 @@ def main(argv=None) -> int:
                    help="путь к /proc/net/tcp6")
     p.add_argument("--self-domain", default="pereval.portbuddy.tech",
                    help="собственный домен сервиса (исключается из прокси-метрик)")
+    p.add_argument("--role", choices=["auto", "primary", "worker"], default="auto",
+                   help="роль узла: primary (опрашивает воркеров), worker (только локальный сбор) или auto")
+    p.add_argument("--salt-seed", default=None,
+                   help="переопределить seed для суточной ротации соли хеширования IP")
+    p.add_argument("--worker-timeout", type=float, default=2.0,
+                   help="таймаут HTTP-опроса /node-stats.json у воркеров в секундах (по умолчанию 2)")
+    p.add_argument("--worker-stale-ttl", type=int, default=60,
+                   help="время жизни кэша снимка воркера при временной недоступности в секундах (по умолчанию 60)")
     p.add_argument("--interval", type=float, default=5.0,
                    help="интервал обновления в секундах (по умолчанию 5)")
     p.add_argument("--now", type=int, default=None,
@@ -801,6 +1122,8 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     service_map_path = Path(args.service_map) if args.service_map else resolve_default_service_map()
+    cluster_config_path = Path(args.cluster_config) if args.cluster_config else resolve_default_cluster_config()
+    node_output_path = Path(args.node_output) if args.node_output else None
     output_path = Path(args.output)
 
     collector = StatsCollector(
@@ -812,6 +1135,12 @@ def main(argv=None) -> int:
         proc_tcp_path=Path(args.proc_tcp) if args.proc_tcp else None,
         proc_tcp6_path=Path(args.proc_tcp6) if args.proc_tcp6 else None,
         self_domain=args.self_domain,
+        cluster_config_path=cluster_config_path,
+        node_output_path=node_output_path,
+        role=args.role,
+        salt_seed=args.salt_seed,
+        worker_timeout=args.worker_timeout,
+        worker_stale_ttl=args.worker_stale_ttl,
     )
 
     now = args.now if args.now is not None else int(time.time())

@@ -65,6 +65,7 @@ except ImportError:
 
 DOMAIN_RE = re.compile(r'^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$')
 IPISH_RE = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
+ENV_VAR_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 FAQ_RE = re.compile(r'<details class="faq">\s*<summary>(.*?)</summary>\s*'
                     r'<p>(.*?)</p>\s*</details>', re.S)
 PLACEHOLDER_RE = re.compile(r'\{\{\s*(\w+)\s*\}\}')
@@ -74,6 +75,8 @@ TEMPLATES = OrderedDict([
     ("nginx.conf", "nginx.conf"),
     ("nginx-sni-allow.map", "nginx-sni-allow.map"),
     ("nginx-host-allow.map", "nginx-host-allow.map"),
+    ("nginx-workers-stream.conf", "nginx-workers-stream.conf"),
+    ("nginx-workers-http.conf", "nginx-workers-http.conf"),
     ("index.html", "index.html"),
     ("stats.html", "stats.html"),
     ("terms.html", "terms.html"),
@@ -91,6 +94,27 @@ SEO_TEMPLATES = OrderedDict([
 
 
 # --------------------------------------------------------------------- модель
+
+
+class WorkerNode:
+    def __init__(self, ip, name="", weight=1, ssh_user=None, ssh_user_env=None,
+                 ssh_key=None, ssh_key_env=None, ssh_port=None):
+        self.ip = ip
+        self.name = name
+        self.weight = weight
+        self.ssh_user = ssh_user
+        self.ssh_user_env = ssh_user_env
+        self.ssh_key = ssh_key
+        self.ssh_key_env = ssh_key_env
+        self.ssh_port = ssh_port
+
+
+class NodesConfig:
+    def __init__(self):
+        self.primary = None
+        self.include_primary_in_dns = False
+        self.probe_sni = "claude.ai"
+        self.workers = []
 
 
 class Service:
@@ -119,6 +143,7 @@ class Group:
 class Doc:
     def __init__(self):
         self.meta = OrderedDict()
+        self.nodes = NodesConfig()
         self.dnsmasq_options = []
         self.categories = []
         self.disabled = []
@@ -134,6 +159,24 @@ class Doc:
             for s in c.services:
                 for d in s.domains:
                     yield d, c, s
+
+    def active_workers(self, primary_ip=None):
+        """Список воркеров, исключая совпадающие с primary_ip."""
+        eff_primary = primary_ip or self.nodes.primary
+        return [w for w in self.nodes.workers if w.ip != eff_primary]
+
+    def active_dns_ips(self, primary_ip):
+        """Список IP-адресов для выдачи в A-записях dnsmasq."""
+        workers = self.active_workers(primary_ip)
+        if not workers:
+            return [primary_ip]
+        ips = []
+        if self.nodes.include_primary_in_dns and primary_ip:
+            ips.append(primary_ip)
+        for w in workers:
+            if w.ip not in ips:
+                ips.append(w.ip)
+        return ips or [primary_ip]
 
 
 # -------------------------------------------------------------------- парсер
@@ -167,6 +210,50 @@ def _domains(raw, where):
     return out
 
 
+def _opt_str(obj, key, where):
+    if key not in obj or obj[key] is None:
+        return None
+    val = obj[key]
+    if not isinstance(val, str):
+        raise ParseError(f"{where}: поле «{key}» должно быть строкой, а не {type(val).__name__}")
+    s = val.strip()
+    return s if s else None
+
+
+def _opt_int(obj, key, where, default=None):
+    if key not in obj or obj[key] is None:
+        return default
+    val = obj[key]
+    if isinstance(val, bool) or not isinstance(val, int):
+        raise ParseError(f"{where}: поле «{key}» должно быть целым числом, а не {type(val).__name__}")
+    return val
+
+
+def parse_workers_arg(raw_workers):
+    """Разбирает CLI-аргумент --workers ip1,ip2 (или name=ip:weight)."""
+    workers = []
+    for idx, item in enumerate(raw_workers.split(","), 1):
+        token = item.strip()
+        if not token:
+            continue
+        name = f"worker-{idx}"
+        weight = 1
+        if "=" in token:
+            name_part, token = token.split("=", 1)
+            name = name_part.strip() or name
+        if ":" in token:
+            ip_part, weight_part = token.rsplit(":", 1)
+            ip_str = ip_part.strip()
+            try:
+                weight = int(weight_part.strip())
+            except ValueError:
+                raise ParseError(f"--workers: некорректный вес «{weight_part}» для «{ip_str}»")
+        else:
+            ip_str = token.strip()
+        workers.append(WorkerNode(ip=ip_str, name=name, weight=weight))
+    return workers
+
+
 def parse(path):
     try:
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
@@ -183,6 +270,45 @@ def parse(path):
         raise ParseError(f"{path}: meta должен быть словарём")
     for k, v in meta.items():
         doc.meta[str(k)] = "" if v is None else str(v)
+
+    nodes_raw = data.get("nodes")
+    if nodes_raw is not None:
+        if not isinstance(nodes_raw, dict):
+            raise ParseError(f"{path}: nodes должен быть словарём")
+        if nodes_raw.get("primary") is not None:
+            doc.nodes.primary = str(nodes_raw["primary"]).strip()
+        inc_primary = nodes_raw.get("include_primary_in_dns")
+        if inc_primary is not None:
+            if not isinstance(inc_primary, bool):
+                raise ParseError(f"{path}: nodes.include_primary_in_dns должен быть булевым значением")
+            doc.nodes.include_primary_in_dns = inc_primary
+        probe_sni = _opt_str(nodes_raw, "probe_sni", f"{path}: nodes")
+        if probe_sni:
+            doc.nodes.probe_sni = probe_sni.lower()
+        w_list = nodes_raw.get("workers")
+        if w_list is not None:
+            if not isinstance(w_list, list):
+                raise ParseError(f"{path}: nodes.workers должен быть списком")
+            for wi, wraw in enumerate(w_list, 1):
+                where = f"{path}: nodes.workers[{wi}]"
+                if isinstance(wraw, str):
+                    doc.nodes.workers.append(WorkerNode(ip=wraw.strip(), name=f"worker-{wi}"))
+                elif isinstance(wraw, dict):
+                    wip = _need(wraw, "ip", where, str).strip()
+                    wname = _opt_str(wraw, "name", where) or f"worker-{wi}"
+                    wweight = _opt_int(wraw, "weight", where, default=1)
+                    doc.nodes.workers.append(WorkerNode(
+                        ip=wip,
+                        name=wname,
+                        weight=wweight,
+                        ssh_user=_opt_str(wraw, "ssh_user", where),
+                        ssh_user_env=_opt_str(wraw, "ssh_user_env", where),
+                        ssh_key=_opt_str(wraw, "ssh_key", where),
+                        ssh_key_env=_opt_str(wraw, "ssh_key_env", where),
+                        ssh_port=_opt_int(wraw, "ssh_port", where, default=None),
+                    ))
+                else:
+                    raise ParseError(f"{where}: ожидался словарь или строка с IP")
 
     opts = data.get("dnsmasq_options") or []
     if not isinstance(opts, list):
@@ -224,8 +350,52 @@ def parse(path):
 # ---------------------------------------------------------------- валидация
 
 
-def validate(doc):
+def _validate_env_ref(val, field_name, worker_name, errors):
+    var_name = val[2:-1] if (val.startswith("${") and val.endswith("}")) else val[1:]
+    if not ENV_VAR_RE.match(var_name):
+        errors.append(f"некорректное имя переменной окружения в {field_name}=«{val}» "
+                      f"у воркера «{worker_name}»")
+
+
+def validate(doc, primary_ip=None):
     errors, warnings = [], []
+
+    if doc.nodes.primary:
+        try:
+            ipaddress.IPv4Address(doc.nodes.primary)
+        except ipaddress.AddressValueError:
+            errors.append(f"некорректный IPv4-адрес nodes.primary: «{doc.nodes.primary}»")
+
+    if doc.nodes.probe_sni and not DOMAIN_RE.match(doc.nodes.probe_sni):
+        errors.append(f"некорректный домен nodes.probe_sni: «{doc.nodes.probe_sni}»")
+
+    primary_ips = {p for p in (doc.nodes.primary, primary_ip) if p}
+    seen_worker_ips = set()
+    for w in doc.nodes.workers:
+        try:
+            ipaddress.IPv4Address(w.ip)
+        except ipaddress.AddressValueError:
+            errors.append(f"некорректный IPv4-адрес воркера «{w.name}»: «{w.ip}»")
+        if w.ip in primary_ips:
+            errors.append(f"IP воркера «{w.name}» ({w.ip}) совпадает с основным узлом (primary)")
+        if w.ip in seen_worker_ips:
+            errors.append(f"дублирующийся IP воркера: {w.ip}")
+        seen_worker_ips.add(w.ip)
+        if w.weight < 1:
+            errors.append(f"вес (weight) воркера «{w.name}» ({w.ip}) должен быть >= 1 (указано {w.weight})")
+        if w.ssh_port is not None and not (1 <= w.ssh_port <= 65535):
+            errors.append(f"некорректный ssh_port у воркера «{w.name}» ({w.ip}): {w.ssh_port} (ожидается 1..65535)")
+        for fname, fval in (("ssh_user_env", w.ssh_user_env), ("ssh_key_env", w.ssh_key_env)):
+            if fval is not None and not ENV_VAR_RE.match(fval):
+                errors.append(f"некорректное имя переменной окружения {fname}=«{fval}» у воркера «{w.name}»")
+        if w.ssh_user is not None and w.ssh_user.startswith("$"):
+            _validate_env_ref(w.ssh_user, "ssh_user", w.name, errors)
+        if w.ssh_key is not None:
+            if "-----BEGIN" in w.ssh_key or "\n" in w.ssh_key:
+                errors.append(f"воркер «{w.name}»: нельзя хранить приватный SSH-ключ напрямую в services.yaml; "
+                              f"используйте ssh_key_env или путь к файлу")
+            elif w.ssh_key.startswith("$"):
+                _validate_env_ref(w.ssh_key, "ssh_key", w.name, errors)
 
     seen = {}
     for d, c, s in doc.active():
@@ -357,7 +527,10 @@ def wrap_comment(text, width=76):
 
 
 def conf_body(doc, ip):
+    dns_ips = doc.active_dns_ips(ip) if isinstance(ip, str) else list(ip)
+    n_ips = len(dns_ips)
     out = []
+    domain_idx = 0
     for i, c in enumerate(doc.categories, 1):
         out.append("#" + "=" * 78)
         out.append(f"# {i}. {c.name.upper()} ({c.count})")
@@ -365,7 +538,14 @@ def conf_body(doc, ip):
         for s in c.services:
             out.append("")
             out.append(f"# --- {s.name} ---")
-            out.extend(f"address=/{d}/{ip}" for d in s.domains)
+            for d in s.domains:
+                if n_ips <= 1:
+                    out.append(f"address=/{d}/{dns_ips[0]}")
+                else:
+                    rot = domain_idx % n_ips
+                    for node_ip in dns_ips[rot:] + dns_ips[:rot]:
+                        out.append(f"address=/{d}/{node_ip}")
+                domain_idx += 1
         out.append("")
     return "\n".join(out)
 
@@ -400,8 +580,94 @@ def service_map_json(doc):
     return json.dumps(mapping, ensure_ascii=False, indent=2) + "\n"
 
 
+def nginx_workers_stream_body(doc, primary_ip):
+    """Содержимое nginx-workers-stream.conf (пул воркеров на 443 или прямой выход)."""
+    workers = doc.active_workers(primary_ip)
+    if not workers:
+        return "\n".join([
+            "map $sni_allow_target $sni_upstream {",
+            "    default           $sni_allow_target;",
+            '    "__WORKERS__"     $ssl_preread_server_name:443;',
+            "}",
+        ])
+    lines = [
+        "upstream pereval_stream_workers {",
+        "    least_conn;",
+    ]
+    for w in workers:
+        lines.append(f"    server {w.ip}:443 weight={w.weight} max_fails=2 fail_timeout=10s;")
+    lines.extend([
+        "}",
+        "",
+        "map $sni_allow_target $sni_upstream {",
+        '    "127.0.0.1:9"     127.0.0.1:9;',
+        '    "127.0.0.1:8443"  127.0.0.1:8443;',
+        "    default           pereval_stream_workers;",
+        '    "__WORKERS__"     pereval_stream_workers;',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def nginx_workers_http_body(doc, primary_ip):
+    """Содержимое nginx-workers-http.conf (пул воркеров на 80 или прямой выход)."""
+    workers = doc.active_workers(primary_ip)
+    if not workers:
+        return "\n".join([
+            "map $http_allow_target $http_upstream {",
+            "    default           $http_allow_target;",
+            '    "__WORKERS__"     $host;',
+            "}",
+        ])
+    lines = [
+        "upstream pereval_http_workers {",
+        "    least_conn;",
+    ]
+    for w in workers:
+        lines.append(f"    server {w.ip}:80 weight={w.weight} max_fails=2 fail_timeout=10s;")
+    lines.extend([
+        "    keepalive 32;",
+        "}",
+        "",
+        "map $http_allow_target $http_upstream {",
+        '    ""                "";',
+        "    default           pereval_http_workers;",
+        '    "__WORKERS__"     pereval_http_workers;',
+        "}",
+    ])
+    return "\n".join(lines)
+
+
+def cluster_nodes_json(doc, primary_ip):
+    """JSON-описание узлов кластера для healthcheck.py и deploy.sh."""
+    domain = extract_domain(doc)
+    payload = OrderedDict([
+        ("primary", primary_ip),
+        ("domain", domain),
+        ("include_primary_in_dns", bool(doc.nodes.include_primary_in_dns)),
+        ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
+        ("workers", [
+            OrderedDict([
+                ("ip", w.ip),
+                ("name", w.name or f"worker-{idx}"),
+                ("weight", w.weight),
+                ("ssh_user", w.ssh_user),
+                ("ssh_user_env", w.ssh_user_env),
+                ("ssh_key", w.ssh_key),
+                ("ssh_key_env", w.ssh_key_env),
+                ("ssh_port", w.ssh_port),
+            ])
+            for idx, w in enumerate(doc.active_workers(primary_ip), 1)
+        ]),
+    ])
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
 def conf_disabled(doc, ip):
+    dns_ips = doc.active_dns_ips(ip) if isinstance(ip, str) else list(ip)
+    n_ips = len(dns_ips)
     out = []
+    domain_idx = 0
     for g in doc.disabled:
         out.append("#" + "=" * 78)
         out.append(f"# ОТКЛЮЧЕНО: {g.name.upper()}")
@@ -409,7 +675,14 @@ def conf_disabled(doc, ip):
         if g.note:
             out.append(wrap_comment(g.note))
         out.append("")
-        out.extend(f"#address=/{d}/{ip}" for d in g.domains)
+        for d in g.domains:
+            if n_ips <= 1:
+                out.append(f"#address=/{d}/{dns_ips[0]}")
+            else:
+                rot = domain_idx % n_ips
+                for node_ip in dns_ips[rot:] + dns_ips[:rot]:
+                    out.append(f"#address=/{d}/{node_ip}")
+            domain_idx += 1
         out.append("")
     return "\n".join(out)
 
@@ -484,7 +757,10 @@ def build_values(doc, ip, source, templates_dir):
                                  for d in sorted(set(doc.passthrough.domains))),
         "sni_entries": map_entries(doc, "$ssl_preread_server_name:443"),
         "host_entries": map_entries(doc, "$host"),
+        "workers_stream_body": nginx_workers_stream_body(doc, ip),
+        "workers_http_body": nginx_workers_http_body(doc, ip),
         "service_map_json": service_map_json(doc),
+        "cluster_nodes_json": cluster_nodes_json(doc, ip),
     }
     # FAQPage собирается из самой страницы, но только если шаблон его просит —
     # иначе отсутствие блоков FAQ маскировало бы настоящие ошибки шаблона.
@@ -618,7 +894,8 @@ def main(argv=None):
                "  python3 generate.py services.yaml 153.80.200.170 --check\n"
                "  python3 generate.py services.yaml 153.80.200.170 --seo-extras\n")
     p.add_argument("services", help="путь к YAML с категориями, сервисами и доменами")
-    p.add_argument("ip", help="IPv4-адрес прокси-сервера")
+    p.add_argument("ip", nargs="?", default=None,
+                   help="IPv4-адрес основного прокси-сервера (по умолчанию берётся из nodes.primary)")
     p.add_argument("-t", "--templates", default=None,
                    help="каталог с шаблонами (по умолчанию templates/ рядом со скриптом)")
     p.add_argument("-o", "--out-dir", default=None,
@@ -627,17 +904,16 @@ def main(argv=None):
     p.add_argument("--origin", help="адрес сайта (переопределяет meta.origin)")
     p.add_argument("--domain", help="домен DNS-сервера (переопределяет хост из meta.origin)")
     p.add_argument("--date", help="дата обновления YYYY-MM-DD (переопределяет meta.date)")
+    p.add_argument("--workers", default=None,
+                   help="список IP воркеров через запятую (переопределяет nodes.workers, напр. 153.80.200.171,153.80.200.172)")
+    p.add_argument("--include-primary-in-dns", action="store_true",
+                   help="включать основной IP в ответы dnsmasq наравне с воркерами")
     p.add_argument("--check", action="store_true",
                    help="только проверить данные и шаблоны, ничего не записывать")
     p.add_argument("--seo-extras", action="store_true",
                    help="дополнительно собрать og-image.svg")
     p.add_argument("-q", "--quiet", action="store_true", help="не печатать предупреждения")
     a = p.parse_args(argv)
-
-    try:
-        ip = str(ipaddress.IPv4Address(a.ip))
-    except ipaddress.AddressValueError as exc:
-        p.error(f"«{a.ip}» не похож на IPv4-адрес: {exc}")
 
     src = Path(a.services)
     if not src.is_file():
@@ -649,15 +925,28 @@ def main(argv=None):
 
     try:
         doc = parse(src)
+        if a.workers is not None:
+            doc.nodes.workers = parse_workers_arg(a.workers)
     except ParseError as exc:
         print(f"ошибка разбора: {exc}", file=sys.stderr)
         return 2
+
+    if a.include_primary_in_dns:
+        doc.nodes.include_primary_in_dns = True
+
+    raw_ip = a.ip or doc.nodes.primary
+    if not raw_ip:
+        p.error("не указан IP-адрес сервера (передайте позиционным аргументом ip или укажите nodes.primary в YAML)")
+    try:
+        ip = str(ipaddress.IPv4Address(raw_ip))
+    except ipaddress.AddressValueError as exc:
+        p.error(f"«{raw_ip}» не похож на IPv4-адрес: {exc}")
 
     for key, val in (("name", a.name), ("origin", a.origin), ("domain", a.domain), ("date", a.date)):
         if val:
             doc.meta[key] = val
 
-    errors, warnings = validate(doc)
+    errors, warnings = validate(doc, primary_ip=ip)
     if warnings and not a.quiet:
         for m in warnings:
             print(f"предупреждение: {m}", file=sys.stderr)
@@ -680,6 +969,7 @@ def main(argv=None):
         rendered = [(out_name, render(tpl_dir, tpl_name, values, doc, ip))
                     for tpl_name, out_name in wanted.items()]
         rendered.append(("service-map.json", values["service_map_json"]))
+        rendered.append(("cluster-nodes.json", values["cluster_nodes_json"]))
     except ParseError as exc:
         print(f"ошибка шаблона: {exc}", file=sys.stderr)
         return 2

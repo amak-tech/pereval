@@ -6,6 +6,7 @@
 #
 # Структура:
 #   meta             название, домен сайта и дата обновления для страницы
+#   nodes            конфигурация основного узла (primary) и пула воркеров (workers)
 #   dnsmasq_options  строки, которые попадут в блок опций dnsmasq как есть
 #   categories       категория -> сервисы -> домены. Поддомены включаются
 #                    автоматически: anthropic.com покрывает api.anthropic.com,
@@ -22,6 +23,28 @@
 meta:
   name: Перевал
   origin: https://pereval.portbuddy.tech
+nodes:
+  primary: 153.80.200.170
+  include_primary_in_dns: false   # false = отдавать в DNS только здоровые воркеры; true = включать primary наравне с воркерами
+  probe_sni: claude.ai
+  workers:
+    # Добавляйте сюда дополнительные VPS-воркеры по мере роста нагрузки.
+    # По умолчанию для подключения к воркерам используются те же SSH-пользователь,
+    # SSH-ключ и порт, что и для основного узла (primary).
+    # При необходимости можно переопределить их для конкретного воркера напрямую
+    # или через секреты GitHub Actions (переменные окружения):
+    # - ip: 153.80.200.171
+    #   name: kz-worker-1
+    #   weight: 1
+    #   ssh_user_env: WORKER1_SSH_USER   # опционально: имя env-переменной (или ssh_user: ubuntu)
+    #   ssh_key_env: WORKER1_SSH_KEY     # опционально: имя env-переменной с приватным ключом или путём (или ssh_key: ~/.ssh/id_ed25519)
+    #   ssh_port: 22                     # опционально: по умолчанию наследует порт основного узла (22)
+
+    - ip: 151.247.25.123
+      name: nl-worker-1
+    - ip: 151.247.25.209
+      name: nl-worker-2
+
 dnsmasq_options:
   - listen-address=0.0.0.0
   - port=53
@@ -37,7 +60,7 @@ dnsmasq_options:
   - bind-interfaces
   - filter-AAAA
   - filter-rr=HTTPS,SVCB
-  - local-ttl=3600
+  - local-ttl=60
 categories:
   - name: ИИ и языковые модели
     services:
