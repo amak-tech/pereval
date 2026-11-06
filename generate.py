@@ -447,7 +447,7 @@ def validate(doc, primary_ip=None):
 
 def html_toc(doc):
     e = html.escape
-    return "".join(f'<a href="#cat-{i}">{e(c.name)} <span>{c.count}</span></a>'
+    return "".join(f'<a href="#cat-{i}">{e(c.name)} <span>{len(c.services)}</span></a>'
                    for i, c in enumerate(doc.categories, 1))
 
 
@@ -455,16 +455,13 @@ def html_cards(doc):
     e = html.escape
     out = []
     for i, c in enumerate(doc.categories, 1):
-        rows = []
+        chips = []
         for s in c.services:
-            chips = "".join(f'<code class="d">{e(d)}</code>' for d in s.domains)
             key = f'{s.name.lower()} {" ".join(s.domains)}'
-            rows.append(f'<div class="sub" data-search="{e(key)}">'
-                        f'<h4 class="subhead">{e(s.name)}</h4>'
-                        f'<div class="chips">{chips}</div></div>')
+            chips.append(f'<span class="svc sub" data-search="{e(key)}">{e(s.name)}</span>')
         out.append(f'<section class="cat" id="cat-{i}" aria-labelledby="cat-{i}-h">'
-                   f'<h3 id="cat-{i}-h">{e(c.name)}<span class="count">{c.count}</span></h3>'
-                   f'{"".join(rows)}</section>')
+                   f'<h3 id="cat-{i}-h">{e(c.name)}<span class="count">{len(c.services)}</span></h3>'
+                   f'<div class="chips">{"".join(chips)}</div></section>')
     return "".join(out)
 
 
