@@ -143,6 +143,15 @@ python3 update_hosts.py --hosts-file ./hosts.preview
 
 ---
 
+## Платные тарифы (Ранний доступ): Перевал Pro и Перевал Dedicated
+
+Помимо бесплатного базового доступа для текстовых ИИ и IDE, доступны два специализированных направления (сейчас открыта запись в ранний доступ):
+
+1. **[Перевал Pro (`/pro.html`)](https://pereval.portbuddy.tech/pro.html)** — расширенная индивидуальная подписка: быстрые серверы без вечерних перегрузок, удобный личный кабинет на сайте и полный список популярных сервисов, соцсетей и медиа-стримингов, которые сами ограничили работу для российских и белорусских IP-адресов (Spotify, Netflix, Twitch 1080p, TikTok, Reddit, Pinterest, Canva, Notion, Miro, Trello, Supercell, Xbox, PlayStation, Coursera, Duolingo, ElevenLabs и др.).
+2. **[Перевал Dedicated (`/dedicated.html`)](https://pereval.portbuddy.tech/dedicated.html)** — выделенный персональный DNS-прокси сервер «под ключ» со своим IPv4-адресом и доменом для всей семьи (настройка на домашнем роутере, Smart TV и консолях) или для компаний и команд разработчиков, с возможностью добавлять собственные кастомные домены в личном веб-кабинете.
+
+---
+
 ## Предложить новый сервис или задать вопрос
 
 Если нужный вам зарубежный сервис ограничивает доступ по региону (выдаёт ошибку региональной недоступности), но его ещё нет в списке на **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=request)** — напишите в наш **[Telegram-чат @pereval_dns](https://t.me/pereval_dns)** или создайте обращение в разделе **[Issues](https://github.com/amak-tech/pereval/issues)** репозитория **[github.com/amak-tech/pereval](https://github.com/amak-tech/pereval)** и укажите адрес сайта или название приложения.

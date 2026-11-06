@@ -32,7 +32,8 @@ CLUSTER_NODES="cluster-nodes.json"
 STATS_COLLECTOR="stats_collector.py"
 DOH_PROXY="doh_proxy.py"
 HEALTHCHECK="healthcheck.py"
-WEB_FILES=("index.html" "stats.html" "terms.html" "privacy.html" "dns.mobileconfig" "favicon.svg" "favicon.ico" "apple-touch-icon.png" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
+LEADS_SERVICE="leads_service.py"
+WEB_FILES=("index.html" "pro.html" "dedicated.html" "stats.html" "terms.html" "privacy.html" "dns.mobileconfig" "favicon.svg" "favicon.ico" "apple-touch-icon.png" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
@@ -188,6 +189,7 @@ LOCAL_FILES=(
 	"$STATS_COLLECTOR"
 	"$DOH_PROXY"
 	"$HEALTHCHECK"
+	"$LEADS_SERVICE"
 	"${WEB_FILES[@]}"
 )
 missing=()
@@ -201,7 +203,7 @@ fi
 
 # несведённые подстановки означают, что генератор падал на середине
 for f in "${LOCAL_FILES[@]}"; do
-	[[ $f == *.png || $f == *.ico || $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" ]] && continue
+	[[ $f == *.png || $f == *.ico || $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" || $f == "$LEADS_SERVICE" ]] && continue
 	if grep -q '{{[a-z_]*}}' "$f"; then
 		die "в $f остались подстановки {{...}} — генератор не доработал"
 	fi
@@ -273,7 +275,7 @@ fi
 
 if [[ -f $SOURCE_YAML ]]; then
 	for f in "${LOCAL_FILES[@]}"; do
-		[[ $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" ]] && continue
+		[[ $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" || $f == "$LEADS_SERVICE" ]] && continue
 		if [[ $SOURCE_YAML -nt $f ]]; then
 			warn "$SOURCE_YAML новее, чем $f — возможно, забыли пересобрать"
 			((FORCE)) || die "перезапустите generate.py или добавьте --force"
@@ -348,6 +350,20 @@ prepare_local_stage() {
 		info "$f ($(wc -c <"$f" | tr -d ' ') байт)"
 	done
 
+	if [[ -n ${SMTP_USERNAME:-} || -n ${SMTP_PASSWORD:-} ]]; then
+		cat >"$LOCAL_STAGE/leads.env" <<EOF
+SMTP_HOST=${SMTP_HOST:-smtp-pulse.com}
+SMTP_PORT=${SMTP_PORT:-2525}
+SMTP_USERNAME=${SMTP_USERNAME:-}
+SMTP_PASSWORD=${SMTP_PASSWORD:-}
+MAIL_FROM=${MAIL_FROM:-no-reply@portbuddy.dev}
+MAIL_FROM_NAME=${MAIL_FROM_NAME:-Port Buddy}
+ADMIN_EMAIL=${ADMIN_EMAIL:-admin@portbuddy.dev}
+EOF
+		chmod 600 "$LOCAL_STAGE/leads.env"
+		info "подготовлен файл секретов SMTP (leads.env)"
+	fi
+
 	cat >"$LOCAL_STAGE/apply.sh" <<'REMOTE'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -370,6 +386,12 @@ DOH_UNIT_DST="/etc/systemd/system/pereval-doh.service"
 HC_DST="/usr/local/bin/pereval-healthcheck.py"
 HC_UNIT_DST="/etc/systemd/system/pereval-healthcheck.service"
 HC_STATE_DIR="/var/lib/pereval-healthcheck"
+LEADS_DST="/usr/local/bin/pereval-leads.py"
+LEADS_UNIT_DST="/etc/systemd/system/pereval-leads.service"
+LEADS_STATE_DIR="/var/lib/pereval-leads"
+LEADS_VENV_DIR="/opt/pereval-leads/venv"
+LEADS_ENV_DIR="/etc/pereval"
+LEADS_ENV_DST="/etc/pereval/leads.env"
 
 say()  { printf '    %s\n' "$*"; }
 fail() { printf 'ошибка на сервере (%s): %s\n' "$SERVER_IP" "$*" >&2; exit 1; }
@@ -397,13 +419,14 @@ RESCONF
 	fi
 fi
 
-mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" /etc/sysctl.d
+mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" "$LEADS_STATE_DIR" "$LEADS_ENV_DIR" /etc/sysctl.d
+chmod 0700 "$LEADS_STATE_DIR" "$LEADS_ENV_DIR"
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json stats_collector.py doh_proxy.py healthcheck.py index.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml; do
+for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json stats_collector.py doh_proxy.py healthcheck.py leads_service.py index.html pro.html dedicated.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
-say "получено 23 файла (роль узла: $NODE_ROLE)"
+say "получено 26 файлов (роль узла: $NODE_ROLE)"
 
 # Для воркера формируем локальный dnsmasq.conf со своим IP и прямые nginx-workers-*.conf,
 # чтобы воркер всегда выходил напрямую в интернет со своего IP без петель.
@@ -463,7 +486,12 @@ backup_one "$DOH_DST"                              pereval-doh-proxy.py
 backup_one "$DOH_UNIT_DST"                         pereval-doh.service
 backup_one "$HC_DST"                               pereval-healthcheck.py
 backup_one "$HC_UNIT_DST"                          pereval-healthcheck.service
+backup_one "$LEADS_DST"                            pereval-leads.py
+backup_one "$LEADS_UNIT_DST"                       pereval-leads.service
+backup_one "$LEADS_ENV_DST"                        leads.env
 backup_one "$WEB_DIR/index.html"                   index.html
+backup_one "$WEB_DIR/pro.html"                     pro.html
+backup_one "$WEB_DIR/dedicated.html"               dedicated.html
 backup_one "$WEB_DIR/stats.html"                   stats.html
 backup_one "$WEB_DIR/terms.html"                   terms.html
 backup_one "$WEB_DIR/privacy.html"                 privacy.html
@@ -480,7 +508,7 @@ say "резервные копии: $BACKUP"
 
 restore() {
 	printf 'откатываю изменения\n' >&2
-	for name in dnsmasq.conf dnsmasq-base.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json pereval-stats-collector.py pereval-stats.service pereval-doh-proxy.py pereval-doh.service pereval-healthcheck.py pereval-healthcheck.service index.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
+	for name in dnsmasq.conf dnsmasq-base.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json pereval-stats-collector.py pereval-stats.service pereval-doh-proxy.py pereval-doh.service pereval-healthcheck.py pereval-healthcheck.service pereval-leads.py pereval-leads.service leads.env index.html pro.html dedicated.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
 		if [[ -f "$BACKUP/$name" ]]; then
 			case "$name" in
 				dnsmasq.conf)                                                                                                    cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
@@ -493,7 +521,10 @@ restore() {
 				pereval-doh.service)                                                                                             cp -a "$BACKUP/$name" "$DOH_UNIT_DST" ;;
 				pereval-healthcheck.py)                                                                                          cp -a "$BACKUP/$name" "$HC_DST" ;;
 				pereval-healthcheck.service)                                                                                     cp -a "$BACKUP/$name" "$HC_UNIT_DST" ;;
-				index.html|stats.html|terms.html|privacy.html|dns.mobileconfig|favicon.svg|favicon.ico|apple-touch-icon.png|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
+				pereval-leads.py)                                                                                                cp -a "$BACKUP/$name" "$LEADS_DST" ;;
+				pereval-leads.service)                                                                                           cp -a "$BACKUP/$name" "$LEADS_UNIT_DST" ;;
+				leads.env)                                                                                                       cp -a "$BACKUP/$name" "$LEADS_ENV_DST" ;;
+				index.html|pro.html|dedicated.html|stats.html|terms.html|privacy.html|dns.mobileconfig|favicon.svg|favicon.ico|apple-touch-icon.png|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
 				*)                                                                                                               cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
 			esac
 		fi
@@ -505,6 +536,7 @@ restore() {
 	systemctl restart pereval-stats.service 2>/dev/null || true
 	if [[ $NODE_ROLE == "primary" ]]; then
 		systemctl restart pereval-healthcheck.service 2>/dev/null || true
+		systemctl restart pereval-leads.service 2>/dev/null || true
 	fi
 }
 
@@ -556,6 +588,8 @@ fi
 
 # --- статика сайта и профиль iOS ------------------------------------------
 install -m 0644 "$STAGE/index.html"            "$WEB_DIR/index.html"
+install -m 0644 "$STAGE/pro.html"              "$WEB_DIR/pro.html"
+install -m 0644 "$STAGE/dedicated.html"        "$WEB_DIR/dedicated.html"
 install -m 0644 "$STAGE/stats.html"            "$WEB_DIR/stats.html"
 install -m 0644 "$STAGE/terms.html"            "$WEB_DIR/terms.html"
 install -m 0644 "$STAGE/privacy.html"          "$WEB_DIR/privacy.html"
@@ -646,6 +680,60 @@ UNIT
 	chmod 0644 "$HC_UNIT_DST"
 fi
 
+# --- сервис сбора заявок и SMTP-уведомлений (pereval-leads.service) -------
+install -m 0755 "$STAGE/leads_service.py"     "$LEADS_DST"
+if [[ $NODE_ROLE == "primary" ]]; then
+	if [[ ! -x "$LEADS_VENV_DIR/bin/python3" ]]; then
+		say "создаю виртуальное окружение $LEADS_VENV_DIR..."
+		mkdir -p "$(dirname "$LEADS_VENV_DIR")"
+		if ! python3 -m venv "$LEADS_VENV_DIR" >/dev/null 2>&1; then
+			DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq >/dev/null
+			DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq python3-venv python3-pip >/dev/null
+			python3 -m venv "$LEADS_VENV_DIR"
+		fi
+	fi
+	if ! "$LEADS_VENV_DIR/bin/python3" -c "import fastapi, uvicorn, pydantic" >/dev/null 2>&1; then
+		say "устанавливаю fastapi, uvicorn, pydantic в $LEADS_VENV_DIR..."
+		"$LEADS_VENV_DIR/bin/pip" install --disable-pip-version-check -q fastapi uvicorn pydantic
+	fi
+	if [[ -f "$STAGE/leads.env" ]]; then
+		install -m 0600 "$STAGE/leads.env" "$LEADS_ENV_DST"
+		say "обновлён файл окружения $LEADS_ENV_DST"
+	elif [[ ! -f "$LEADS_ENV_DST" ]]; then
+		cat >"$LEADS_ENV_DST" <<'ENVEOF'
+SMTP_HOST=smtp-pulse.com
+SMTP_PORT=2525
+SMTP_USERNAME=
+SMTP_PASSWORD=
+MAIL_FROM=no-reply@portbuddy.dev
+MAIL_FROM_NAME=Port Buddy
+ADMIN_EMAIL=admin@portbuddy.dev
+ENVEOF
+		chmod 0600 "$LEADS_ENV_DST"
+		say "создан шаблон окружения $LEADS_ENV_DST (права 0600)"
+	else
+		chmod 0600 "$LEADS_ENV_DST"
+		say "сохранён существующий $LEADS_ENV_DST"
+	fi
+	cat >"$LEADS_UNIT_DST" <<UNIT
+[Unit]
+Description=Pereval demand validation leads and SMTP notification service
+After=network.target nginx.service
+
+[Service]
+Type=simple
+EnvironmentFile=-$LEADS_ENV_DST
+Environment=LEADS_FILE=$LEADS_STATE_DIR/leads.jsonl
+ExecStart=$LEADS_VENV_DIR/bin/python3 $LEADS_DST --host 127.0.0.1 --port 8054
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	chmod 0644 "$LEADS_UNIT_DST"
+fi
+
 # --- установка dnsmasq ----------------------------------------------------
 install -m 0644 "$STAGE/dnsmasq-node.conf" "$DNSMASQ_DST"
 
@@ -729,9 +817,20 @@ if [[ $NODE_ROLE == "primary" ]]; then
 		fail "pereval-healthcheck.service не поднялся"
 	fi
 	say "демон мониторинга воркеров pereval-healthcheck перезапущен"
+
+	systemctl enable pereval-leads.service >/dev/null 2>&1 || true
+	if ! systemctl restart pereval-leads.service; then
+		journalctl -u pereval-leads.service -n 20 --no-pager >&2 || true
+		restore
+		fail "pereval-leads.service не поднялся"
+	fi
+	say "сервис приёма заявок pereval-leads перезапущен"
 else
 	if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1; then
 		systemctl disable --now pereval-healthcheck.service >/dev/null 2>&1 || true
+	fi
+	if systemctl list-unit-files pereval-leads.service >/dev/null 2>&1; then
+		systemctl disable --now pereval-leads.service >/dev/null 2>&1 || true
 	fi
 fi
 
@@ -777,7 +876,7 @@ fi
 sleep 1
 EXPECTED_UNITS=(dnsmasq nginx pereval-doh pereval-stats)
 if [[ $NODE_ROLE == "primary" ]]; then
-	EXPECTED_UNITS+=(pereval-healthcheck)
+	EXPECTED_UNITS+=(pereval-healthcheck pereval-leads)
 fi
 for unit in "${EXPECTED_UNITS[@]}"; do
 	systemctl is-active --quiet "$unit" || { restore; fail "$unit не активен после перезапуска"; }
@@ -797,7 +896,11 @@ else
 	say "ВНИМАНИЕ: claude.ai -> ${got:-пусто}, адрес не найден в $DNSMASQ_DST"
 fi
 
-for port in 80 443 853 8053; do
+CHECK_PORTS=(80 443 853 8053)
+if [[ $NODE_ROLE == "primary" ]]; then
+	CHECK_PORTS+=(8054)
+fi
+for port in "${CHECK_PORTS[@]}"; do
 	if ss -tlnH "sport = :$port" | grep -q .; then
 		say "порт $port слушается"
 	else
@@ -895,8 +998,11 @@ DRYPRE
 		printf '    %-28s -> %s\n' "$DOH_PROXY" "/usr/local/bin/pereval-doh-proxy.py"
 		printf '    %-28s -> %s\n' "pereval-doh.service" "/etc/systemd/system/pereval-doh.service"
 		printf '    %-28s -> %s\n' "$HEALTHCHECK" "/usr/local/bin/pereval-healthcheck.py"
+		printf '    %-28s -> %s\n' "$LEADS_SERVICE" "/usr/local/bin/pereval-leads.py"
 		if [[ $node_role == "primary" ]]; then
 			printf '    %-28s -> %s\n' "pereval-healthcheck.service" "/etc/systemd/system/pereval-healthcheck.service"
+			printf '    %-28s -> %s\n' "pereval-leads.service" "/etc/systemd/system/pereval-leads.service"
+			printf '    %-28s -> %s\n' "leads.env (SMTP)" "/etc/pereval/leads.env"
 		fi
 		for w in "${WEB_FILES[@]}"; do
 			printf '    %-28s -> %s\n' "$w" "/var/www/geoblock/$w"
@@ -966,6 +1072,7 @@ if ! nginx -V 2>&1 | grep -qE -- '--with-stream($| )' && [[ ! -f /usr/lib/nginx/
 fi
 command -v dnsmasq >/dev/null 2>&1 || need_pkgs+=(dnsmasq)
 command -v python3 >/dev/null 2>&1 || need_pkgs+=(python3)
+dpkg -s python3-venv >/dev/null 2>&1 || need_pkgs+=(python3-venv)
 command -v openssl >/dev/null 2>&1 || need_pkgs+=(openssl)
 command -v dig >/dev/null 2>&1 || need_pkgs+=(dnsutils)
 command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)

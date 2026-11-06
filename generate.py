@@ -78,6 +78,8 @@ TEMPLATES = OrderedDict([
     ("nginx-workers-stream.conf", "nginx-workers-stream.conf"),
     ("nginx-workers-http.conf", "nginx-workers-http.conf"),
     ("index.html", "index.html"),
+    ("pro.html", "pro.html"),
+    ("dedicated.html", "dedicated.html"),
     ("stats.html", "stats.html"),
     ("terms.html", "terms.html"),
     ("privacy.html", "privacy.html"),
@@ -778,13 +780,16 @@ def render(templates_dir, tpl_name, values, doc, ip):
     path = templates_dir / tpl_name
     if not path.is_file():
         raise ParseError(f"шаблон не найден: {path}")
+    raw_text = path.read_text(encoding="utf-8")
     local = dict(values)
     if tpl_name.endswith(".html"):
         local["disabled"] = values["disabled_html"]
+        if re.search(r'\{\{\s*faq_entities\s*\}\}', raw_text):
+            local["faq_entities"] = faq_entities(raw_text, str(path), local)
     else:
         local["disabled"] = conf_disabled(doc, ip)
         local["passthrough_note"] = wrap_comment(doc.passthrough.note)
-    return substitute(path.read_text(encoding="utf-8"), local, str(path))
+    return substitute(raw_text, local, str(path))
 
 
 def render_svg_png(svg_path, png_path, width, height):

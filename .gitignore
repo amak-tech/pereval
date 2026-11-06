@@ -17,3 +17,5 @@
 /cluster-nodes.json
 /nginx-workers-stream.conf
 /nginx-workers-http.conf
+/dedicated.html
+/pro.html

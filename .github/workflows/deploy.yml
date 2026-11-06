@@ -39,6 +39,13 @@ jobs:
           SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
           SUTTON_SSH_KEY: ${{ secrets.SUTTON_SSH_KEY }}
           SUTTON_SSH_USER: ${{ secrets.SUTTON_SSH_USER }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME}}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           # Optional per-worker secrets (referenced via ssh_user_env / ssh_key_env in services.yaml):
 #          WORKER1_SSH_USER: ${{ secrets.WORKER1_SSH_USER }}
 #          WORKER1_SSH_KEY: ${{ secrets.WORKER1_SSH_KEY }}
