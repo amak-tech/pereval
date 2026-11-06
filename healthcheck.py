@@ -54,11 +54,7 @@ def build_tls_client_hello(server_name: str) -> bytes:
     sni_list = struct.pack("!H", len(sni_entry)) + sni_entry
     ext_sni = struct.pack("!HH", 0x0000, len(sni_list)) + sni_list
 
-    # supported_versions extension (0x002b): TLS 1.3 (0x0304), TLS 1.2 (0x0303)
-    versions = b"\x04\x03\x04\x03\x03"
-    ext_versions = struct.pack("!HH", 0x002B, len(versions)) + versions
-
-    # supported_groups (0x000a) & ec_point_formats (0x000b) для совместимости с OpenSSL
+    # supported_groups (0x000a) & ec_point_formats (0x000b) для совместимости с OpenSSL / BoringSSL
     groups = struct.pack("!HHHH", 6, 0x001D, 0x0017, 0x0018)
     ext_groups = struct.pack("!HH", 0x000A, len(groups)) + groups
     ec_formats = b"\x01\x00"
@@ -68,7 +64,7 @@ def build_tls_client_hello(server_name: str) -> bytes:
     sig_algs = struct.pack("!HHHHH", 8, 0x0403, 0x0804, 0x0401, 0x0503)
     ext_sig = struct.pack("!HH", 0x000D, len(sig_algs)) + sig_algs
 
-    extensions = ext_sni + ext_versions + ext_groups + ext_ec + ext_sig
+    extensions = ext_sni + ext_groups + ext_ec + ext_sig
     ext_block = struct.pack("!H", len(extensions)) + extensions
 
     client_version = b"\x03\x03"  # TLS 1.2
@@ -77,12 +73,12 @@ def build_tls_client_hello(server_name: str) -> bytes:
     cipher_suites = struct.pack(
         "!HHHHHHH",
         12,
-        0x1301,  # TLS_AES_128_GCM_SHA256
-        0x1302,  # TLS_AES_256_GCM_SHA384
         0xC02F,  # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
         0xC02B,  # TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
         0xC030,  # TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-        0x009C,  # TLS_RSA_WITH_AES_128_GCM_SHA256
+        0xC02C,  # TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        0xCCA8,  # TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        0xCCA9,  # TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
     )
     compression = b"\x01\x00"
 
@@ -99,8 +95,8 @@ def build_tls_client_hello(server_name: str) -> bytes:
     return record
 
 
-async def probe_tls_sni(ip: str, port: int, sni: str, timeout: float):
-    """Проверяет TCP/443 отправкой TLS ClientHello с указанным SNI."""
+async def _probe_tls_sni_once(ip: str, port: int, sni: str, timeout: float):
+    """Отправляет одиночный TLS ClientHello с указанным SNI и проверяет ответ ServerHello."""
     t0 = time.monotonic()
     writer = None
     try:
@@ -113,7 +109,7 @@ async def probe_tls_sni(ip: str, port: int, sni: str, timeout: float):
         elapsed_ms = (time.monotonic() - t0) * 1000.0
         if len(header) < 5:
             return False, elapsed_ms, f"short TLS response ({len(header)} bytes)"
-        # 0x16 = Handshake (ServerHello), 0x15 = Alert (тоже означает живой TLS-стек)
+        # 0x16 = Handshake (ServerHello)
         if header[0] == 0x16 and header[1] == 0x03:
             return True, elapsed_ms, None
         return False, elapsed_ms, f"unexpected TLS record header: {header[:2].hex()}"
@@ -127,6 +123,17 @@ async def probe_tls_sni(ip: str, port: int, sni: str, timeout: float):
                 await writer.wait_closed()
             except Exception:
                 pass
+
+
+async def probe_tls_sni(ip: str, port: int, sni: str, timeout: float, fallback_sni: str = None):
+    """Проверяет TCP/443 отправкой TLS ClientHello с указанным SNI (и fallback на локальный домен)."""
+    ok, elapsed_ms, err = await _probe_tls_sni_once(ip, port, sni, timeout)
+    if ok or not fallback_sni or fallback_sni == sni:
+        return ok, elapsed_ms, err
+    fb_ok, fb_ms, _fb_err = await _probe_tls_sni_once(ip, port, fallback_sni, timeout)
+    if fb_ok:
+        return True, fb_ms, None
+    return ok, elapsed_ms, err
 
 
 async def probe_http_healthz(ip: str, port: int, host: str, timeout: float):
@@ -389,7 +396,7 @@ async def run_cycle(args, state: dict) -> dict:
     async def check_one(w):
         ip = w["ip"]
         tls_ok, tls_ms, tls_err = await probe_tls_sni(
-            ip, args.tls_port, probe_sni, args.timeout
+            ip, args.tls_port, probe_sni, args.timeout, fallback_sni=domain
         )
         http_ok, http_ms, http_err = await probe_http_healthz(
             ip, args.http_port, domain, args.timeout
@@ -489,9 +496,11 @@ async def run_cycle(args, state: dict) -> dict:
     if need_sync:
         last_dns_reload = float(state.get("last_dnsmasq_reload_ts") or 0.0)
         elapsed_since_dns = time.time() - last_dns_reload
-        # При полном отказе воркеров (fail_open_active) обновляем DNS немедленно без ожидания cooldown
+        recovering_from_fail_open = (prev_worker_ips == [] and bool(active_worker_ips))
+        # При полном отказе воркеров (fail_open_active) или выходе из него обновляем DNS немедленно
         allow_dns_restart = (
             fail_open_active
+            or recovering_from_fail_open
             or last_dns_reload == 0.0
             or elapsed_since_dns >= args.min_reload_interval
             or not args.dnsmasq_out.is_file()
@@ -511,7 +520,7 @@ async def run_cycle(args, state: dict) -> dict:
         state["active_worker_ips"] = active_worker_ips
         if allow_dns_restart:
             state["active_dns_ips"] = active_dns_ips
-            if dns_updated:
+            if dns_updated and not args.no_service_reload:
                 state["last_dnsmasq_reload_ts"] = time.time()
 
     health_payload = OrderedDict([
