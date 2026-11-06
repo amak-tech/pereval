@@ -251,6 +251,15 @@ categories:
           - sentry.dev
       - name: Базы данных, мониторинг, CI
         domains:
+          - neon.com
+          - neon.tech
+          - neon.build
+          - neon.new
+          - neonapi.io
+          - neonstatus.com
+          - 7687492087503394.hostedstatus.com
+          - dfv3qgd2ykmrx.cloudfront.net
+          - d2a07l6itrasqg.cloudfront.net
           - mongodb.com
           - docs.liquibase.com
           - redis.io
