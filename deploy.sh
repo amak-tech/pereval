@@ -606,7 +606,7 @@ After=network.target nginx.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --output $WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $DOMAIN
+ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $WEB_DIR/node-stats.json --output $WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $DOMAIN --role $NODE_ROLE
 Restart=always
 RestartSec=5
 Nice=10
@@ -618,9 +618,12 @@ UNIT
 chmod 0644 "$STATS_UNIT_DST"
 /usr/bin/python3 "$COLLECTOR_DST" \
 	--service-map "$MAP_DIR/service-map.json" \
+	--cluster-config "$MAP_DIR/cluster-nodes.json" \
+	--node-output "$WEB_DIR/node-stats.json" \
 	--output "$WEB_DIR/stats.json" \
 	--state-file "$STATS_STATE_DIR/state.json" \
 	--self-domain "$DOMAIN" \
+	--role "$NODE_ROLE" \
 	--once || true
 
 # --- демон мониторинга воркеров и failover (pereval-healthcheck.service) --
