@@ -376,7 +376,7 @@ fail() { printf 'ошибка на сервере (%s): %s\n' "$SERVER_IP" "$*" 
 
 # --- освобождение порта 53 от systemd-resolved stub listener при необходимости
 if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
-	if ss -ulpn '( sport = :53 )' 2>/dev/null | grep -q '127\.0\.0\.53'; then
+	if ss -tulnp '( sport = :53 )' 2>/dev/null | grep -qE '127\.0\.0\.5[34]|systemd-resolve'; then
 		say "освобождаю порт 53 от systemd-resolved stub listener..."
 		mkdir -p /etc/systemd/resolved.conf.d
 		cat >/etc/systemd/resolved.conf.d/geoblock.conf <<'RESCONF'
@@ -743,8 +743,8 @@ elif [[ $DOMAIN == *.example || $DOMAIN == *.invalid || $DOMAIN == *.localhost ]
 else
 	if ! command -v certbot >/dev/null 2>&1; then
 		say "устанавливаю certbot..."
-		DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot >/dev/null
+		DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq >/dev/null
+		DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq certbot >/dev/null
 		say "certbot установлен"
 	fi
 
@@ -823,11 +823,66 @@ deploy_node() {
 	local node_name="$6"
 
 	local target="$node_user@$node_ip"
+	local ctl="/tmp/.geoblock-cm-$$-${#ACTIVE_CTLS[@]}"
+	local ssh_opts=(
+		-i "$node_key"
+		-p "$node_port"
+		-o IdentitiesOnly=yes
+		-o BatchMode=yes
+		-o ConnectTimeout=10
+		-o StrictHostKeyChecking=accept-new
+		-o LogLevel=ERROR
+		-o ControlMaster=auto
+		-o "ControlPath=$ctl"
+		-o ControlPersist=120
+	)
 
 	if ((DRY_RUN)); then
 		step "Пробный запуск [$node_role: $node_name ($target:$node_port)], изменений не будет"
 		info "SSH-пользователь: $node_user | SSH-ключ: $node_key | порт: $node_port | роль: $node_role"
-		info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates"
+		if ssh "${ssh_opts[@]}" -o ConnectTimeout=5 "$target" true 2>/dev/null; then
+			ACTIVE_CTLS+=("$ctl")
+			ACTIVE_TARGETS+=("$target")
+			local dry_sudo=""
+			if [[ $node_user != root ]]; then
+				if ssh "${ssh_opts[@]}" "$target" "sudo -n true" 2>/dev/null; then
+					dry_sudo="sudo"
+				else
+					warn "пользователю $node_user на $node_ip потребуется sudo без пароля"
+				fi
+			fi
+			local dry_probe
+			dry_probe=$(ssh "${ssh_opts[@]}" "$target" "$dry_sudo bash -s" <<'DRYPRE' || true
+set -uo pipefail
+os_name="Linux"
+if . /etc/os-release 2>/dev/null; then os_name="${PRETTY_NAME:-Linux}"; fi
+printf 'os=%s (%s)\n' "$os_name" "$(hostname 2>/dev/null || echo unknown)"
+need_pkgs=()
+command -v tar >/dev/null 2>&1 || need_pkgs+=(tar)
+command -v nginx >/dev/null 2>&1 || need_pkgs+=(nginx)
+if ! nginx -V 2>&1 | grep -qE -- '--with-stream($| )' && [[ ! -f /usr/lib/nginx/modules/ngx_stream_module.so && ! -f /etc/nginx/modules-enabled/50-mod-stream.conf ]]; then
+	need_pkgs+=(libnginx-mod-stream)
+fi
+command -v dnsmasq >/dev/null 2>&1 || need_pkgs+=(dnsmasq)
+command -v python3 >/dev/null 2>&1 || need_pkgs+=(python3)
+command -v openssl >/dev/null 2>&1 || need_pkgs+=(openssl)
+command -v dig >/dev/null 2>&1 || need_pkgs+=(dnsutils)
+command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)
+[[ -d /etc/ssl/certs ]] || need_pkgs+=(ca-certificates)
+printf 'missing_pkgs=%s\n' "${need_pkgs[*]:-нет (все установлены)}"
+if systemctl is-active --quiet systemd-resolved 2>/dev/null && ss -tulnp '( sport = :53 )' 2>/dev/null | grep -qE '127\.0\.0\.5[34]|systemd-resolve'; then
+	printf 'port53=занят systemd-resolved (будет автоматически освобождён через DNSStubListener=no)\n'
+else
+	printf 'port53=готов\n'
+fi
+DRYPRE
+			)
+			info "SSH-подключение: OK — $(printf '%s\n' "$dry_probe" | sed -n 's/^os=//p' | head -1)"
+			info "пакеты для доустановки: $(printf '%s\n' "$dry_probe" | sed -n 's/^missing_pkgs=//p' | head -1)"
+			info "статус порта 53: $(printf '%s\n' "$dry_probe" | sed -n 's/^port53=//p' | head -1)"
+		else
+			info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates"
+		fi
 		printf '    %-28s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
 		printf '    %-28s -> %s\n' "$NGINX_CONF" "/etc/nginx/nginx.conf"
 		for m in "${NGINX_MAPS[@]}" "${NGINX_WORKER_CONFS[@]}"; do
@@ -855,20 +910,6 @@ deploy_node() {
 		return 0
 	fi
 
-	local ctl="/tmp/.geoblock-cm-$$-${#ACTIVE_CTLS[@]}"
-	local ssh_opts=(
-		-i "$node_key"
-		-p "$node_port"
-		-o IdentitiesOnly=yes
-		-o BatchMode=yes
-		-o ConnectTimeout=10
-		-o StrictHostKeyChecking=accept-new
-		-o LogLevel=ERROR
-		-o ControlMaster=auto
-		-o "ControlPath=$ctl"
-		-o ControlPersist=120
-	)
-
 	step "Подключаюсь к [$node_role: $node_name] $target:$node_port"
 	ssh "${ssh_opts[@]}" "$target" true 2>/dev/null \
 		|| die "не удалось подключиться по SSH к $target:$node_port.
@@ -894,10 +935,33 @@ deploy_node() {
 set -euo pipefail
 if . /etc/os-release 2>/dev/null; then printf 'os=%s\n' "${PRETTY_NAME:-Linux}"; fi
 
+# Освобождаем порт 53 от systemd-resolved ДО установки dnsmasq, чтобы postinst-скрипт
+# пакета dnsmasq сразу смог занять порт 53 без ошибки dpkg.
+if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+	if ss -tulnp '( sport = :53 )' 2>/dev/null | grep -qE '127\.0\.0\.5[34]|systemd-resolve'; then
+		mkdir -p /etc/systemd/resolved.conf.d
+		cat >/etc/systemd/resolved.conf.d/geoblock.conf <<'RESCONF'
+[Resolve]
+DNSStubListener=no
+Domains=~.
+DNS=1.1.1.1 8.8.8.8
+RESCONF
+		systemctl restart systemd-resolved || true
+		if [[ -L /etc/resolv.conf ]] && readlink /etc/resolv.conf | grep -q 'stub-resolv.conf'; then
+			ln -sfn /run/systemd/resolve/resolv.conf /etc/resolv.conf || true
+		fi
+		if ! grep -qE '^nameserver\s+[0-9]+' /etc/resolv.conf 2>/dev/null || grep -qE '^nameserver\s+127\.' /etc/resolv.conf 2>/dev/null; then
+			rm -f /etc/resolv.conf
+			printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' >/etc/resolv.conf
+		fi
+		printf 'freed_port53=yes\n'
+	fi
+fi
+
 need_pkgs=()
 command -v tar >/dev/null 2>&1 || need_pkgs+=(tar)
 command -v nginx >/dev/null 2>&1 || need_pkgs+=(nginx)
-if ! nginx -V 2>&1 | grep -q -- '--with-stream' && [[ ! -f /usr/lib/nginx/modules/ngx_stream_module.so && ! -f /etc/nginx/modules-enabled/50-mod-stream.conf ]]; then
+if ! nginx -V 2>&1 | grep -qE -- '--with-stream($| )' && [[ ! -f /usr/lib/nginx/modules/ngx_stream_module.so && ! -f /etc/nginx/modules-enabled/50-mod-stream.conf ]]; then
 	need_pkgs+=(libnginx-mod-stream)
 fi
 command -v dnsmasq >/dev/null 2>&1 || need_pkgs+=(dnsmasq)
@@ -909,10 +973,8 @@ command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)
 
 if ((${#need_pkgs[@]})); then
 	printf 'installing=%s\n' "${need_pkgs[*]}"
-	export DEBIAN_FRONTEND=noninteractive
+	export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 	apt-get update -qq >/dev/null
-	# Останавливаем автозапуск dnsmasq во время apt install, если порт 53 занят systemd-resolved,
-	# чтобы dpkg не возвращал ошибку до того, как apply.sh освободит порт 53 и положит рабочий конфиг.
 	apt-get install -y -qq "${need_pkgs[@]}" >/dev/null || {
 		systemctl reset-failed dnsmasq 2>/dev/null || true
 	}
@@ -929,6 +991,9 @@ PRE
 	)
 
 	info "сервер ($node_ip): $(printf '%s' "$preflight" | sed -n 's/^os=//p' | head -1)"
+	if printf '%s' "$preflight" | grep -qx 'freed_port53=yes'; then
+		info "порт 53 освобождён от systemd-resolved stub listener"
+	fi
 	local installed_pkgs
 	installed_pkgs=$(printf '%s' "$preflight" | sed -n 's/^installing=//p' | head -1)
 	if [[ -n $installed_pkgs ]]; then
@@ -950,7 +1015,7 @@ PRE
 
 	step "Передаю файлы на $node_ip в $stage"
 	if ! COPYFILE_DISABLE=1 tar -cf - -C "$LOCAL_STAGE" . \
-		| ssh "${ssh_opts[@]}" "$target" "mkdir -p '$stage' && tar -xf - -C '$stage'"; then
+		| ssh "${ssh_opts[@]}" "$target" "mkdir -p '$stage' && (tar --warning=no-unknown-keyword -xf - -C '$stage' 2>/dev/null || tar -xf - -C '$stage')"; then
 		die "не удалось передать файлы на сервер $node_ip"
 	fi
 
