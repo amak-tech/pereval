@@ -11,7 +11,7 @@
 #      и разрешает SSH-реквизиты каждого воркера (по умолчанию наследует от основного узла,
 #      либо берёт из ssh_user_env / ssh_key_env / ssh_user / ssh_key / ssh_port)
 #   3. автоматически устанавливает недостающие пакеты (tar, nginx, libnginx-mod-stream,
-#      dnsmasq, python3, openssl, dnsutils, iproute2, ca-certificates) и освобождает
+#      dnsmasq, python3, openssl, dnsutils, iproute2, ca-certificates, bmon) и освобождает
 #      порт 53 от systemd-resolved stub listener при необходимости
 #   4. заливает файлы в staging-каталог на сервере, проверяет синтаксис ДО замены
 #   5. делает резервные копии, устанавливает, перезапускает сервисы, при ошибке откатывает
@@ -990,6 +990,7 @@ command -v python3 >/dev/null 2>&1 || need_pkgs+=(python3)
 command -v openssl >/dev/null 2>&1 || need_pkgs+=(openssl)
 command -v dig >/dev/null 2>&1 || need_pkgs+=(dnsutils)
 command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)
+command -v bmon >/dev/null 2>&1 || need_pkgs+=(bmon)
 [[ -d /etc/ssl/certs ]] || need_pkgs+=(ca-certificates)
 printf 'missing_pkgs=%s\n' "${need_pkgs[*]:-нет (все установлены)}"
 if systemctl is-active --quiet systemd-resolved 2>/dev/null && ss -tulnp '( sport = :53 )' 2>/dev/null | grep -qE '127\.0\.0\.5[34]|systemd-resolve'; then
@@ -1003,7 +1004,7 @@ DRYPRE
 			info "пакеты для доустановки: $(printf '%s\n' "$dry_probe" | sed -n 's/^missing_pkgs=//p' | head -1)"
 			info "статус порта 53: $(printf '%s\n' "$dry_probe" | sed -n 's/^port53=//p' | head -1)"
 		else
-			info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates"
+			info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates bmon"
 		fi
 		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
 		printf '    %-34s -> %s\n' "$NGINX_CONF" "/etc/nginx/nginx.conf"
@@ -1095,6 +1096,7 @@ dpkg -s python3-venv >/dev/null 2>&1 || need_pkgs+=(python3-venv)
 command -v openssl >/dev/null 2>&1 || need_pkgs+=(openssl)
 command -v dig >/dev/null 2>&1 || need_pkgs+=(dnsutils)
 command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)
+command -v bmon >/dev/null 2>&1 || need_pkgs+=(bmon)
 [[ -d /etc/ssl/certs ]] || need_pkgs+=(ca-certificates)
 
 if ((${#need_pkgs[@]})); then

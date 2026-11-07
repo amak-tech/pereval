@@ -327,7 +327,7 @@ Demand-validation lead capture and SMTP notification microservice listening on `
    - Optional per-worker overrides in `services.yaml` (`ssh_user_env`, `ssh_key_env`, `ssh_user`, `ssh_key`, `ssh_port`) allow pointing each worker to GitHub Actions secrets via environment variables. Inline private keys from environment variables are automatically written to temporary `0600` files and cleaned up on exit.
 3. **Zero-Touch Package Bootstrapping & SSH Multiplexing:**
    - Opens a `ControlMaster` socket per node so all SSH commands reuse one TCP connection.
-   - Automatically detects and installs any missing packages on fresh Debian/Ubuntu servers (`tar`, `nginx`, `libnginx-mod-stream`, `dnsmasq`, `python3`, `openssl`, `dnsutils`, `iproute2`, `ca-certificates`) and frees port `53` from `systemd-resolved` stub listener (`DNSStubListener=no`) if active.
+   - Automatically detects and installs any missing packages on fresh Debian/Ubuntu servers (`tar`, `nginx`, `libnginx-mod-stream`, `dnsmasq`, `python3`, `openssl`, `dnsutils`, `iproute2`, `ca-certificates`, `bmon`) and frees port `53` from `systemd-resolved` stub listener (`DNSStubListener=no`) if active.
    - Streams all 23 files + generated `apply.sh` to `/tmp/geoblock-<timestamp>` using `COPYFILE_DISABLE=1 tar -cf - ... | ssh ... tar -xf -`.
 3. **Remote Validation, Backup & Atomic Rollback (`apply.sh`):**
    - Tests `dnsmasq --test -C "$STAGE/dnsmasq-geoblock.conf"` **before** touching any live file.

@@ -308,7 +308,19 @@ td:last-child{color:var(--mute)}
 
 <div class="panel active" id="mac" role="tabpanel" aria-labelledby="tab-mac">
   <h3>Настройка DNS на macOS</h3>
-  <h4 class="subhead">Через системные настройки</h4>
+  <h4 class="subhead">Профиль конфигурации (рекомендуется, macOS 11 Big Sur и новее)</h4>
+  <p>Профиль настраивает зашифрованный DNS (DNS-over-TLS через <code>{{domain}}</code>) сразу для всех подключений — Wi-Fi, Ethernet, USB-модема — без ручной правки каждой сети.</p>
+  <p><a class="btn" href="/dns.mobileconfig" download="{{domain}}.mobileconfig">Скачать профиль для macOS (.mobileconfig)</a></p>
+  <ol>
+    <li>Скачайте профиль и откройте файл двойным щелчком — появится уведомление «Профиль загружен».</li>
+    <li>Откройте «Системные настройки» → «Основные» → «Управление устройством»
+        (на macOS Ventura: «Конфиденциальность и безопасность» → «Профили»).</li>
+    <li>Дважды щёлкните <strong>{{name}} DNS</strong>, нажмите «Установить» и введите пароль администратора.
+        Пометка «Не проверен» означает лишь, что профиль не подписан, — на работу она не влияет.</li>
+  </ol>
+  <p>Включить или выключить профиль можно в «Системные настройки» → «Сеть» → «VPN и фильтры» (macOS Sonoma и новее);
+  удалить — там же, где устанавливали, кнопкой <strong>−</strong>.</p>
+  <h4 class="subhead">Или вручную через системные настройки</h4>
   <ol>
     <li>Откройте «Системные настройки» → «Сеть».</li>
     <li>Выберите активное подключение (Wi-Fi или Ethernet) и нажмите «Подробнее…».</li>
@@ -387,16 +399,22 @@ networksetup -setdnsservers Wi-Fi empty</code></pre>
     <li>Переключите список с «Автоматически (DHCP)» на «Вручную».</li>
     <li>Включите <strong>IPv4</strong> и введите <code>{{ip}}</code> в поле
         «Предпочтительный DNS». Альтернативный оставьте пустым.</li>
+    <li><strong>Windows 11 (рекомендуется):</strong> в пункте «DNS через HTTPS» выберите
+        «Вкл. (ручной шаблон)» и укажите шаблон <code>https://{{domain}}/dns-query</code>.
+        Так запросы к DNS будут зашифрованы. В Windows 10 этого пункта нет — пропустите шаг.</li>
     <li>IPv6 оставьте выключенным и нажмите «Сохранить».</li>
   </ol>
   <h4 class="subhead">Или через PowerShell от администратора</h4>
 <pre><code>Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ServerAddresses {{ip}}
+# Windows 11: включить DNS-over-HTTPS для этого сервера
+Add-DnsClientDohServerAddress -ServerAddress {{ip}} -DohTemplate https://{{domain}}/dns-query -AllowFallbackToUdp $false -AutoUpgrade $true
 Clear-DnsClientCache
 
 # проверить
 Get-DnsClientServerAddress -InterfaceAlias "Wi-Fi"
 # вернуть DHCP
-Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses</code></pre>
+Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi" -ResetServerAddresses
+Remove-DnsClientDohServerAddress -ServerAddress {{ip}}</code></pre>
   <p>Если не знаете имя интерфейса, выполните <code>Get-NetAdapter</code>.</p>
 </div>
 
