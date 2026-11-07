@@ -105,49 +105,58 @@ All server-side components run on a single Linux VPS (Debian/Ubuntu) and interac
 
 ## 3. Repository Structure & File Inventory
 
-The repository follows a **Single Source of Truth + Zero-Dependency Generator** architecture. Both templates/sources and the generated artifacts are tracked in the root directory so the repository is always inspectable and ready to deploy.
+The repository follows a **Single Source of Truth + Zero-Dependency Generator** architecture. Source scripts live in `src/`, static icons in `assets/`, templates are organized into subdirectories under `templates/`, and generated artifacts are output to `build/`.
 
 ```text
 .
 ├── services.yaml            # SINGLE SOURCE OF TRUTH: metadata, nodes cluster, dnsmasq options, categories, services, domains
-├── generate.py              # Build script: validates services.yaml and renders templates/ into root artifacts
 ├── deploy.sh                # Automated zero-downtime fleet deployment script with auto-bootstrapping, staging, backups & rollback
-├── doh_proxy.py             # Production daemon: async RFC 8484 DNS-over-HTTPS proxy (pereval-doh.service)
-├── stats_collector.py       # Production daemon: real-time usage telemetry collector (pereval-stats.service)
-├── healthcheck.py           # Production daemon: active worker health-check & DNS/nginx failover (pereval-healthcheck.service)
-├── leads_service.py         # Production daemon: FastAPI demand-validation leads & SMTP notification service (pereval-leads.service)
-├── update_hosts.py          # Client utility: manages Pereval domains in local /etc/hosts (macOS / Linux)
 ├── README.md                # Public user-facing documentation (in Russian)
 ├── AGENTS.md                # Technical documentation & contributor/agent guide (this file)
-├── templates/               # Source templates rendered by generate.py using {{placeholder}} syntax
-│   ├── dnsmasq.conf         # -> dnsmasq-geoblock.conf
-│   ├── nginx.conf           # -> nginx.conf
-│   ├── nginx-sni-allow.map  # -> nginx-sni-allow.map
-│   ├── nginx-host-allow.map # -> nginx-host-allow.map
-│   ├── nginx-workers-stream.conf # -> nginx-workers-stream.conf
-│   ├── nginx-workers-http.conf   # -> nginx-workers-http.conf
-│   ├── index.html           # -> index.html (landing page, OS setup guides, interactive domain search, FAQ)
-│   ├── pro.html             # -> pro.html (Pereval Pro high-performance cluster landing page & lead form)
-│   ├── dedicated.html       # -> dedicated.html (Pereval Dedicated family/B2B server landing page & lead form)
-│   ├── stats.html           # -> stats.html (real-time telemetry dashboard reading /stats.json)
-│   ├── terms.html           # -> terms.html (Terms of Service)
-│   ├── privacy.html         # -> privacy.html (Privacy Policy)
-│   ├── dns.mobileconfig     # -> dns.mobileconfig (Apple iOS/iPadOS/macOS DoT configuration profile)
-│   ├── favicon.svg          # -> favicon.svg (+ rasterized to favicon.ico and apple-touch-icon.png)
-│   ├── og-image.svg         # -> og-image.svg (+ rasterized to og-image.png 1200x630)
-│   ├── robots.txt           # -> robots.txt
-│   └── sitemap.xml          # -> sitemap.xml
+├── src/                     # Python build, daemon, and client scripts
+│   ├── generate.py          # Build script: validates services.yaml and renders templates/ into build/
+│   ├── doh_proxy.py         # Production daemon: async RFC 8484 DNS-over-HTTPS proxy (pereval-doh.service)
+│   ├── stats_collector.py   # Production daemon: real-time usage telemetry collector (pereval-stats.service)
+│   ├── healthcheck.py       # Production daemon: active worker health-check & DNS/nginx failover (pereval-healthcheck.service)
+│   ├── leads_service.py     # Production daemon: FastAPI demand-validation leads & SMTP notification service (pereval-leads.service)
+│   └── update_hosts.py      # Client utility: manages Pereval domains in local /etc/hosts (macOS / Linux)
+├── assets/                  # Static web icon assets
+│   ├── favicon.svg
+│   ├── favicon.ico
+│   └── apple-touch-icon.png
+├── templates/               # Source templates rendered by src/generate.py using {{placeholder}} syntax
+│   ├── dnsmasq/
+│   │   └── dnsmasq.conf             # -> build/dnsmasq-geoblock.conf
+│   ├── nginx/
+│   │   ├── nginx.conf               # -> build/nginx.conf
+│   │   ├── nginx-sni-allow.map      # -> build/nginx-sni-allow.map
+│   │   ├── nginx-host-allow.map     # -> build/nginx-host-allow.map
+│   │   ├── nginx-workers-stream.conf # -> build/nginx-workers-stream.conf
+│   │   └── nginx-workers-http.conf  # -> build/nginx-workers-http.conf
+│   ├── web/
+│   │   ├── index.html               # -> build/index.html (landing page, OS setup guides, interactive domain search, FAQ)
+│   │   ├── pro.html                 # -> build/pro.html (Pereval Pro high-performance cluster landing page & lead form)
+│   │   ├── dedicated.html           # -> build/dedicated.html (Pereval Dedicated family/B2B server landing page & lead form)
+│   │   ├── stats.html               # -> build/stats.html (real-time telemetry dashboard reading /stats.json)
+│   │   ├── terms.html               # -> build/terms.html (Terms of Service)
+│   │   ├── privacy.html             # -> build/privacy.html (Privacy Policy)
+│   │   ├── dns.mobileconfig         # -> build/dns.mobileconfig (Apple iOS/iPadOS/macOS DoT configuration profile)
+│   │   ├── robots.txt               # -> build/robots.txt
+│   │   └── sitemap.xml              # -> build/sitemap.xml
+│   └── assets/
+│       ├── favicon.svg              # -> build/favicon.svg (+ rasterized to favicon.ico and apple-touch-icon.png)
+│       └── og-image.svg             # -> build/og-image.svg (+ rasterized to og-image.png 1200x630)
 ├── logos/                   # Brand assets (SVG & PNG in dark/light themes across 8 aspect ratios)
 │   └── README.md            # Documentation of logo formats and usage
-└── [Generated Root Files]   # Output of `python3 generate.py services.yaml 153.80.200.170`
+└── build/                   # Output of `python3 src/generate.py services.yaml 153.80.200.170` (gitignored)
     ├── dnsmasq-geoblock.conf
     ├── nginx.conf
     ├── nginx-sni-allow.map
     ├── nginx-host-allow.map
     ├── nginx-workers-stream.conf
     ├── nginx-workers-http.conf
-    ├── service-map.json     # Generated directly by generate.py (domain -> {service, category})
-    ├── cluster-nodes.json   # Generated directly by generate.py (primary IP, domain, worker pool & SSH env refs)
+    ├── service-map.json     # Generated directly by src/generate.py (domain -> {service, category})
+    ├── cluster-nodes.json   # Generated directly by src/generate.py (primary IP, domain, worker pool & SSH env refs)
     ├── index.html
     ├── pro.html
     ├── dedicated.html
@@ -204,11 +213,11 @@ Before writing any file, `generate.py` runs strict validation (`validate(doc)`):
   - HTML fragments: `{{toc}}`, `{{cards}}`, `{{disabled}}` (in `.html`), `{{passthrough_note}}`, `{{passthrough_chips}}`, `{{faq_entities}}`
   - Config fragments: `{{options}}`, `{{body}}`, `{{disabled}}` (in non-`.html`), `{{passthrough}}`, `{{sni_entries}}`, `{{host_entries}}`
 - **Automatic Schema.org `FAQPage` Generation (`faq_entities`):**
-  - `generate.py` parses `<details class="faq"><summary>...</summary><p>...</p></details>` blocks directly from `templates/index.html`, substitutes any `{{...}}` placeholders inside them, strips HTML tags, and serializes the JSON-LD `mainEntity` array. FAQ text only needs to be edited once in `templates/index.html`.
+  - `src/generate.py` parses `<details class="faq"><summary>...</summary><p>...</p></details>` blocks directly from `templates/web/index.html`, substitutes any `{{...}}` placeholders inside them, strips HTML tags, and serializes the JSON-LD `mainEntity` array. FAQ text only needs to be edited once in `templates/web/index.html`.
 - **Service Map Generation (`service-map.json`):**
-  - Automatically writes `service-map.json` mapping every active base domain to `{"service": "...", "category": "..."}` for `stats_collector.py`.
+  - Automatically writes `build/service-map.json` mapping every active base domain to `{"service": "...", "category": "..."}` for `src/stats_collector.py`.
 - **Raster Image Generation (`favicon.ico`, `apple-touch-icon.png`, `og-image.png`):**
-  - After rendering `favicon.svg` and `og-image.svg`, `generate.py` automatically rasterizes:
+  - After rendering `favicon.svg` and `og-image.svg`, `src/generate.py` automatically rasterizes:
     - `favicon.ico`: Multi-resolution binary ICO container (`16×16`, `32×32`, `48×48` PNG frames packed via `struct.pack`).
     - `apple-touch-icon.png`: `180×180` full-bleed PNG (strips outer border stroke and sets `rx="0"` so iOS applies its own squircle mask cleanly).
     - `og-image.png`: `1200×630` Open Graph social preview card.
@@ -219,14 +228,15 @@ Requirement: Python 3 + `PyYAML` (`pip3 install pyyaml` or `apt install python3-
 
 ```bash
 # 1. Validate services.yaml and all templates without writing files
-python3 generate.py services.yaml 153.80.200.170 --check
+python3 src/generate.py services.yaml 153.80.200.170 --check
 
-# 2. Full build: generate all configs, HTML pages, service-map.json, and PNG/ICO assets
-python3 generate.py services.yaml 153.80.200.170
+# 2. Full build: generate all configs, HTML pages, service-map.json, and PNG/ICO assets into build/
+python3 src/generate.py services.yaml 153.80.200.170
 
 # Optional flags:
 #   -t / --templates <dir>   Custom templates directory (default: ./templates)
-#   -o / --out-dir <dir>     Output directory (default: directory of services.yaml)
+#   -o / --out-dir <dir>     Output directory (default: ./build)
+#   -a / --assets-dir <dir>  Static assets directory (default: ./assets)
 #   --name <str>             Override meta.name
 #   --origin <url>           Override meta.origin
 #   --domain <host>          Override DNS/DoT hostname
@@ -346,37 +356,37 @@ Demand-validation lead capture and SMTP notification microservice listening on `
 
 When modifying this repository, always follow these rules:
 
-### Rule 1: Never Edit Generated Root Files Directly
-The following files in the repository root are **build outputs** of `generate.py` and will be overwritten on the next run:
-- `dnsmasq-geoblock.conf`
-- `nginx.conf`
-- `nginx-sni-allow.map`
-- `nginx-host-allow.map`
-- `nginx-workers-stream.conf`, `nginx-workers-http.conf`
-- `service-map.json`, `cluster-nodes.json`
-- `index.html`, `pro.html`, `dedicated.html`, `stats.html`, `terms.html`, `privacy.html`
-- `dns.mobileconfig`
-- `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, `og-image.svg`, `og-image.png`
-- `robots.txt`, `sitemap.xml`
+### Rule 1: Never Edit Generated Build Files Directly
+The following files in `build/` are **build outputs** of `src/generate.py` and will be overwritten on the next run:
+- `build/dnsmasq-geoblock.conf`
+- `build/nginx.conf`
+- `build/nginx-sni-allow.map`
+- `build/nginx-host-allow.map`
+- `build/nginx-workers-stream.conf`, `build/nginx-workers-http.conf`
+- `build/service-map.json`, `build/cluster-nodes.json`
+- `build/index.html`, `build/pro.html`, `build/dedicated.html`, `build/stats.html`, `build/terms.html`, `build/privacy.html`
+- `build/dns.mobileconfig`
+- `build/favicon.svg`, `build/favicon.ico`, `build/apple-touch-icon.png`, `build/og-image.svg`, `build/og-image.png`
+- `build/robots.txt`, `build/sitemap.xml`
 
-**Always edit the corresponding source in `services.yaml` or `templates/<filename>`, then run:**
+**Always edit the corresponding source in `services.yaml` or `templates/<subdir>/<filename>`, then run:**
 ```bash
-python3 generate.py services.yaml 153.80.200.170 --check
-python3 generate.py services.yaml 153.80.200.170
+python3 src/generate.py services.yaml 153.80.200.170 --check
+python3 src/generate.py services.yaml 153.80.200.170
 ```
 
 ### Rule 2: Adding or Updating Domains in `services.yaml`
 1. **Check parent coverage first:** Before adding `sub.example.com`, check if `example.com` is already in `services.yaml`. If `example.com` is present, all its subdomains are already proxied by `dnsmasq` and `nginx`. Only add specific subdomains when proxying the entire parent domain would break unrelated services (e.g., specific `*.clients6.google.com` or `*.googleapis.com` hosts for Google Gemini/AI Studio while `clients6.google.com` itself stays in `disabled`).
 2. **Never proxy shared CDN or consumer root domains carelessly:** Avoid adding broad shared domains like `google.com`, `gstatic.com`, `googleapis.com`, or `cloudflare.com` as apex entries.
 3. **Quote numeric or special domains:** In YAML, any domain resembling numbers must be quoted as a string.
-4. **Always run `--check` and regenerate:** Run `python3 generate.py services.yaml 153.80.200.170` so all config files, domain counts on the landing page, `service-map.json`, and SEO metadata stay synchronized.
+4. **Always run `--check` and regenerate:** Run `python3 src/generate.py services.yaml 153.80.200.170` so all config files, domain counts on the landing page, `service-map.json`, and SEO metadata stay synchronized.
 
-### Rule 3: Editing Templates (`templates/*`)
-- Use `{{placeholder_name}}` for substitutions. If you introduce a new placeholder in `templates/`, add its builder logic to `build_values()` in `generate.py`.
-- In `templates/index.html`, FAQ items must keep the `<details class="faq"><summary>...</summary><p>...</p></details>` structure so `faq_entities()` can extract them into the Schema.org `FAQPage` JSON-LD block.
+### Rule 3: Editing Templates (`templates/**/*`)
+- Use `{{placeholder_name}}` for substitutions. If you introduce a new placeholder in `templates/`, add its builder logic to `build_values()` in `src/generate.py`.
+- In `templates/web/index.html`, FAQ items must keep the `<details class="faq"><summary>...</summary><p>...</p></details>` structure so `faq_entities()` can extract them into the Schema.org `FAQPage` JSON-LD block.
 - Keep `templates/` self-contained (inline CSS and vanilla JS without external bundler steps).
 
-### Rule 4: Modifying Runtime Scripts (`doh_proxy.py`, `stats_collector.py`, `update_hosts.py`)
-- **Zero third-party dependencies:** Server daemons (`doh_proxy.py`, `stats_collector.py`) and `update_hosts.py` (when invoked via `sudo`) must rely strictly on the Python 3 standard library.
-- **Log format compatibility:** `SNI_LOG_RE` and `HTTP_LOG_RE` in `stats_collector.py` are tightly coupled to `log_format sni` and `log_format hostproxy` in `templates/nginx.conf`. If you change either log format in `templates/nginx.conf`, update the corresponding regex in `stats_collector.py`.
+### Rule 4: Modifying Runtime Scripts (`src/doh_proxy.py`, `src/stats_collector.py`, `src/update_hosts.py`)
+- **Zero third-party dependencies:** Server daemons (`src/doh_proxy.py`, `src/stats_collector.py`, `src/healthcheck.py`) and `src/update_hosts.py` (when invoked via `sudo`) must rely strictly on the Python 3 standard library.
+- **Log format compatibility:** `SNI_LOG_RE` and `HTTP_LOG_RE` in `src/stats_collector.py` are tightly coupled to `log_format sni` and `log_format hostproxy` in `templates/nginx/nginx.conf`. If you change either log format in `templates/nginx/nginx.conf`, update the corresponding regex in `src/stats_collector.py`.
 - **Atomic file writes:** Any file read directly by `nginx` (such as `/var/www/geoblock/stats.json`) must be written to a temporary file in the same directory and atomically renamed (`Path.replace()`).

@@ -66,9 +66,9 @@
 
 ---
 
-## Работа через `/etc/hosts` (`update_hosts.py`)
+## Работа через `/etc/hosts` (`src/update_hosts.py`)
 
-В репозитории доступен скрипт [`update_hosts.py`](./update_hosts.py), который автоматически прописывает домены Перевала напрямую в системный файл `/etc/hosts` (на macOS и Linux) без изменения настроек DNS.
+В репозитории доступен скрипт [`src/update_hosts.py`](./src/update_hosts.py), который автоматически прописывает домены Перевала напрямую в системный файл `/etc/hosts` (на macOS и Linux) без изменения настроек DNS.
 
 ### Когда это полезно (Use Cases)
 
@@ -87,30 +87,30 @@
 
 **1. Установить или обновить записи Перевала в `/etc/hosts`:**
 ```bash
-sudo python3 update_hosts.py
+sudo python3 src/update_hosts.py
 ```
 Повторный запуск команды безопасно обновит существующий блок между маркерами `# >>> PEREVAL START` и `# <<< PEREVAL END` без дублирования строк.
 
 **2. Посмотреть сгенерированный блок без изменения `/etc/hosts` (режим `--dry-run`):**
 ```bash
-python3 update_hosts.py --dry-run
+python3 src/update_hosts.py --dry-run
 ```
 
 **3. Удалить все записи Перевала из `/etc/hosts`:**
 ```bash
-sudo python3 update_hosts.py --remove
+sudo python3 src/update_hosts.py --remove
 ```
 
 **4. Дополнительные параметры (кастомный IP, путь к списку сервисов или файлу hosts):**
 ```bash
 # Указать другой IP-адрес сервера Перевала
-sudo python3 update_hosts.py --ip 153.80.200.170
+sudo python3 src/update_hosts.py --ip 153.80.200.170
 
 # Использовать альтернативный файл services.yaml
-sudo python3 update_hosts.py --services /path/to/services.yaml
+sudo python3 src/update_hosts.py --services /path/to/services.yaml
 
 # Записать результат в другой файл вместо /etc/hosts
-python3 update_hosts.py --hosts-file ./hosts.preview
+python3 src/update_hosts.py --hosts-file ./hosts.preview
 ```
 
 ### Параметры командной строки

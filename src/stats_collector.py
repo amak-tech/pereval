@@ -1069,16 +1069,22 @@ def resolve_default_service_map() -> Path:
     prod = Path("/etc/nginx/geoblock/service-map.json")
     if prod.is_file():
         return prod
-    local = Path(__file__).resolve().parent / "service-map.json"
-    return local
+    script_dir = Path(__file__).resolve().parent
+    build_path = script_dir.parent / "build" / "service-map.json"
+    if build_path.is_file():
+        return build_path
+    return script_dir / "service-map.json"
 
 
 def resolve_default_cluster_config() -> Path:
     prod = Path("/etc/nginx/geoblock/cluster-nodes.json")
     if prod.is_file():
         return prod
-    local = Path(__file__).resolve().parent / "cluster-nodes.json"
-    return local
+    script_dir = Path(__file__).resolve().parent
+    build_path = script_dir.parent / "build" / "cluster-nodes.json"
+    if build_path.is_file():
+        return build_path
+    return script_dir / "cluster-nodes.json"
 
 
 def main(argv=None) -> int:

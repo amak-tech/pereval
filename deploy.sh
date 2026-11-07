@@ -23,17 +23,36 @@
 
 set -euo pipefail
 
-DNSMASQ_CONF="dnsmasq-geoblock.conf"
-NGINX_CONF="nginx.conf"
-NGINX_MAPS=("nginx-sni-allow.map" "nginx-host-allow.map")
-NGINX_WORKER_CONFS=("nginx-workers-stream.conf" "nginx-workers-http.conf")
-SERVICE_MAP="service-map.json"
-CLUSTER_NODES="cluster-nodes.json"
-STATS_COLLECTOR="stats_collector.py"
-DOH_PROXY="doh_proxy.py"
-HEALTHCHECK="healthcheck.py"
-LEADS_SERVICE="leads_service.py"
-WEB_FILES=("index.html" "pro.html" "dedicated.html" "stats.html" "terms.html" "privacy.html" "dns.mobileconfig" "favicon.svg" "favicon.ico" "apple-touch-icon.png" "og-image.svg" "og-image.png" "robots.txt" "sitemap.xml")
+BUILD_DIR="${BUILD_DIR:-build}"
+SRC_DIR="${SRC_DIR:-src}"
+ASSETS_DIR="${ASSETS_DIR:-assets}"
+
+DNSMASQ_CONF="$BUILD_DIR/dnsmasq-geoblock.conf"
+NGINX_CONF="$BUILD_DIR/nginx.conf"
+NGINX_MAPS=("$BUILD_DIR/nginx-sni-allow.map" "$BUILD_DIR/nginx-host-allow.map")
+NGINX_WORKER_CONFS=("$BUILD_DIR/nginx-workers-stream.conf" "$BUILD_DIR/nginx-workers-http.conf")
+SERVICE_MAP="$BUILD_DIR/service-map.json"
+CLUSTER_NODES="$BUILD_DIR/cluster-nodes.json"
+STATS_COLLECTOR="$SRC_DIR/stats_collector.py"
+DOH_PROXY="$SRC_DIR/doh_proxy.py"
+HEALTHCHECK="$SRC_DIR/healthcheck.py"
+LEADS_SERVICE="$SRC_DIR/leads_service.py"
+WEB_FILES=(
+	"$BUILD_DIR/index.html"
+	"$BUILD_DIR/pro.html"
+	"$BUILD_DIR/dedicated.html"
+	"$BUILD_DIR/stats.html"
+	"$BUILD_DIR/terms.html"
+	"$BUILD_DIR/privacy.html"
+	"$BUILD_DIR/dns.mobileconfig"
+	"$ASSETS_DIR/favicon.svg"
+	"$ASSETS_DIR/favicon.ico"
+	"$ASSETS_DIR/apple-touch-icon.png"
+	"$BUILD_DIR/og-image.svg"
+	"$BUILD_DIR/og-image.png"
+	"$BUILD_DIR/robots.txt"
+	"$BUILD_DIR/sitemap.xml"
+)
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
@@ -198,7 +217,7 @@ for f in "${LOCAL_FILES[@]}"; do
 done
 if ((${#missing[@]})); then
 	die "не хватает файлов: ${missing[*]}
-    соберите их: python3 generate.py $SOURCE_YAML $SERVER_IP"
+    соберите их: python3 $SRC_DIR/generate.py $SOURCE_YAML $SERVER_IP"
 fi
 
 # несведённые подстановки означают, что генератор падал на середине
@@ -214,11 +233,11 @@ n_dnsmasq=$(awk -F/ '/^address=\//{print $2}' "$DNSMASQ_CONF" | sort -u | wc -l 
 for m in "${NGINX_MAPS[@]}"; do
 	n_map=$(grep -c '^\.' "$m" || true)
 	((n_dnsmasq == n_map)) || die "в $DNSMASQ_CONF $n_dnsmasq уникальных доменов, а в $m — $n_map
-    пересоберите оба файла одним запуском generate.py"
+    пересоберите оба файла одним запуском $SRC_DIR/generate.py"
 done
 info "$n_dnsmasq доменов, списки dnsmasq и nginx совпадают"
 
-DOMAIN=$(sed -n '/<key>ServerName<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;q;}' dns.mobileconfig)
+DOMAIN=$(sed -n '/<key>ServerName<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;q;}' "$BUILD_DIR/dns.mobileconfig")
 [[ -n $DOMAIN ]] || die "не удалось определить ServerName из dns.mobileconfig"
 info "домен сервера: $DOMAIN"
 
@@ -269,16 +288,16 @@ if [[ $ROLE != "worker" ]]; then
 	if (( ! ip_known )); then
 		baked="${CLUSTER_PRIMARY:-$(grep -m1 '^address=' "$DNSMASQ_CONF" | sed 's|.*/||')}"
 		die "$DNSMASQ_CONF и $CLUSTER_NODES собраны для адреса ${baked:-неизвестного}, а разворачивается на $SERVER_IP
-    пересоберите: python3 generate.py $SOURCE_YAML $SERVER_IP"
+    пересоберите: python3 $SRC_DIR/generate.py $SOURCE_YAML $SERVER_IP"
 	fi
 fi
 
 if [[ -f $SOURCE_YAML ]]; then
 	for f in "${LOCAL_FILES[@]}"; do
-		[[ $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" || $f == "$LEADS_SERVICE" ]] && continue
+		[[ $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" || $f == "$LEADS_SERVICE" || $f == "$ASSETS_DIR/"* ]] && continue
 		if [[ $SOURCE_YAML -nt $f ]]; then
 			warn "$SOURCE_YAML новее, чем $f — возможно, забыли пересобрать"
-			((FORCE)) || die "перезапустите generate.py или добавьте --force"
+			((FORCE)) || die "перезапустите $SRC_DIR/generate.py или добавьте --force"
 			break
 		fi
 	done
@@ -986,28 +1005,28 @@ DRYPRE
 		else
 			info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates"
 		fi
-		printf '    %-28s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
-		printf '    %-28s -> %s\n' "$NGINX_CONF" "/etc/nginx/nginx.conf"
+		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
+		printf '    %-34s -> %s\n' "$NGINX_CONF" "/etc/nginx/nginx.conf"
 		for m in "${NGINX_MAPS[@]}" "${NGINX_WORKER_CONFS[@]}"; do
-			printf '    %-28s -> %s\n' "$m" "/etc/nginx/geoblock/$m"
+			printf '    %-34s -> %s\n' "$m" "/etc/nginx/geoblock/${m##*/}"
 		done
-		printf '    %-28s -> %s\n' "$SERVICE_MAP" "/etc/nginx/geoblock/$SERVICE_MAP"
-		printf '    %-28s -> %s\n' "$CLUSTER_NODES" "/etc/nginx/geoblock/$CLUSTER_NODES"
-		printf '    %-28s -> %s\n' "$STATS_COLLECTOR" "/usr/local/bin/pereval-stats-collector.py"
-		printf '    %-28s -> %s\n' "pereval-stats.service" "/etc/systemd/system/pereval-stats.service"
-		printf '    %-28s -> %s\n' "$DOH_PROXY" "/usr/local/bin/pereval-doh-proxy.py"
-		printf '    %-28s -> %s\n' "pereval-doh.service" "/etc/systemd/system/pereval-doh.service"
-		printf '    %-28s -> %s\n' "$HEALTHCHECK" "/usr/local/bin/pereval-healthcheck.py"
-		printf '    %-28s -> %s\n' "$LEADS_SERVICE" "/usr/local/bin/pereval-leads.py"
+		printf '    %-34s -> %s\n' "$SERVICE_MAP" "/etc/nginx/geoblock/${SERVICE_MAP##*/}"
+		printf '    %-34s -> %s\n' "$CLUSTER_NODES" "/etc/nginx/geoblock/${CLUSTER_NODES##*/}"
+		printf '    %-34s -> %s\n' "$STATS_COLLECTOR" "/usr/local/bin/pereval-stats-collector.py"
+		printf '    %-34s -> %s\n' "pereval-stats.service" "/etc/systemd/system/pereval-stats.service"
+		printf '    %-34s -> %s\n' "$DOH_PROXY" "/usr/local/bin/pereval-doh-proxy.py"
+		printf '    %-34s -> %s\n' "pereval-doh.service" "/etc/systemd/system/pereval-doh.service"
+		printf '    %-34s -> %s\n' "$HEALTHCHECK" "/usr/local/bin/pereval-healthcheck.py"
+		printf '    %-34s -> %s\n' "$LEADS_SERVICE" "/usr/local/bin/pereval-leads.py"
 		if [[ $node_role == "primary" ]]; then
-			printf '    %-28s -> %s\n' "pereval-healthcheck.service" "/etc/systemd/system/pereval-healthcheck.service"
-			printf '    %-28s -> %s\n' "pereval-leads.service" "/etc/systemd/system/pereval-leads.service"
-			printf '    %-28s -> %s\n' "leads.env (SMTP)" "/etc/pereval/leads.env"
+			printf '    %-34s -> %s\n' "pereval-healthcheck.service" "/etc/systemd/system/pereval-healthcheck.service"
+			printf '    %-34s -> %s\n' "pereval-leads.service" "/etc/systemd/system/pereval-leads.service"
+			printf '    %-34s -> %s\n' "leads.env (SMTP)" "/etc/pereval/leads.env"
 		fi
 		for w in "${WEB_FILES[@]}"; do
-			printf '    %-28s -> %s\n' "$w" "/var/www/geoblock/$w"
+			printf '    %-34s -> %s\n' "$w" "/var/www/geoblock/${w##*/}"
 		done
-		printf '    %-28s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
+		printf '    %-34s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
 		if [[ $node_role == "primary" ]]; then
 			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, restart pereval-healthcheck, certbot (%s)\n' "$DOMAIN"
 		else

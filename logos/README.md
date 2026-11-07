@@ -15,11 +15,11 @@
 | **Вертикальная карточка (Vertical)** | `4:5` (`1080×1350`) | `logo-vertical-4x5-dark.svg` / `.png` | `logo-vertical-4x5-light.svg` / `.png` | Вертикальные посты в ленте Telegram и соцсетей с кратким описанием подключения |
 | **Компактный бейдж (Pill Badge)** | `4:1` (`800×200`) | `logo-badge-dark.svg` / `.png` | `logo-badge-light.svg` / `.png` | Кнопки, плашки для партнёрских сайтов, подписи и футеры |
 
-## Иконки для веб-сайта (в корне проекта и `templates/`)
+## Иконки для веб-сайта (в `assets/`, `templates/assets/` и `build/`)
 
-На основе основного знака автоматически собираются веб-иконки при запуске `python3 generate.py services.yaml 153.80.200.170`:
+На основе основного знака автоматически собираются веб-иконки при запуске `python3 src/generate.py services.yaml 153.80.200.170`:
 
-- `favicon.svg` (из `templates/favicon.svg`) — векторная иконка сайта и логотип в шапке страниц (`index.html`, `stats.html`, `terms.html`, `privacy.html`).
-- `favicon.ico` — мультиразмерная иконка (`16×16`, `32×32`, `48×48`) для совместимости со всеми браузерами.
-- `apple-touch-icon.png` (`180×180`) — иконка для домашнего экрана iOS / iPadOS и закладок Safari.
-- `og-image.svg` / `og-image.png` (`1200×630`) — карточка предпросмотра ссылок Open Graph / X / Telegram с логотипом проекта.
+- `assets/favicon.svg` (и `templates/assets/favicon.svg`) — векторная иконка сайта и логотип в шапке страниц (`index.html`, `stats.html`, `terms.html`, `privacy.html`).
+- `assets/favicon.ico` — мультиразмерная иконка (`16×16`, `32×32`, `48×48`) для совместимости со всеми браузерами.
+- `assets/apple-touch-icon.png` (`180×180`) — иконка для домашнего экрана iOS / iPadOS и закладок Safari.
+- `build/og-image.svg` / `build/og-image.png` (`1200×630`, из `templates/assets/og-image.svg`) — карточка предпросмотра ссылок Open Graph / X / Telegram с логотипом проекта.

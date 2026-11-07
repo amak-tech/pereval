@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Собирает dnsmasq-geoblock.conf и index.html из YAML с доменами и шаблонов.
+"""Собирает конфигурационные файлы и веб-страницы в build/ из YAML и шаблонов.
 
-    python3 generate.py services.yaml 153.80.200.170
+    python3 src/generate.py services.yaml 153.80.200.170
 
 Ни строчки вёрстки, стилей и текста страницы здесь нет — всё лежит в templates/.
 Скрипт читает данные, собирает из них фрагменты и подставляет в шаблоны на месте
@@ -71,27 +71,27 @@ FAQ_RE = re.compile(r'<details class="faq">\s*<summary>(.*?)</summary>\s*'
 PLACEHOLDER_RE = re.compile(r'\{\{\s*(\w+)\s*\}\}')
 
 TEMPLATES = OrderedDict([
-    ("dnsmasq.conf", "dnsmasq-geoblock.conf"),
-    ("nginx.conf", "nginx.conf"),
-    ("nginx-sni-allow.map", "nginx-sni-allow.map"),
-    ("nginx-host-allow.map", "nginx-host-allow.map"),
-    ("nginx-workers-stream.conf", "nginx-workers-stream.conf"),
-    ("nginx-workers-http.conf", "nginx-workers-http.conf"),
-    ("index.html", "index.html"),
-    ("pro.html", "pro.html"),
-    ("dedicated.html", "dedicated.html"),
-    ("stats.html", "stats.html"),
-    ("terms.html", "terms.html"),
-    ("privacy.html", "privacy.html"),
-    ("dns.mobileconfig", "dns.mobileconfig"),
-    ("favicon.svg", "favicon.svg"),
-    ("og-image.svg", "og-image.svg"),
-    ("robots.txt", "robots.txt"),
-    ("sitemap.xml", "sitemap.xml"),
+    ("dnsmasq/dnsmasq.conf", "dnsmasq-geoblock.conf"),
+    ("nginx/nginx.conf", "nginx.conf"),
+    ("nginx/nginx-sni-allow.map", "nginx-sni-allow.map"),
+    ("nginx/nginx-host-allow.map", "nginx-host-allow.map"),
+    ("nginx/nginx-workers-stream.conf", "nginx-workers-stream.conf"),
+    ("nginx/nginx-workers-http.conf", "nginx-workers-http.conf"),
+    ("web/index.html", "index.html"),
+    ("web/pro.html", "pro.html"),
+    ("web/dedicated.html", "dedicated.html"),
+    ("web/stats.html", "stats.html"),
+    ("web/terms.html", "terms.html"),
+    ("web/privacy.html", "privacy.html"),
+    ("web/dns.mobileconfig", "dns.mobileconfig"),
+    ("assets/favicon.svg", "favicon.svg"),
+    ("assets/og-image.svg", "og-image.svg"),
+    ("web/robots.txt", "robots.txt"),
+    ("web/sitemap.xml", "sitemap.xml"),
 ])
 SEO_TEMPLATES = OrderedDict([
-    ("favicon.svg", "favicon.svg"),
-    ("og-image.svg", "og-image.svg"),
+    ("assets/favicon.svg", "favicon.svg"),
+    ("assets/og-image.svg", "og-image.svg"),
 ])
 
 
@@ -725,9 +725,23 @@ def extract_domain(doc):
     return raw
 
 
+def resolve_template_path(templates_dir, tpl_name):
+    """Находит шаблон по относительному пути в templates/ (с фолбэком на плоский каталог)."""
+    candidate = templates_dir / tpl_name
+    if candidate.is_file():
+        return candidate
+    flat = templates_dir / Path(tpl_name).name
+    if flat.is_file():
+        return flat
+    matches = list(templates_dir.rglob(Path(tpl_name).name))
+    if matches:
+        return matches[0]
+    return candidate
+
+
 def build_values(doc, ip, source, templates_dir):
     """Все подстановки: скаляры из данных плюс собранные фрагменты."""
-    idx = templates_dir / "index.html"
+    idx = resolve_template_path(templates_dir, "web/index.html")
     domain = extract_domain(doc)
     profile_identifier = ".".join(reversed(domain.split("."))) + ".dns"
     profile_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{domain}:profile")).upper()
@@ -774,7 +788,7 @@ def build_values(doc, ip, source, templates_dir):
 def render(templates_dir, tpl_name, values, doc, ip):
     """Подставляет значения в шаблон. disabled и passthrough_note зависят
     от формата: в HTML это разметка, в конфиге — комментарии."""
-    path = templates_dir / tpl_name
+    path = resolve_template_path(templates_dir, tpl_name)
     if not path.is_file():
         raise ParseError(f"шаблон не найден: {path}")
     raw_text = path.read_text(encoding="utf-8")
@@ -892,16 +906,18 @@ def main(argv=None):
         description="Собирает dnsmasq-geoblock.conf и index.html из YAML и шаблонов.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Примеры:\n"
-               "  python3 generate.py services.yaml 153.80.200.170\n"
-               "  python3 generate.py services.yaml 153.80.200.170 --check\n"
-               "  python3 generate.py services.yaml 153.80.200.170 --seo-extras\n")
+               "  python3 src/generate.py services.yaml 153.80.200.170\n"
+               "  python3 src/generate.py services.yaml 153.80.200.170 --check\n"
+               "  python3 src/generate.py services.yaml 153.80.200.170 --seo-extras\n")
     p.add_argument("services", help="путь к YAML с категориями, сервисами и доменами")
     p.add_argument("ip", nargs="?", default=None,
                    help="IPv4-адрес основного прокси-сервера (по умолчанию берётся из nodes.primary)")
     p.add_argument("-t", "--templates", default=None,
-                   help="каталог с шаблонами (по умолчанию templates/ рядом со скриптом)")
+                   help="каталог с шаблонами (по умолчанию templates/ в корне проекта)")
     p.add_argument("-o", "--out-dir", default=None,
-                   help="каталог для результатов (по умолчанию — рядом с YAML)")
+                   help="каталог для сгенерированных файлов (по умолчанию build/ в корне проекта)")
+    p.add_argument("-a", "--assets-dir", default=None,
+                   help="каталог со статическими иконками (по умолчанию assets/ в корне проекта)")
     p.add_argument("--name", help="название сервиса (переопределяет meta.name)")
     p.add_argument("--origin", help="адрес сайта (переопределяет meta.origin)")
     p.add_argument("--domain", help="домен DNS-сервера (переопределяет хост из meta.origin)")
@@ -921,9 +937,12 @@ def main(argv=None):
     if not src.is_file():
         p.error(f"файл не найден: {src}")
 
-    tpl_dir = Path(a.templates) if a.templates else Path(__file__).resolve().parent / "templates"
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent if (script_dir.parent / "templates").is_dir() else script_dir
+    tpl_dir = Path(a.templates) if a.templates else project_root / "templates"
     if not tpl_dir.is_dir():
         p.error(f"каталог шаблонов не найден: {tpl_dir}")
+    assets_dir = Path(a.assets_dir) if a.assets_dir else project_root / "assets"
 
     try:
         doc = parse(src)
@@ -985,7 +1004,7 @@ def main(argv=None):
         print("проверка пройдена")
         return 0
 
-    out = Path(a.out_dir) if a.out_dir else src.parent
+    out = Path(a.out_dir) if a.out_dir else project_root / "build"
     out.mkdir(parents=True, exist_ok=True)
     for fname, body in rendered:
         (out / fname).write_text(body, encoding="utf-8")
@@ -995,9 +1014,15 @@ def main(argv=None):
         ico_out = out / "favicon.ico"
         if render_favicon_ico(fav_svg, ico_out):
             print(f"  записан {ico_out} ({ico_out.stat().st_size:,} байт)".replace(",", " "))
+        elif (assets_dir / "favicon.ico").is_file() and (assets_dir / "favicon.ico").resolve() != ico_out.resolve():
+            shutil.copy2(assets_dir / "favicon.ico", ico_out)
+            print(f"  скопирован {ico_out} из {assets_dir / 'favicon.ico'}")
         touch_out = out / "apple-touch-icon.png"
         if render_apple_touch_icon(fav_svg, touch_out):
             print(f"  записан {touch_out} ({touch_out.stat().st_size:,} байт)".replace(",", " "))
+        elif (assets_dir / "apple-touch-icon.png").is_file() and (assets_dir / "apple-touch-icon.png").resolve() != touch_out.resolve():
+            shutil.copy2(assets_dir / "apple-touch-icon.png", touch_out)
+            print(f"  скопирован {touch_out} из {assets_dir / 'apple-touch-icon.png'}")
     svg_out = out / "og-image.svg"
     png_out = out / "og-image.png"
     if svg_out.is_file():

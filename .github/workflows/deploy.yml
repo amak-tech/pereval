@@ -32,7 +32,7 @@ jobs:
       - name: Generate configuration files
         env:
           SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
-        run: python3 generate.py services.yaml "$SUTTON_IP_ADDRESS"
+        run: python3 src/generate.py services.yaml "$SUTTON_IP_ADDRESS"
 
       - name: Deploy to server
         env:
