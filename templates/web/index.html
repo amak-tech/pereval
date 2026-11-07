@@ -11,6 +11,7 @@
     domain          домен DNS-сервера (для DNS-over-TLS и профиля iOS)
     date            дата обновления из meta.date
     total           сколько всего активных доменов
+    service_count   сколько всего сервисов
     category_count  сколько категорий
 
   Блоки, собранные из YAML:
@@ -40,7 +41,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DNS-прокси для доступа к ChatGPT, Claude и Gemini — {{name}}</title>
-<meta name="description" content="DNS-прокси для работы с ChatGPT, Claude, Gemini, Cursor, JetBrains и всего {{total}} доменами зарубежных ИИ и инструментов разработки. Один адрес DNS в настройках сети, без VPN-клиента.">
+<meta name="description" content="DNS-прокси для работы с ChatGPT, Claude, Gemini, Cursor, JetBrains и всего {{service_count}} сервисами зарубежных ИИ и инструментов разработки. Один адрес DNS в настройках сети, без VPN-клиента.">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
@@ -55,7 +56,7 @@
 <meta property="og:locale" content="ru_RU">
 <meta property="og:url" content="{{origin}}/">
 <meta property="og:title" content="DNS-прокси для доступа к ChatGPT, Claude и Gemini — {{name}}">
-<meta property="og:description" content="DNS-сервер в Казахстане для сетевой связности со {{total}} доменами зарубежных ИИ и инструментов разработки: ChatGPT, Claude, Gemini, Cursor, JetBrains. Без VPN-клиента — один адрес в настройках сети.">
+<meta property="og:description" content="DNS-сервер для сетевой связности с {{service_count}} сервисами зарубежных ИИ и инструментов разработки: ChatGPT, Claude, Gemini, Cursor, JetBrains. Без VPN-клиента — один адрес в настройках сети.">
 <meta property="article:modified_time" content="{{date}}">
 <meta property="og:image" content="{{origin}}/og-image.png">
 <meta property="og:image:type" content="image/png">
@@ -64,21 +65,21 @@
 <meta property="og:image:alt" content="{{name}} — DNS-прокси для зарубежных ИИ и инструментов разработки">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="DNS-прокси для доступа к ChatGPT, Claude и Gemini — {{name}}">
-<meta name="twitter:description" content="DNS-сервер в Казахстане для сетевой связности со {{total}} доменами зарубежных ИИ и инструментов разработки: ChatGPT, Claude, Gemini, Cursor, JetBrains. Без VPN-клиента — один адрес в настройках сети.">
+<meta name="twitter:description" content="DNS-сервер для сетевой связности с {{service_count}} сервисами зарубежных ИИ и инструментов разработки: ChatGPT, Claude, Gemini, Cursor, JetBrains. Без VPN-клиента — один адрес в настройках сети.">
 <meta name="twitter:image" content="{{origin}}/og-image.png">
 <meta name="twitter:image:alt" content="{{name}} — DNS-прокси для зарубежных ИИ и инструментов разработки">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
 {"@type":"WebSite","@id":"{{origin}}/#website","url":"{{origin}}/","name":"{{name}}",
- "description":"DNS-сервер в Казахстане для маршрутизации соединений к {{total}} доменам зарубежных ИИ и инструментов разработки.",
+ "description":"DNS-сервер для маршрутизации соединений к {{service_count}} сервисам зарубежных ИИ и инструментов разработки.",
  "inLanguage":"ru-RU"},
 {"@type":"WebPage","@id":"{{origin}}/#webpage","url":"{{origin}}/",
  "name":"DNS-прокси для доступа к ChatGPT, Claude и Gemini — {{name}}",
- "description":"DNS-прокси для работы с ChatGPT, Claude, Gemini, Cursor, JetBrains и всего {{total}} доменами зарубежных ИИ и инструментов разработки.",
+ "description":"DNS-прокси для работы с ChatGPT, Claude, Gemini, Cursor, JetBrains и всего {{service_count}} сервисами зарубежных ИИ и инструментов разработки.",
  "inLanguage":"ru-RU","isPartOf":{"@id":"{{origin}}/#website"},"dateModified":"{{date}}"},
 {"@type":"Service","@id":"{{origin}}/#service","name":"{{name}}",
  "serviceType":"DNS-прокси для доступа к зарубежным ИИ и инструментам разработки с региональными ограничениями",
- "description":"Восстанавливает доступ к {{total}} доменам зарубежных ИИ и инструментов разработки, ограничивающих российские и белорусские IP-адреса по геолокации.",
+ "description":"Восстанавливает доступ к {{service_count}} сервисам зарубежных ИИ и инструментов разработки, ограничивающих российские и белорусские IP-адреса по геолокации.",
  "areaServed":[{"@type":"Country","name":"Россия"},{"@type":"Country","name":"Беларусь"}],
  "provider":{"@type":"Organization","name":"{{name}}","url":"{{origin}}/","logo":"{{origin}}/favicon.svg"}},
 {"@type":"FAQPage","@id":"{{origin}}/#faq","mainEntity":{{faq_entities}}},
@@ -165,7 +166,8 @@ padding:20px 22px;margin:14px 0;scroll-margin-top:20px}
 .cat>h3{margin-top:0}
 .cat .count{font-size:12px;color:var(--mute);font-weight:400;background:var(--code);
 border-radius:20px;padding:2px 9px;flex-shrink:0}
-.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.svc{font-size:14px;font-weight:500;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:6px 12px;color:var(--ink)}
 code.d{font-size:12.5px;background:var(--code);max-width:100%;overflow-wrap:anywhere;word-break:break-all}
 code.d.off{opacity:.55;text-decoration:line-through}
 .sub[hidden],.cat[hidden]{display:none}
@@ -205,6 +207,19 @@ letter-spacing:.1em;color:var(--accent);margin:0 0 8px}
 .creator-term-bar{padding:8px 14px;border-bottom:1px solid var(--line);
 font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--mute)}
 .creator-term pre{margin:0;border:0;border-radius:0;padding:14px 16px;font-size:12.5px;line-height:1.55}
+.plans-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));margin:18px 0 0}
+.plan-card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between}
+.plan-card.featured{border:2px solid var(--accent)}
+.plan-eyebrow{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0 0 6px}
+.plan-card h3{margin:0 0 8px;font-size:19px;display:block}
+.plan-card p{margin:0 0 12px;font-size:14.5px;color:var(--mute)}
+.plan-list{margin:0 0 16px;padding-left:18px;font-size:14px;color:var(--ink)}
+.plan-list li{margin:6px 0}
+.plan-card .btn{width:100%;margin:4px 0 0}
+.btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 14.5px/1.25 inherit;
+text-decoration:none;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:9px;
+padding:11px 16px;margin:4px 0 0;width:100%;text-align:center}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
 @media (max-width:600px){
 .wrap{padding:0 16px 56px}
 header .wrap{padding:28px 16px 24px}
@@ -227,13 +242,13 @@ td:last-child{color:var(--mute)}
 
 <header>
   <div class="wrap">
-    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span>DNS-прокси · Казахстан · <a href="/stats.html">Статистика</a> · <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a> · от создателей <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=header" target="_blank" rel="noopener" data-pb-placement="header">Port Buddy</a></span></p>
+    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span>DNS-прокси · <a href="/pro.html">{{name}} Pro</a> · <a href="/dedicated.html">Dedicated</a> · <a href="/stats.html">Статистика</a> · <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a></span></p>
     <h1>{{name}} — DNS-прокси для зарубежных ИИ и инструментов разработки</h1>
     <p class="lede">Если ChatGPT отвечает «not available in your country», Claude
     не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не
-    в блокировках Роскомнадзора. {{name}} — частный DNS-сервер в Казахстане, который
+    в блокировках Роскомнадзора. {{name}} — частный DNS-сервер, который
     восстанавливает доступ к зарубежным ИИ и инструментам разработки, ограничивающим
-    российские и белорусские IP-адреса по геолокации ({{total}} доменов: ChatGPT, Claude,
+    российские и белорусские IP-адреса по геолокации ({{service_count}} сервисов: ChatGPT, Claude,
     Gemini, Cursor, JetBrains и др.). Достаточно указать один адрес в настройках
     сети: без VPN-клиента, без расширений для браузера и без настройки каждого приложения
     отдельно.</p>
@@ -489,11 +504,9 @@ $ portbuddy tcp 5432</code></pre>
 </aside>
 
 <h2 id="services">Какие сервисы охвачены</h2>
-<p>{{total}} доменов в {{category_count}} категориях. Поддомены включаются автоматически:
-<code>anthropic.com</code> покрывает и <code>api.anthropic.com</code>, и любой другой хост
-внутри.</p>
-<label class="vh" for="q">Поиск по списку доменов</label>
-<input id="q" type="search" placeholder="Поиск — например claude, cursor, jetbrains, .ai" autocomplete="off">
+<p>В списке <strong>{{service_count}} сервисов</strong> в {{category_count}} категориях.</p>
+<label class="vh" for="q">Поиск по списку сервисов</label>
+<input id="q" type="search" placeholder="Поиск по сервису — например Claude, Cursor, JetBrains, MongoDB" autocomplete="off">
 <nav class="toc" aria-label="Категории сервисов">{{toc}}</nav>
 {{cards}}
 
@@ -508,8 +521,55 @@ $ portbuddy tcp 5432</code></pre>
   <a class="creator-link" href="https://github.com/amak-tech/pereval/issues/new" target="_blank" rel="noopener">Создать Issue на GitHub →</a>
 </div>
 
+<h2 id="plans">Тарифы: расширенная подписка Pro и личный сервер для семьи или компании</h2>
+<p>Базовый сервер «{{name}}» бесплатен и предназначен для текстовых нейросетей и инструментов разработки. Если вам нужна стабильная скорость без вечерних перегрузок, доступ к популярным сервисам, соцсетям и медиа-стримингам, которые сами ограничили работу для РФ и РБ (Spotify, Netflix, Twitch, TikTok, Reddit, Pinterest, Canva, Notion, Miro, Supercell, Xbox), или собственный DNS-сервер на домашний роутер и для команды — запишитесь в ранний доступ:</p>
+<div class="plans-grid">
+  <div class="plan-card">
+    <div>
+      <p class="plan-eyebrow">Бесплатно · Сейчас на странице</p>
+      <h3>{{name}} Free</h3>
+      <p>Общий бесплатный сервер для повседневной работы с текстовыми нейросетями и IDE.</p>
+      <ul class="plan-list">
+        <li>{{service_count}} сервисов ИИ и инструментов разработки</li>
+        <li>Настройка за 1 минуту без регистрации</li>
+        <li>Общий канал (возможна нагрузка в часы пик)</li>
+      </ul>
+    </div>
+    <a class="btn-outline" href="#setup">Инструкция по настройке ↑</a>
+  </div>
+  <div class="plan-card featured">
+    <div>
+      <p class="plan-eyebrow">Ранний доступ · Для себя</p>
+      <h3>{{name}} Pro</h3>
+      <p>Полный список сервисов и высокая скорость на незагруженных серверах без вечерних тормозов.</p>
+      <ul class="plan-list">
+        <li>Spotify, Netflix, Twitch (1080p), Deezer</li>
+        <li>TikTok (актуальная лента), Reddit, Pinterest</li>
+        <li>Canva, Notion, Miro, Supercell, Xbox, Coursera</li>
+        <li>Личный кабинет с готовой настройкой для телефона и ПК</li>
+      </ul>
+    </div>
+    <a class="btn" href="/pro.html">Подробнее о {{name}} Pro →</a>
+  </div>
+  <div class="plan-card">
+    <div>
+      <p class="plan-eyebrow">Для всей семьи и B2B-команд</p>
+      <h3>{{name}} Dedicated</h3>
+      <p>Выделенный персональный DNS-прокси сервер под ключ со своим IP и доменом.</p>
+      <ul class="plan-list">
+        <li>Настройка на домашнем роутере для всей семьи и Smart TV</li>
+        <li>Или изолированный узел для компании / команды</li>
+        <li>Полный каталог Pro + <strong>ваши кастомные домены</strong></li>
+        <li>Приватный доступ только для ваших устройств</li>
+      </ul>
+    </div>
+    <a class="btn-outline" href="/dedicated.html">Выделенный сервер Dedicated →</a>
+  </div>
+</div>
+
 <h2 id="faq">Частые вопросы</h2>
 <details class="faq"><summary>Чем это отличается от VPN?</summary><p>VPN направляет через себя весь трафик и обычно заметно снижает скорость. Здесь через сервер идут только соединения с доменами из списка — всё остальное подключается напрямую, как и раньше. Ничего не нужно включать и выключать: настроили один раз в свойствах сети, и оно работает в браузере, в терминале и в приложениях одновременно.</p></details>
+<details class="faq"><summary>Какая локация у DNS?</summary><p>Основной DNS-сервер расположен в Казахстане (Алматы), а дополнительные прокси-узлы — в Казахстане и Европе. Запросы к сервисам из списка направляются через эти зарубежные серверы с минимальной задержкой для пользователей из России и Беларуси, а все остальные сайты открываются напрямую через вашего интернет-провайдера.</p></details>
 <details class="faq"><summary>Нужно ли что-то устанавливать?</summary><p>Нет. Ни клиента, ни расширения, ни сертификата. Достаточно указать адрес DNS-сервера <code>{{ip}}</code> в настройках сети или прописать <code>{{origin}}/dns-query</code> в настройках DNS-over-HTTPS прямо в браузере.</p></details>
 <details class="faq"><summary>Можно ли настроить DNS только в браузере, не меняя настройки всей системы?</summary><p>Да. В Firefox, Chrome, Edge, Brave и Яндекс.Браузере можно включить DNS-over-HTTPS (DoH) и указать пользовательский поставщик <code>{{origin}}/dns-query</code> (подробные шаги — во вкладке «Браузер»). Тогда через прокси будут работать сайты только внутри этого браузера, а вся остальная система останется на прежних настройках сети.</p></details>
 <details class="faq"><summary>Работает ли это на iPhone и Android?</summary><p>Да, и по Wi-Fi, и в мобильной сети. На iPhone и iPad скачайте и установите профиль конфигурации (.mobileconfig) во вкладке «iOS / iPadOS» — он включает DNS-over-TLS для всех сетей сразу. На Android 9+ откройте «Настройки» → «Сеть и интернет» → «Приватный DNS» (или «Частный DNS») и укажите имя хоста <code>{{domain}}</code>. По Wi-Fi также можно просто прописать адрес <code>{{ip}}</code> вручную в свойствах сети.</p></details>
@@ -550,6 +610,8 @@ $ portbuddy tcp 5432</code></pre>
   <a href='https://ko-fi.com/S0D829QQHC' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi1.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
   <p class="legal">Сервис не является средством обхода блокировок Роскомнадзора или Мининформа РБ, работает строго по фиксированному списку незапрещённых зарубежных IT-платформ и не предоставляет доступ к ресурсам, ограниченным законодательством РФ и РБ. Используя сервис, вы безоговорочно принимаете <a href="/terms.html">Пользовательское соглашение</a> и <a href="/privacy.html">Политику конфиденциальности</a>.</p>
   <nav class="legal-links" aria-label="Правовые документы и контакты">
+    <a href="/pro.html">{{name}} Pro</a>
+    <a href="/dedicated.html">{{name}} Dedicated</a>
     <a href="/stats.html">Статистика и нагрузка</a>
     <a href="/terms.html">Пользовательское соглашение (Условия использования)</a>
     <a href="/privacy.html">Политика конфиденциальности</a>

@@ -3,9 +3,9 @@
 """Manage Pereval domains in /etc/hosts for macOS (Scenario B: root access with corporate WARP VPN).
 
 Usage:
-    sudo python3 update_hosts.py               # Install or update Pereval entries in /etc/hosts
-    sudo python3 update_hosts.py --remove      # Remove Pereval entries from /etc/hosts
-    python3 update_hosts.py --dry-run          # Print generated /etc/hosts block without writing
+    sudo python3 src/update_hosts.py               # Install or update Pereval entries in /etc/hosts
+    sudo python3 src/update_hosts.py --remove      # Remove Pereval entries from /etc/hosts
+    python3 src/update_hosts.py --dry-run          # Print generated /etc/hosts block without writing
 """
 
 import argparse
@@ -137,7 +137,17 @@ def flush_dns_cache() -> None:
 
 
 def main() -> None:
-    base_dir = Path(__file__).resolve().parent
+    script_dir = Path(__file__).resolve().parent
+    project_root = (
+        script_dir.parent
+        if (script_dir.parent / "services.yaml").is_file() or (script_dir.parent / "build").is_dir()
+        else script_dir
+    )
+    default_dnsmasq = (
+        project_root / "build" / "dnsmasq-geoblock.conf"
+        if (project_root / "build" / "dnsmasq-geoblock.conf").is_file()
+        else project_root / "dnsmasq-geoblock.conf"
+    )
     parser = argparse.ArgumentParser(
         description="Install or remove Pereval domain mappings in /etc/hosts."
     )
@@ -149,7 +159,7 @@ def main() -> None:
     parser.add_argument(
         "--services",
         type=Path,
-        default=base_dir / "services.yaml",
+        default=project_root / "services.yaml",
         help="Path to services.yaml",
     )
     parser.add_argument(
@@ -171,12 +181,12 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.dry_run:
-        domains = load_domains(args.services, base_dir / "dnsmasq-geoblock.conf")
+        domains = load_domains(args.services, default_dnsmasq)
         print(build_hosts_block(domains, args.ip))
         return
 
     if os.geteuid() != 0 and args.hosts_file == Path("/etc/hosts"):
-        sys.exit("Error: Root privileges required. Run with: sudo python3 update_hosts.py")
+        sys.exit("Error: Root privileges required. Run with: sudo python3 src/update_hosts.py")
 
     if not args.hosts_file.exists():
         sys.exit(f"Error: Hosts file not found: {args.hosts_file}")
@@ -193,7 +203,7 @@ def main() -> None:
         print(f"Removed Pereval entries from {args.hosts_file} and flushed macOS DNS cache.")
         return
 
-    domains = load_domains(args.services, base_dir / "dnsmasq-geoblock.conf")
+    domains = load_domains(args.services, default_dnsmasq)
     block = build_hosts_block(domains, args.ip)
     updated = cleaned + "\n" + block + "\n"
     args.hosts_file.write_text(updated, encoding="utf-8")

@@ -7,6 +7,18 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>{{origin}}/pro.html</loc>
+    <lastmod>{{date}}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>{{origin}}/dedicated.html</loc>
+    <lastmod>{{date}}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>{{origin}}/stats.html</loc>
     <lastmod>{{date}}</lastmod>
     <changefreq>hourly</changefreq>

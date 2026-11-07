@@ -34,7 +34,7 @@
 
 ## Какие сервисы работают через Перевал
 
-На сайте **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services)** поддерживаются самые востребованные сервисы для работы с ИИ и разработки (132 домена) с удобным поиском и проверкой:
+На сайте **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services)** поддерживаются самые востребованные сервисы для работы с ИИ и разработки (64 сервиса) с удобным поиском и проверкой:
 
 - **ИИ и языковые модели:** ChatGPT (OpenAI), Claude (Anthropic), Google Gemini, AI Studio, NotebookLM и Jules, Grok (xAI), Microsoft Copilot, Cursor, Windsurf / Codeium, OpenRouter, Groq, Lambda Labs, Lightning AI, Augment Code, Cline, Trae, Qoder, Manus, Genspark, Langdock, DeepL.
 - **Инструменты разработки, SaaS и облака:** JetBrains (IDE, AI Assistant, Toolbox, YouTrack, Qodana), HashiCorp (Terraform, Vagrant), Atlassian (Jira, Confluence), Sentry, MongoDB, Redis, Neo4j, Liquibase, Grafana, Graylog, Snyk, PostHog, Amplitude, Pingdom, Buf, Spacelift, Algolia, GitGuardian, Swagger, Netlify, Heroku, Framer, Ngrok, Tailscale, HTTP Toolkit, Oracle, Liberica JDK, Qt, Bitnami, NVIDIA Developer, Mattermost, Outline, ClickUp, Zapier.
@@ -66,9 +66,9 @@
 
 ---
 
-## Работа через `/etc/hosts` (`update_hosts.py`)
+## Работа через `/etc/hosts` (`src/update_hosts.py`)
 
-В репозитории доступен скрипт [`update_hosts.py`](./update_hosts.py), который автоматически прописывает домены Перевала напрямую в системный файл `/etc/hosts` (на macOS и Linux) без изменения настроек DNS.
+В репозитории доступен скрипт [`src/update_hosts.py`](./src/update_hosts.py), который автоматически прописывает домены Перевала напрямую в системный файл `/etc/hosts` (на macOS и Linux) без изменения настроек DNS.
 
 ### Когда это полезно (Use Cases)
 
@@ -87,30 +87,30 @@
 
 **1. Установить или обновить записи Перевала в `/etc/hosts`:**
 ```bash
-sudo python3 update_hosts.py
+sudo python3 src/update_hosts.py
 ```
 Повторный запуск команды безопасно обновит существующий блок между маркерами `# >>> PEREVAL START` и `# <<< PEREVAL END` без дублирования строк.
 
 **2. Посмотреть сгенерированный блок без изменения `/etc/hosts` (режим `--dry-run`):**
 ```bash
-python3 update_hosts.py --dry-run
+python3 src/update_hosts.py --dry-run
 ```
 
 **3. Удалить все записи Перевала из `/etc/hosts`:**
 ```bash
-sudo python3 update_hosts.py --remove
+sudo python3 src/update_hosts.py --remove
 ```
 
 **4. Дополнительные параметры (кастомный IP, путь к списку сервисов или файлу hosts):**
 ```bash
 # Указать другой IP-адрес сервера Перевала
-sudo python3 update_hosts.py --ip 153.80.200.170
+sudo python3 src/update_hosts.py --ip 153.80.200.170
 
 # Использовать альтернативный файл services.yaml
-sudo python3 update_hosts.py --services /path/to/services.yaml
+sudo python3 src/update_hosts.py --services /path/to/services.yaml
 
 # Записать результат в другой файл вместо /etc/hosts
-python3 update_hosts.py --hosts-file ./hosts.preview
+python3 src/update_hosts.py --hosts-file ./hosts.preview
 ```
 
 ### Параметры командной строки
@@ -140,6 +140,15 @@ python3 update_hosts.py --hosts-file ./hosts.preview
   - По умолчанию для подключения к воркерам используются те же SSH-пользователь и SSH-ключ, что и для основного узла, с возможностью переопределения для каждого воркера через переменные окружения (`ssh_user_env`, `ssh_key_env`) из секретов GitHub Actions.
 - **Агрегированная телеметрия кластера без двойного учёта (`stats_collector.py`):**
   - Все узлы кластера используют синхронизированную суточную криптографическую соль (`BLAKE2b`), исключают внутренний трафик и проверки здоровья между узлами и экспортируют локальные метрики в `/node-stats.json`, которые основной узел каждые 5 секунд объединяет (по множеству уникальных пользователей и сумме запросов/трафика) для дашборда [`/stats.html`](https://pereval.portbuddy.tech/stats.html).
+
+---
+
+## Платные тарифы (Ранний доступ): Перевал Pro и Перевал Dedicated
+
+Помимо бесплатного базового доступа для текстовых ИИ и IDE, доступны два специализированных направления (сейчас открыта запись в ранний доступ):
+
+1. **[Перевал Pro (`/pro.html`)](https://pereval.portbuddy.tech/pro.html)** — расширенная индивидуальная подписка: быстрые серверы без вечерних перегрузок, удобный личный кабинет на сайте и полный список популярных сервисов, соцсетей и медиа-стримингов, которые сами ограничили работу для российских и белорусских IP-адресов (Spotify, Netflix, Twitch 1080p, TikTok, Reddit, Pinterest, Canva, Notion, Miro, Trello, Supercell, Xbox, PlayStation, Coursera, Duolingo, ElevenLabs и др.).
+2. **[Перевал Dedicated (`/dedicated.html`)](https://pereval.portbuddy.tech/dedicated.html)** — выделенный персональный DNS-прокси сервер «под ключ» со своим IPv4-адресом и доменом для всей семьи (настройка на домашнем роутере, Smart TV и консолях) или для компаний и команд разработчиков, с возможностью добавлять собственные кастомные домены в личном веб-кабинете.
 
 ---
 

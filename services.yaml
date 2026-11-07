@@ -196,23 +196,45 @@ categories:
         domains:
           - windsurf.com
           - codeium.com
-      - name: OpenRouter, Groq и другие шлюзы к моделям
+      - name: OpenRouter
         domains:
           - openrouter.ai
+      - name: Groq
+        domains:
           - groq.com
+      - name: Lambda Labs
+        domains:
           - lambdalabs.com
+      - name: Lightning AI
+        domains:
           - lightning.ai
-      - name: ИИ-агенты и инструменты для кода
+      - name: Augment Code
         domains:
           - augmentcode.com
+      - name: Cline
+        domains:
           - data.cline.bot
+      - name: Trae
+        domains:
           - trae.ai
+      - name: Qoder
+        domains:
           - qoder.com
+      - name: Manus
+        domains:
           - manus.im
           - files.manus.cdn
+      - name: Genspark
+        domains:
           - genspark.ai
+      - name: Langdock
+        domains:
           - langdock.com
+      - name: Reve
+        domains:
           - reve.com
+      - name: Vizard
+        domains:
           - vizard.ai
       - name: DeepL
         domains:
@@ -249,7 +271,7 @@ categories:
         domains:
           - sentry.io
           - sentry.dev
-      - name: Базы данных, мониторинг, CI
+      - name: Neon
         domains:
           - neon.com
           - neon.tech
@@ -260,65 +282,131 @@ categories:
           - 7687492087503394.hostedstatus.com
           - dfv3qgd2ykmrx.cloudfront.net
           - d2a07l6itrasqg.cloudfront.net
+      - name: MongoDB
+        domains:
           - mongodb.com
+      - name: Liquibase
+        domains:
           - docs.liquibase.com
+      - name: Redis
+        domains:
           - redis.io
           - redislabs.com
+      - name: Neo4j
+        domains:
           - neo4j.com
+      - name: Grafana
+        domains:
           - grafana.com
+      - name: Graylog
+        domains:
           - graylog.org
+      - name: Snyk
+        domains:
           - snyk.io
+      - name: Pingdom
+        domains:
           - pingdom.com
+      - name: PostHog
+        domains:
           - posthog.com
+      - name: Amplitude
+        domains:
           - amplitude.com
+      - name: Buf
+        domains:
           - buf.build
+      - name: Spacelift
+        domains:
           - spacelift.io
+      - name: Algolia
+        domains:
           - dashboard.algolia.com
+      - name: GitGuardian
+        domains:
           - dashboard.gitguardian.com
+      - name: Healthchecks.io
+        domains:
           - hc-ping.com
           - hchk.io
+      - name: Swagger / SmartBear
+        domains:
           - swagger.io
           - smartbear.com
           - smartbear.co
-      - name: Хостинг, PaaS и фронтенд
+      - name: Heroku
         domains:
           - assets.heroku.com
           - herokucdn.com
+      - name: Netlify
+        domains:
           - netlify.com
+      - name: Framer
+        domains:
           - framer.com
           - framer.app
           - framerstatic.com
           - framercanvas.com
           - framerusercontent.com
           - framercdn.com
+      - name: Capacitor
+        domains:
           - capacitorjs.com
+      - name: React Flow
+        domains:
           - reactflow.dev
-      - name: Сети, туннели и отладка
+      - name: ngrok
         domains:
           - ngrok.com
           - connect.ngrok-agent.com
+      - name: Tailscale
+        domains:
           - pkgs.tailscale.com
+      - name: HTTP Toolkit
+        domains:
           - httptoolkit.com
+      - name: ZeroSSL
+        domains:
           - zerossl.com
+      - name: Mailinator
+        domains:
           - mailinator.com
+      - name: PX6
+        domains:
           - px6.net
-      - name: SDK, библиотеки и облака
+      - name: Oracle Cloud
         domains:
           - oracle.com
           - oraclecloud.com
+      - name: BellSoft Liberica
+        domains:
           - bell-sw.com
+      - name: Qt
+        domains:
           - qt.io
+      - name: Bitnami
+        domains:
           - bitnami.com
+      - name: NVIDIA Developer
+        domains:
           - developer.nvidia.com
-      - name: Совместная работа и продуктивность
+      - name: Mattermost
         domains:
           - mattermost.com
+      - name: Outline
+        domains:
           - getoutline.com
+      - name: ClickUp
+        domains:
           - clickup.com
+      - name: Zapier
+        domains:
           - zapier.com
-      - name: Спорт и здоровье
+      - name: Strava
         domains:
           - strava.com
+      - name: FatSecret
+        domains:
           - fatsecret.com
 disabled:
   - name: Общая инфраструктура Google и Firebase
