@@ -1,40 +1,69 @@
-# Единый источник данных: категории, сервисы и их домены.
+# Единый источник данных: домены, пулы воркеров, категории, сервисы и их домены.
 #
-# Из этого файла generate.py собирает dnsmasq-geoblock.conf и index.html:
+# Из этого файла generate.py собирает конфиги dnsmasq/nginx для всех нод и
+# каталог сервисов для веб-приложения (web/src/generated/services.json):
 #
-#     python3 generate.py services.yaml 153.80.200.170
+#     python3 src/generate.py services.yaml 153.80.200.170
 #
 # Структура:
-#   meta             название, домен сайта и дата обновления для страницы
-#   nodes            конфигурация основного узла (primary) и пула воркеров (workers)
+#   meta             название и адрес сайта (лендинг, кабинет, API)
+#   free             домены DNS бесплатной версии (основной + устаревшие, которые
+#                    продолжают работать для старых профилей)
+#   nodes            кластер Free: основной узел (primary), пулы и воркеры
 #   dnsmasq_options  строки, которые попадут в блок опций dnsmasq как есть
-#   categories       категория -> сервисы -> домены. Поддомены включаются
-#                    автоматически: anthropic.com покрывает api.anthropic.com,
-#                    поэтому дочерние записи указывать не нужно
+#   categories       Free-каталог: категория (id, pool) -> сервисы (pool) -> домены.
+#                    Поддомены включаются автоматически: anthropic.com покрывает
+#                    api.anthropic.com, поэтому дочерние записи указывать не нужно
 #   disabled         группы доменов, закомментированных в конфиге, с пояснением
 #   passthrough      домены, которые НЕЛЬЗЯ проксировать: российские сервисы,
 #                    блокирующие зарубежные адреса, включая казахстанские
+#   pro              инфраструктура и каталог платной версии (DNS-нода, пулы,
+#                    воркеры, категории)
+#
+# Пулы воркеров. У каждого сервиса есть пул: явно у сервиса, иначе у категории,
+# иначе «default». Все домены сервиса резолвятся в ОДНУ ноду пула (выбор
+# детерминированный, rendezvous-хэш по имени сервиса) — важно для сервисов,
+# которым нужен постоянный IP (ИИ-платформы). «Тяжёлые» сервисы (видео, соцсети)
+# можно вынести в отдельный пул на другие ноды. Пул без живых нод уходит
+# в fallback, затем на primary.
 #
 # После правок стоит прогнать проверку — она ловит дубли, конфликты
-# с passthrough и уже покрытые поддомены:
+# с passthrough, неизвестные пулы и уже покрытые поддомены:
 #
-#     python3 generate.py services.yaml 153.80.200.170 --check
+#     python3 src/generate.py services.yaml 153.80.200.170 --check
 
 meta:
   name: Перевал
-  origin: https://pereval.portbuddy.tech
+  origin: https://pereval.top
+
+free:
+  domain: free.pereval.top                 # DoH https://free.pereval.top/dns-query, DoT free.pereval.top
+  legacy_domains:
+    - pereval.portbuddy.tech               # старое имя: DoH/DoT продолжают работать, сайт -> 301 на origin
+
 nodes:
   primary: 153.80.200.170
   include_primary_in_dns: false   # false = отдавать в DNS только здоровые воркеры; true = включать primary наравне с воркерами
   probe_sni: claude.ai
+  pools:
+    default:
+      note: Общий пул — всё, у чего пул не задан явно.
+    ai:
+      note: ИИ-платформы — важно, чтобы все запросы сервиса шли с одного IP/локации.
+      fallback: default
+    media:
+      note: Тяжёлый трафик (видео, стриминги, соцсети) — отдельные ноды, чтобы не мешать ИИ.
+      fallback: default
   workers:
     # Добавляйте сюда дополнительные VPS-воркеры по мере роста нагрузки.
+    # pools — в каких пулах участвует нода (по умолчанию только default).
     # По умолчанию для подключения к воркерам используются те же SSH-пользователь,
     # SSH-ключ и порт, что и для основного узла (primary).
     # При необходимости можно переопределить их для конкретного воркера напрямую
     # или через секреты GitHub Actions (переменные окружения):
     # - ip: 153.80.200.171
-    #   name: kz-worker-1
+    #   name: kz-media-1
+    #   pools: [media]
     #   weight: 1
     #   ssh_user_env: WORKER1_SSH_USER   # опционально: имя env-переменной (или ssh_user: ubuntu)
     #   ssh_key_env: WORKER1_SSH_KEY     # опционально: имя env-переменной с приватным ключом или путём (или ssh_key: ~/.ssh/id_ed25519)
@@ -42,6 +71,7 @@ nodes:
 
     - ip: 151.247.25.123
       name: nl-worker-1
+      pools: [default, ai, media]
 
 dnsmasq_options:
   - listen-address=0.0.0.0
@@ -60,7 +90,9 @@ dnsmasq_options:
   - filter-rr=HTTPS,SVCB
   - local-ttl=60
 categories:
-  - name: ИИ и языковые модели
+  - id: ai
+    name: ИИ и языковые модели
+    pool: ai
     services:
       - name: Anthropic / Claude
         domains:
@@ -240,7 +272,9 @@ categories:
       - name: DeepL
         domains:
           - deepl.com
-  - name: Инструменты разработки, SaaS и облака
+  - id: dev
+    name: Инструменты разработки, SaaS и облака
+    pool: default
     services:
       - name: JetBrains
         domains:
@@ -484,3 +518,163 @@ passthrough:
     - widevine-proxy.ott.yandex.ru
     - xn--90aijkdmaud0d.xn--p1ai
     - yandex.net
+
+# =============================================================================
+# Перевал Pro — платная версия. Отдельная DNS-нода и отдельные прокси-воркеры.
+# Каталог Pro = все категории Free (они тоже уходят через Pro-воркеры)
+# + категории ниже. Списки доменов — стартовые, проверяйте каждый сервис
+# с Pro-воркера перед публикацией на странице.
+# =============================================================================
+pro:
+  domain: pro.pereval.top                  # DoH https://pro.pereval.top/dns/<token>, DoT <token>.pro.pereval.top
+  dns_ip: 203.0.113.10                     # TODO: IP VPS pro-dns (заглушка TEST-NET-3)
+  cp_ip: 203.0.113.20                      # TODO: IP VPS pereval.top (control plane) — для nftables на воркерах
+  pools:
+    default:
+      note: Общий пул Pro.
+    ai:
+      note: ИИ-платформы Pro — постоянный IP на сервис.
+      fallback: default
+    media:
+      note: Стриминги и соцсети Pro — тяжёлый трафик.
+      fallback: default
+  workers:
+    - ip: 203.0.113.30                     # TODO: IP VPS pro-worker-1 (заглушка TEST-NET-3)
+      name: pro-worker-1
+      pools: [default, ai, media]
+  categories:
+    - id: media
+      name: Музыка, кино и стриминги
+      pool: media
+      services:
+        - name: Spotify
+          domains:
+            - spotify.com
+            - scdn.co
+            - spotifycdn.com
+            - spotifycdn.net
+            - spoti.fi
+        - name: Netflix
+          # Видео-CDN nflxvideo.net намеренно не проксируется: регион определяется
+          # на netflix.com, а сам поток идёт напрямую с Open Connect — так работают
+          # классические Smart DNS и не расходуется канал воркера.
+          domains:
+            - netflix.com
+            - nflxext.com
+            - nflximg.net
+            - nflxso.net
+        - name: Twitch
+          domains:
+            - twitch.tv
+            - ttvnw.net
+            - jtvnw.net
+            - twitchcdn.net
+            - twitchsvc.net
+        - name: Deezer
+          domains:
+            - deezer.com
+            - dzcdn.net
+        - name: Tidal
+          domains:
+            - tidal.com
+            - tidalhifi.com
+        - name: ElevenLabs / Suno
+          pool: ai
+          domains:
+            - elevenlabs.io
+            - suno.com
+            - suno.ai
+    - id: social
+      name: Соцсети и сообщества
+      pool: media
+      services:
+        - name: TikTok
+          domains:
+            - tiktok.com
+            - tiktokcdn.com
+            - tiktokcdn-us.com
+            - tiktokcdn-eu.com
+            - tiktokv.com
+            - tiktokv.us
+            - tiktokstatic.com
+            - ttwstatic.com
+            - byteoversea.com
+            - ibyteimg.com
+            - ibytedtos.com
+            - muscdn.com
+            - musical.ly
+        - name: Reddit
+          domains:
+            - reddit.com
+            - redd.it
+            - redditmedia.com
+            - redditstatic.com
+        - name: Pinterest
+          domains:
+            - pinterest.com
+            - pinimg.com
+        - name: 9GAG / Imgur
+          domains:
+            - 9gag.com
+            - 9cache.com
+            - imgur.com
+    - id: apps
+      name: Популярные приложения и учёба
+      pool: default
+      services:
+        - name: Canva
+          domains:
+            - canva.com
+            - canva.link
+        - name: Notion
+          domains:
+            - notion.so
+            - notion.site
+            - notion.com
+            - notion.new
+            - notionusercontent.com
+            - notion-static.com
+            - makenotion.com
+        - name: Miro
+          domains:
+            - miro.com
+            - realtimeboard.com
+        - name: Trello
+          domains:
+            - trello.com
+            - trellocdn.com
+        - name: Coursera
+          domains:
+            - coursera.org
+        - name: Quizlet / Duolingo
+          domains:
+            - quizlet.com
+            - duolingo.com
+    - id: games
+      name: Игры и консоли
+      pool: default
+      services:
+        # ВАЖНО: SNI-прокси пропускает только TCP 80/443 — через него проходит
+        # логин, магазин и API, но не UDP-трафик игровых серверов и стриминга.
+        - name: Supercell (Brawl Stars, Clash Royale, Clash of Clans)
+          domains:
+            - supercell.com
+            - supercellid.com
+            - supercellgames.com
+            - brawlstarsgame.com
+            - clashroyale.com
+            - clashofclans.com
+        - name: Xbox
+          domains:
+            - xbox.com
+            - xboxlive.com
+            - xboxservices.com
+        - name: PlayStation Network
+          domains:
+            - playstation.com
+            - playstation.net
+            - sonyentertainmentnetwork.com
+        - name: NVIDIA GeForce NOW
+          domains:
+            - geforcenow.com
+            - nvidiagrid.net
