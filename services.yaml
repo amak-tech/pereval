@@ -162,11 +162,14 @@ categories:
           - cloudcode-pa.googleapis.com
           - daily-cloudcode-pa.googleapis.com
           - daily-cloudcode-pa.sandbox.googleapis.com
+          - preprod-daily-cloudcode-pa.sandbox.googleapis.com
           - autopush-cloudcode-pa.sandbox.googleapis.com
           - cloudaicompanion.googleapis.com
           - staging-cloudaicompanion.sandbox.googleapis.com
           - aicode.googleapis.com
           - businessaicode.googleapis.com
+          - aiplatform.googleapis.com
+          - iamcredentials.googleapis.com
           - jetski-webchannel.googleapis.com
           - aisandbox-pa.googleapis.com
           - aida.googleapis.com
