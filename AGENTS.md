@@ -111,6 +111,7 @@ The repository follows a **Single Source of Truth + Zero-Dependency Generator** 
 .
 ├── services.yaml            # SINGLE SOURCE OF TRUTH: metadata, nodes cluster, dnsmasq options, categories, services, domains
 ├── deploy.sh                # Automated zero-downtime fleet deployment script with auto-bootstrapping, staging, backups & rollback
+├── LICENSE                  # Apache License 2.0
 ├── README.md                # Public user-facing documentation (in Russian)
 ├── AGENTS.md                # Technical documentation & contributor/agent guide (this file)
 ├── src/                     # Python build, daemon, and client scripts
