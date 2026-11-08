@@ -220,6 +220,11 @@ font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--mut
 text-decoration:none;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:9px;
 padding:11px 16px;margin:4px 0 0;width:100%;text-align:center}
 .btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.donate-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin:18px 0 0}
+.donate-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;gap:14px}
+.donate-card h3{margin:0 0 6px;font-size:17px;display:block}
+.donate-card p{margin:0;font-size:14.5px;color:var(--mute)}
+.donate-card .btn{width:100%;margin:4px 0 0}
 @media (max-width:600px){
 .wrap{padding:0 16px 56px}
 header .wrap{padding:28px 16px 24px}
@@ -242,7 +247,7 @@ td:last-child{color:var(--mute)}
 
 <header>
   <div class="wrap">
-    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span>DNS-прокси · <a href="/pro.html">{{name}} Pro</a> · <a href="/dedicated.html">Dedicated</a> · <a href="/stats.html">Статистика</a> · <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a></span></p>
+    <p class="brand"><img class="brand-logo" src="/favicon.svg" width="22" height="22" alt=""><span>DNS-прокси · <a href="/pro.html">{{name}} Pro</a> · <a href="/dedicated.html">Dedicated</a> · <a href="/stats.html">Статистика</a> · <a href="#support">Поддержать</a> · <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a></span></p>
     <h1>{{name}} — DNS-прокси для зарубежных ИИ и инструментов разработки</h1>
     <p class="lede">Если ChatGPT отвечает «not available in your country», Claude
     не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не
@@ -594,14 +599,9 @@ $ portbuddy tcp 5432</code></pre>
 <details class="faq"><summary>Снизится ли скорость интернета?</summary><p>Только для доменов из списка — их трафик идёт через Казахстан, и к задержке добавляется путь до Алматы. Все остальные сайты, включая российские, подключаются напрямую и работают с прежней скоростью.</p></details>
 <details class="faq"><summary>Видит ли сервер мой трафик?</summary><p>Нет. TLS-соединение не расшифровывается: сервер читает только имя хоста, которое браузер и так передаёт открытым текстом, и пересылает соединение дальше байт в байт. Сертификат проверяет ваше устройство, и он настоящий — от Anthropic, OpenAI или Google, а не подставной.</p></details>
 <details class="faq"><summary>Сервис всё равно пишет, что недоступен в моей стране. Почему?</summary><p>Три обычные причины. Первая: вы настроили DNS в системе, но в браузере включён сторонний DNS-over-HTTPS (Cloudflare / Google) — отключите его или укажите в браузере <code>{{origin}}/dns-query</code>. Вторая: соединение прошло по IPv6, минуя подмену адреса. Третья: сервис проверяет не адрес, а страну аккаунта или платёжной карты — так работают лицензии JetBrains, и здесь прокси не поможет.</p></details>
+<details class="faq"><summary>Продолжат ли работать российские сервисы и Госуслуги?</summary><p>Да. Банки, Госуслуги, маркетплейсы (Ozon, Wildberries), РЖД, налоговая и другие российские сайты, которые сами блокируют зарубежные IP-адреса, в список проксирования не входят — запросы к ним разрешаются обычным образом и идут напрямую через вашего интернет-провайдера.</p></details>
+<details class="faq"><summary>Почему в списке нет некоторых доменов (Docker Hub, Figma, Slack, общая инфраструктура Google)?</summary><p>Часть доменов отключена намеренно. Во-первых, через общие домены Google и Firebase (<code>clients6.google.com</code>, <code>gvt1.com</code>) идёт системный трафик — если направить их через прокси, может нарушиться работа приложений Android и синхронизация браузера. Во-вторых, для ряда сервисов (Docker Hub, Figma, Slack, Stripe, консоли AWS, Azure и Google Cloud) региональные ограничения либо сняты, либо привязаны к стране аккаунта, а не к IP-адресу, поэтому они открываются напрямую без проксирования.</p></details>
 <details class="faq"><summary>Нужного домена нет в списке. Что делать?</summary><p>Он будет разрешаться обычным образом и продолжит выдавать ошибку регионального доступа со стороны сервиса (останется недоступным из вашего региона). Напишите в <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a> или создайте Issue в репозитории <a href="https://github.com/amak-tech/pereval/issues" target="_blank" rel="noopener">github.com/amak-tech/pereval</a> с адресом сайта — домен добавляется в список за пару минут, вместе со всеми поддоменами.</p></details>
-
-<h2 id="off">Отключено намеренно</h2>
-{{disabled}}
-
-<h2 id="ru">Российские сервисы продолжают работать</h2>
-<p>{{passthrough_note}}</p>
-<div class="chips">{{passthrough_chips}}</div>
 
 <h2 id="limits">Что важно знать об ограничениях</h2>
 <table>
@@ -621,16 +621,37 @@ $ portbuddy tcp 5432</code></pre>
   </tbody>
 </table>
 
+<h2 id="support">Поддержать проект</h2>
+<p>Базовый DNS-сервер «{{name}}» бесплатен, работает без рекламы и регистрации. Если сервис помогает вам в ежедневной работе с нейросетями и инструментами разработки, вы можете поддержать оплату серверов и развитие инфраструктуры удобным способом:</p>
+<div class="donate-grid">
+  <div class="donate-card">
+    <div>
+      <p class="plan-eyebrow">Карты РФ, СБП и зарубежные карты</p>
+      <h3>Lava.top</h3>
+      <p>Поддержка в рублях (картами российских банков и через СБП) или с зарубежных карт.</p>
+    </div>
+    <a class="btn" href="https://app.lava.top/antonliashenka?tabId=donate" target="_blank" rel="noopener">Поддержать на Lava.top →</a>
+  </div>
+  <div class="donate-card">
+    <div>
+      <p class="plan-eyebrow">Зарубежные карты и PayPal</p>
+      <h3>Ko-fi</h3>
+      <p>Разовый донат или подписка через международную платформу Ko-fi.</p>
+    </div>
+    <a class="btn" href="https://ko-fi.com/S0D829QQHC" target="_blank" rel="noopener">Поддержать на Ko-fi →</a>
+  </div>
+</div>
+
 </main>
 
 <footer class="wrap">
   <p>Проект поддерживается командой <a href="https://portbuddy.dev/?utm_source=pereval&amp;utm_medium=referral&amp;utm_campaign=portbuddy&amp;utm_content=footer" target="_blank" rel="noopener" data-pb-placement="footer">Port Buddy</a> — публичные HTTP, TCP и UDP-туннели для локальной разработки. Обновлено {{date}}.</p>
-  <a href='https://ko-fi.com/S0D829QQHC' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi1.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
   <p class="legal">Сервис не является средством обхода блокировок Роскомнадзора или Мининформа РБ, работает строго по фиксированному списку незапрещённых зарубежных IT-платформ и не предоставляет доступ к ресурсам, ограниченным законодательством РФ и РБ. Используя сервис, вы безоговорочно принимаете <a href="/terms.html">Пользовательское соглашение</a> и <a href="/privacy.html">Политику конфиденциальности</a>.</p>
   <nav class="legal-links" aria-label="Правовые документы и контакты">
     <a href="/pro.html">{{name}} Pro</a>
     <a href="/dedicated.html">{{name}} Dedicated</a>
     <a href="/stats.html">Статистика и нагрузка</a>
+    <a href="#support">Поддержать проект</a>
     <a href="/terms.html">Пользовательское соглашение (Условия использования)</a>
     <a href="/privacy.html">Политика конфиденциальности</a>
     <a href="https://t.me/pereval_dns" target="_blank" rel="noopener">Telegram-чат</a>
