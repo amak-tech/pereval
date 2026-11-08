@@ -1,0 +1,8 @@
+# Локальная разработка: публикует Postgres на 127.0.0.1:54320 (в проде порт наружу не выдаётся).
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d postgres
+#   DATABASE_URL=postgres://pereval:pereval@127.0.0.1:54320/pereval
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:54320:5432"

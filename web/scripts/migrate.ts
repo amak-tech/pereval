@@ -11,7 +11,7 @@ async function main() {
       break;
     } catch (err) {
       if (attempt === 30) throw err;
-      console.log(`[migrate] БД недоступна (${attempt}/30), жду…`);
+      console.log(`[migrate] БД недоступна (${attempt}/30): ${(err as Error)?.message ?? err} — жду…`);
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
