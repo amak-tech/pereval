@@ -42,8 +42,6 @@ nodes:
 
     - ip: 151.247.25.123
       name: nl-worker-1
-    - ip: 178.214.211.130
-      name: ro-worker-3
 
 dnsmasq_options:
   - listen-address=0.0.0.0
