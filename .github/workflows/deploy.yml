@@ -1,11 +1,26 @@
-name: Deploy
+name: Deploy (DNS/proxy nodes)
+
+# Раскатывает конфиги и демоны на Python/nginx-ноды:
+#   * Free-кластер (primary 153.80.200.170 + воркеры из cluster-nodes.json) — всегда;
+#   * Pro-ноды (pro.dns_ip + pro.workers из services.yaml) — при deploy_pro=true
+#     (нужны секреты PRO_DNS_SECRET / PRO_WORKER_SECRET, выданные `pnpm admin node add`).
+# Сайт/кабинет/API (pereval.top) деплоит отдельный workflow web.yml.
 
 on:
   release:
     types:
       - published
   workflow_call:
+    inputs:
+      deploy_pro:
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      deploy_pro:
+        description: "Также развернуть Pro-ноды (pro-dns + pro-worker)"
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy
@@ -21,38 +36,26 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Install dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq librsvg2-bin fonts-dejavu-core
-          pip install pyyaml
+        run: pip install pyyaml
 
       - name: Generate configuration files
         env:
           SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
-        run: python3 src/generate.py services.yaml "$SUTTON_IP_ADDRESS"
+        run: |
+          python3 src/generate.py services.yaml "$SUTTON_IP_ADDRESS"
+          python3 -m unittest discover -s tests
 
-      - name: Deploy to server
+      - name: Deploy Free cluster (workers, then primary)
         env:
           SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
           SUTTON_SSH_KEY: ${{ secrets.SUTTON_SSH_KEY }}
           SUTTON_SSH_USER: ${{ secrets.SUTTON_SSH_USER }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          MAIL_FROM: ${{ secrets.MAIL_FROM }}
-          MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME}}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           # Optional per-worker secrets (referenced via ssh_user_env / ssh_key_env in services.yaml):
 #          WORKER1_SSH_USER: ${{ secrets.WORKER1_SSH_USER }}
 #          WORKER1_SSH_KEY: ${{ secrets.WORKER1_SSH_KEY }}
-#          WORKER2_SSH_USER: ${{ secrets.WORKER2_SSH_USER }}
-#          WORKER2_SSH_KEY: ${{ secrets.WORKER2_SSH_KEY }}
-#          WORKER3_SSH_USER: ${{ secrets.WORKER3_SSH_USER }}
-#          WORKER3_SSH_KEY: ${{ secrets.WORKER3_SSH_KEY }}
         run: |
           SSH_KEY_FILE="$(mktemp)"
           trap 'rm -f "$SSH_KEY_FILE"' EXIT
@@ -60,3 +63,19 @@ jobs:
           printf '%s\n' "$SUTTON_SSH_KEY" > "$SSH_KEY_FILE"
           chmod +x deploy.sh
           ./deploy.sh "$SUTTON_IP_ADDRESS" "$SSH_KEY_FILE" "$SUTTON_SSH_USER"
+
+      - name: Deploy Pro nodes (pro-dns, then pro-workers)
+        if: ${{ inputs.deploy_pro }}
+        env:
+          SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
+          SUTTON_SSH_KEY: ${{ secrets.PRO_SSH_KEY || secrets.SUTTON_SSH_KEY }}
+          SUTTON_SSH_USER: ${{ secrets.PRO_SSH_USER || secrets.SUTTON_SSH_USER }}
+          PRO_DNS_SECRET: ${{ secrets.PRO_DNS_SECRET }}
+          PRO_WORKER_SECRET: ${{ secrets.PRO_WORKER_SECRET }}
+          CP_ORIGIN: ${{ secrets.CP_ORIGIN }}
+        run: |
+          SSH_KEY_FILE="$(mktemp)"
+          trap 'rm -f "$SSH_KEY_FILE"' EXIT
+          chmod 600 "$SSH_KEY_FILE"
+          printf '%s\n' "$SUTTON_SSH_KEY" > "$SSH_KEY_FILE"
+          ./deploy.sh "$SUTTON_IP_ADDRESS" "$SSH_KEY_FILE" "$SUTTON_SSH_USER" --pro

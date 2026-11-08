@@ -326,7 +326,7 @@ class StatsCollector:
         state_path: Path = None,
         proc_tcp_path: Path = Path("/proc/net/tcp"),
         proc_tcp6_path: Path = Path("/proc/net/tcp6"),
-        self_domain: str = "pereval.portbuddy.tech",
+        self_domain: str = "free.pereval.top",
         cluster_config_path: Path = None,
         node_output_path: Path = None,
         role: str = "auto",
@@ -347,6 +347,8 @@ class StatsCollector:
         self.proc_tcp_path = proc_tcp_path
         self.proc_tcp6_path = proc_tcp6_path
         self.self_domain = normalize_domain(self_domain)
+        # все имена этой DNS-ноды (основное + устаревшие): их SNI — это DoH/DoT, не прокси-трафик
+        self.self_domains = {self.self_domain} if self.self_domain else set()
         self.role = (role or "auto").strip().lower()
         self.custom_salt_seed = salt_seed
         self.worker_timeout = max(0.2, float(worker_timeout))
@@ -358,7 +360,7 @@ class StatsCollector:
         self.cluster_primary_ip = ""
         self.cluster_workers = []
         self.ignored_ips = {"127.0.0.1", "::1"}
-        self.salt_seed = self.custom_salt_seed or self.self_domain or "pereval.portbuddy.tech"
+        self.salt_seed = self.custom_salt_seed or self.self_domain or "free.pereval.top"
         self._apply_cluster_config(load_cluster_config(cluster_config_path))
         if cluster_config_path and cluster_config_path.is_file():
             try:
@@ -382,6 +384,10 @@ class StatsCollector:
         cfg_domain = normalize_domain(cfg.get("domain") or "")
         if cfg_domain and not self.self_domain:
             self.self_domain = cfg_domain
+        for extra in [cfg_domain] + list(cfg.get("free_domains") or []):
+            extra = normalize_domain(extra or "")
+            if extra:
+                self.self_domains.add(extra)
         self.cluster_primary_ip = primary_ip
 
         ignored = {"127.0.0.1", "::1"}
@@ -412,7 +418,7 @@ class StatsCollector:
         if self.custom_salt_seed:
             self.salt_seed = self.custom_salt_seed
         else:
-            dom = cfg_domain or self.self_domain or "pereval.portbuddy.tech"
+            dom = cfg_domain or self.self_domain or "free.pereval.top"
             self.salt_seed = f"{dom}:{primary_ip}" if primary_ip else dom
 
     def _compute_daily_salt(self, day: int) -> str:
@@ -569,10 +575,11 @@ class StatsCollector:
     def _is_ignored_event(self, ip: str, domain: str, upstream: str, status: int) -> bool:
         if not ip or ip in self.ignored_ips or ip.startswith("127."):
             return True
-        if not domain or domain == "-" or domain == self.self_domain:
+        if not domain or domain == "-" or domain in self.self_domains:
             return True
-        if self.self_domain and domain.endswith("." + self.self_domain):
-            return True
+        for sd in self.self_domains:
+            if domain.endswith("." + sd):
+                return True
         up_clean = (upstream or "").strip()
         if not up_clean or up_clean == "-" or "127.0.0.1:9" in up_clean or "127.0.0.1:8443" in up_clean:
             return True
@@ -1109,7 +1116,7 @@ def main(argv=None) -> int:
                    help="путь к /proc/net/tcp")
     p.add_argument("--proc-tcp6", default="/proc/net/tcp6",
                    help="путь к /proc/net/tcp6")
-    p.add_argument("--self-domain", default="pereval.portbuddy.tech",
+    p.add_argument("--self-domain", default="free.pereval.top",
                    help="собственный домен сервиса (исключается из прокси-метрик)")
     p.add_argument("--role", choices=["auto", "primary", "worker"], default="auto",
                    help="роль узла: primary (опрашивает воркеров), worker (только локальный сбор) или auto")

@@ -412,7 +412,7 @@ async def run_cycle(args, state: dict) -> dict:
 
     cluster = json.loads(args.cluster_config.read_text(encoding="utf-8"))
     primary_ip = cluster.get("primary") or "153.80.200.170"
-    domain = cluster.get("domain") or "pereval.portbuddy.tech"
+    domain = cluster.get("domain") or "free.pereval.top"
     include_primary_in_dns = bool(cluster.get("include_primary_in_dns", False))
     probe_sni = cluster.get("probe_sni") or domain
     pools = poolrouting.normalize_pools(cluster.get("pools") or {})
