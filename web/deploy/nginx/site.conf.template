@@ -1,0 +1,90 @@
+# Шаблон обрабатывается entrypoint'ом образа nginx (envsubst): ${SITE_DOMAIN}
+
+server {
+    listen 80 default_server;
+    server_name ${SITE_DOMAIN} www.${SITE_DOMAIN};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+    }
+
+    location = /healthz {
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        return 301 https://${SITE_DOMAIN}$request_uri;
+    }
+}
+
+# www -> apex
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.${SITE_DOMAIN};
+    ssl_certificate     /etc/letsencrypt/live/${SITE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${SITE_DOMAIN}/privkey.pem;
+    return 301 https://${SITE_DOMAIN}$request_uri;
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name ${SITE_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${SITE_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${SITE_DOMAIN}/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Единственный доверенный источник IP клиента для приложения
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host  $host;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_read_timeout 30s;
+    proxy_send_timeout 30s;
+
+    # Статика Next.js — долгий кеш (имена файлов содержат хэш)
+    location /_next/static/ {
+        proxy_pass http://app;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location /api/auth/ {
+        limit_req zone=auth burst=20 nodelay;
+        proxy_pass http://app;
+    }
+
+    location ~ ^/api/(billing/checkout|leads|account/(ips|token|ddns-key)) {
+        limit_req zone=forms burst=10 nodelay;
+        proxy_pass http://app;
+    }
+
+    # Вебхуки lava.top — без лимитов (ретраи приходят пачками)
+    location = /api/billing/lava/webhook {
+        proxy_pass http://app;
+    }
+
+    # Long-poll нод data plane: держим соединение до 60 с
+    location /api/internal/ {
+        proxy_pass http://app;
+        proxy_read_timeout 60s;
+        proxy_buffering off;
+    }
+
+    # DynDNS2 от роутеров
+    location ~ ^/(nic/update|api/ddns/update)$ {
+        limit_req zone=ddns burst=3 nodelay;
+        proxy_pass http://app;
+    }
+
+    location / {
+        proxy_pass http://app;
+    }
+}
