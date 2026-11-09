@@ -108,11 +108,9 @@ export function describeInvoiceRejection(body: string): string {
 export class LavaError extends Error {
   status: number;
   body: string;
-  body: string;
   constructor(status: number, body: string) {
     super(`lava.top HTTP ${status}: ${body.slice(0, 300)}`);
     this.status = status;
-    this.body = body;
     this.body = body;
   }
 }
