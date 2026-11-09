@@ -86,12 +86,33 @@ export const WebhookEnvelope = z.object({
 });
 export type WebhookEnvelope = z.infer<typeof WebhookEnvelope>;
 
+/**
+ * Человекочитаемое объяснение отказа lava.top при создании счёта (HTTP 400) — для ответа
+ * пользователю вместо общего 500. Известные тексты переводим, остальные показываем как есть.
+ */
+export function describeInvoiceRejection(body: string): string {
+  let raw = body;
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown; message?: unknown };
+    raw = String(parsed.error ?? parsed.message ?? body);
+  } catch {
+    /* не JSON — оставляем как есть */
+  }
+  const lower = raw.toLowerCase();
+  if (lower.includes("incorrect email")) {
+    return "Платёжная система lava.top не принимает этот email для покупки (так бывает с адресом, на который зарегистрирован магазин продавца). Оплатите с другого email или войдите другим способом.";
+  }
+  return `Платёжная система lava.top отклонила запрос: ${raw.slice(0, 200)}`;
+}
+
 export class LavaError extends Error {
   status: number;
+  body: string;
   body: string;
   constructor(status: number, body: string) {
     super(`lava.top HTTP ${status}: ${body.slice(0, 300)}`);
     this.status = status;
+    this.body = body;
     this.body = body;
   }
 }

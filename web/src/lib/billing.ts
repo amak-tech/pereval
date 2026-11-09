@@ -91,16 +91,26 @@ export async function checkout(input: CheckoutInput): Promise<{ paymentUrl: stri
 
   const ref = crypto.randomUUID();
   const payBase = `${e.PUBLIC_ORIGIN}/account/pay?ref=${ref}`;
-  const created = await lava.createInvoice({
-    email: user.email,
-    offerId: e.LAVA_OFFER_ID_PRO || "mock-offer",
-    currency: input.currency,
-    periodicity: "MONTHLY",
-    paymentMethod: lava.paymentMethodFor(input.currency),
-    buyerLanguage: "RU",
-    clientUtm: input.utm,
-    returnUrls: { success: `${payBase}&result=success`, failure: `${payBase}&result=failure`, cancel: `${payBase}&result=cancel` },
-  });
+  let created: Awaited<ReturnType<typeof lava.createInvoice>>;
+  try {
+    created = await lava.createInvoice({
+      email: user.email,
+      offerId: e.LAVA_OFFER_ID_PRO || "mock-offer",
+      currency: input.currency,
+      periodicity: "MONTHLY",
+      paymentMethod: lava.paymentMethodFor(input.currency),
+      buyerLanguage: "RU",
+      clientUtm: input.utm,
+      returnUrls: { success: `${payBase}&result=success`, failure: `${payBase}&result=failure`, cancel: `${payBase}&result=cancel` },
+    });
+  } catch (err) {
+    // 4xx от lava.top — ошибка данных покупателя (например, email владельца магазина), а не наша: отвечаем 400 с объяснением
+    if (err instanceof lava.LavaError && err.status >= 400 && err.status < 500 && err.status !== 401 && err.status !== 403) {
+      console.warn(`[billing] lava.top отклонил счёт для ${user.email}: ${err.message}`);
+      throw new HttpError(400, lava.describeInvoiceRejection(err.body), "lava_rejected");
+    }
+    throw err;
+  }
   if (!created.paymentUrl) throw new HttpError(502, "Платёжная система не вернула ссылку на оплату. Попробуйте позже.", "no_payment_url");
   await db().insert(schema.invoices).values({
     id: created.id,

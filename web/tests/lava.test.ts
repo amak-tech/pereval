@@ -80,3 +80,17 @@ describe("mock-клиент lava.top", () => {
     expect(paid.subscriptionDetails?.expiredAt).toBeTruthy();
   });
 });
+
+import { describeInvoiceRejection } from "@/lib/lava";
+
+describe("describeInvoiceRejection", () => {
+  it("email владельца магазина — понятное объяснение", () => {
+    const msg = describeInvoiceRejection('{"error":"Incorrect email to purchase","details":{},"timestamp":"2026-11-10T01:13:40+02:00"}');
+    expect(msg).toMatch(/не принимает этот email/);
+    expect(msg).toMatch(/другого email/);
+  });
+  it("прочие ошибки — текст lava.top как есть", () => {
+    expect(describeInvoiceRejection('{"error":"Offer not found"}')).toBe("Платёжная система lava.top отклонила запрос: Offer not found");
+    expect(describeInvoiceRejection("plain text")).toBe("Платёжная система lava.top отклонила запрос: plain text");
+  });
+});
