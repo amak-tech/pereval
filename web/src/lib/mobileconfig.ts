@@ -70,6 +70,8 @@ ${dnsSettings}
       <string>${uuidv5(`${opts.payloadUuidSeed}:dnsSettings`)}</string>
       <key>PayloadVersion</key>
       <integer>1</integer>
+      <key>ProhibitDisablement</key>
+      <false/>
     </dict>
   </array>
   <key>PayloadDescription</key>
@@ -80,6 +82,8 @@ ${dnsSettings}
   <string>${esc(opts.identifierBase)}</string>
   <key>PayloadRemovalDisallowed</key>
   <false/>
+  <key>PayloadScope</key>
+  <string>System</string>
   <key>PayloadType</key>
   <string>Configuration</string>
   <key>PayloadUUID</key>

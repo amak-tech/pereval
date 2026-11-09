@@ -3,3 +3,9 @@
 /build/
 __pycache__/
 *.py[cod]
+.next
+node_modules
+dist
+.env
+/web/next-env.d.ts
+/web/tsconfig.tsbuildinfo
