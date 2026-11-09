@@ -1221,6 +1221,11 @@ PYC
 	# nftables: доступ к 80/443 только для подписчиков (набор синхронизирует агент)
 	mkdir -p /etc/nftables.d
 	NFT_TRUSTED="$(printf '%s' "$TRUSTED_IPS" | tr ',' ' ' | xargs | tr ' ' ',')"
+	# правило для доверенных IP собираем заранее: внутри ${VAR:+...} фигурные скобки nft ломают раскрытие
+	NFT_TRUSTED_RULE=""
+	if [[ -n $NFT_TRUSTED ]]; then
+		NFT_TRUSTED_RULE="		tcp dport { 80, 443 } ip saddr { $NFT_TRUSTED } accept"
+	fi
 	cat >/etc/nftables.d/pereval-pro.nft <<NFT
 table inet pereval_pro {
 	set pro_clients {
@@ -1230,7 +1235,7 @@ table inet pereval_pro {
 		type filter hook input priority -10; policy accept;
 		iif lo accept
 		tcp dport { 80, 443 } ip saddr @pro_clients accept
-		${NFT_TRUSTED:+tcp dport { 80, 443 } ip saddr { $NFT_TRUSTED } accept}
+$NFT_TRUSTED_RULE
 		tcp dport { 80, 443 } drop
 		udp dport 443 reject
 	}
