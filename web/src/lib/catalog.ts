@@ -14,7 +14,8 @@ export type PoolInfo = { note: string; fallback: string | null; strict_allowlist
 export type WorkerInfo = { ip: string; name: string; weight: number; pools: string[] };
 
 export type Catalog = {
-  meta: { name: string; origin: string };
+  /** cert_domains — имена единого wildcard-сертификата инфраструктуры */
+  meta: { name: string; origin: string; cert_domains: string[] };
   free: {
     domain: string;
     legacy_domains: string[];

@@ -4,6 +4,7 @@ name: Deploy (DNS/proxy nodes)
 #   * Free-кластер (primary 153.80.200.170 + воркеры из cluster-nodes.json) — всегда;
 #   * Pro-ноды (pro.dns_ip + pro.workers из services.yaml) — при deploy_pro=true
 #     (нужны секреты PRO_DNS_SECRET / PRO_WORKER_SECRET, выданные `pnpm admin node add`).
+#   Единый TLS-сертификат раздаёт control plane: Free primary забирает его по FREE_PRIMARY_SECRET.
 # Сайт/кабинет/API (pereval.top) деплоит отдельный workflow web.yml.
 
 on:
@@ -53,6 +54,8 @@ jobs:
           SUTTON_IP_ADDRESS: ${{ secrets.SUTTON_IP_ADDRESS }}
           SUTTON_SSH_KEY: ${{ secrets.SUTTON_SSH_KEY }}
           SUTTON_SSH_USER: ${{ secrets.SUTTON_SSH_USER }}
+          FREE_PRIMARY_SECRET: ${{ secrets.FREE_PRIMARY_SECRET }}
+          CP_ORIGIN: ${{ secrets.CP_ORIGIN }}
           # Optional per-worker secrets (referenced via ssh_user_env / ssh_key_env in services.yaml):
 #          WORKER1_SSH_USER: ${{ secrets.WORKER1_SSH_USER }}
 #          WORKER1_SSH_KEY: ${{ secrets.WORKER1_SSH_KEY }}

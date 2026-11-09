@@ -3,9 +3,7 @@ import { db, schema } from "@/lib/db/client";
 import { enqueueAdminMail, outboxStats } from "@/lib/mail";
 import { adminAlertMail } from "@/lib/mail-templates";
 import { getSetting, setSetting } from "@/lib/settings";
-import { certDaysLeft } from "@/jobs/certwatch";
-import { catalog } from "@/lib/catalog";
-import { env } from "@/lib/env";
+import { certStatus, formatHostLine } from "@/jobs/certwatch";
 
 /** Ежедневный дайджест администратору (в 08:00 по Москве). */
 export async function sendDailyDigest(now: Date = new Date()): Promise<{ sent: boolean }> {
@@ -32,7 +30,7 @@ export async function sendDailyDigest(now: Date = new Date()): Promise<{ sent: b
   const [leads] = await db().select({ n: dsql<number>`count(*)::int` }).from(schema.leads).where(gt(schema.leads.createdAt, since));
   const nodesRows = await db().select().from(schema.nodes);
   const mail = await outboxStats();
-  const cert = await certDaysLeft(catalog.pro?.domain ?? env().PRO_DOMAIN);
+  const cert = await certStatus(now);
   const [activeUsers] = await db()
     .select({ n: dsql<number>`count(distinct ${schema.tokenActivity.userId})::int` })
     .from(schema.tokenActivity)
@@ -53,7 +51,8 @@ export async function sendDailyDigest(now: Date = new Date()): Promise<{ sent: b
       ? nodesRows.map((n) => `  ${n.name} (${n.kind}) — последний контакт ${n.lastSeenAt ? n.lastSeenAt.toISOString() : "никогда"}${n.enabled ? "" : " [отключена]"}`)
       : ["  не зарегистрированы"]),
     ``,
-    `Сертификат ${catalog.pro?.domain ?? env().PRO_DOMAIN}: ${cert ? `${cert.daysLeft} дн. (до ${cert.notAfter})` : "недоступен"}`,
+    `Единый сертификат${cert.source === "cp" ? " (на CP)" : cert.source === "tls" ? " (по TLS сайта)" : ""}: ${cert.notAfter ? `${cert.daysLeft} дн. (до ${cert.notAfter.toISOString().slice(0, 10)})` : "не определён"}`,
+    ...cert.hosts.map(formatHostLine),
   ];
   const t = adminAlertMail(`Дайджест Перевала за ${day}`, lines.join("\n"));
   await enqueueAdminMail(t.subject.replace("⚠️ ", "📊 "), t.text, t.html);

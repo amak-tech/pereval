@@ -22,7 +22,8 @@ RUN pnpm build
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
-RUN addgroup -S app && adduser -S app -G app
+# uid/gid фиксированы: nginx-контейнер публикует копию сертификата с группой 10001 (см. deploy/nginx/entrypoint-extra.sh)
+RUN addgroup -S -g 10001 app && adduser -S -u 10001 -G app app
 # Next standalone (server.js + минимальные node_modules)
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static

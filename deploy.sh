@@ -45,6 +45,7 @@ FREE_FILES=(
 	"$SRC_DIR/stats_collector.py"
 	"$SRC_DIR/doh_proxy.py"
 	"$SRC_DIR/healthcheck.py"
+	"$SRC_DIR/cert_sync.py"
 )
 # Pro DNS-нода
 PRO_DNS_FILES=(
@@ -54,6 +55,7 @@ PRO_DNS_FILES=(
 	"$BUILD_DIR/pro-nodes.json"
 	"$SRC_DIR/pro_dns.py"
 	"$SRC_DIR/healthcheck.py"
+	"$SRC_DIR/cert_sync.py"
 )
 # Pro прокси-воркер
 PRO_WORKER_FILES=(
@@ -115,8 +117,11 @@ usage() {
   ./deploy.sh 203.0.113.10 ~/.ssh/id_ed25519 root --role pro-dns
   ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519 ubuntu --port 2222 --dry-run
 
-Секреты Pro-нод (см. web: pnpm admin node add): PRO_DNS_SECRET, PRO_WORKER_SECRET (или PRO_WORKER_<N>_SECRET)
-в переменных окружения — попадут в /etc/pereval/node.env. CP_ORIGIN по умолчанию = site_origin из services.yaml.
+Секреты нод (см. web: pnpm admin node add): FREE_PRIMARY_SECRET (Free primary: забирает единый TLS-сертификат
+с control plane), PRO_DNS_SECRET, PRO_WORKER_SECRET — в переменных окружения, попадут в /etc/pereval/node.env.
+CP_ORIGIN по умолчанию = site_origin из services.yaml.
+TLS: один wildcard-сертификат (cert_domains в cluster-nodes.json) выпускается на control plane
+(web/deploy/issue-cert.sh) и раздаётся нодам скриптом cert_sync.py по systemd-таймеру; certbot на нодах не нужен.
 Сайт, кабинет и API (pereval.top) разворачиваются отдельно: web/compose.yaml + .github/workflows/web.yml.
 USAGE
 }
@@ -293,6 +298,7 @@ print(f"PRIMARY={data.get('primary') or ''}")
 print(f"DOMAIN={data.get('domain') or ''}")
 print("FREE_DOMAINS=" + " ".join(data.get("free_domains") or ([data["domain"]] if data.get("domain") else [])))
 print(f"SITE_ORIGIN={data.get('site_origin') or ''}")
+print("CERT_DOMAINS=" + " ".join(data.get("cert_domains") or pro.get("cert_domains") or []))
 def worker_lines(prefix, workers):
     for idx, w in enumerate(workers or [], 1):
         if not isinstance(w, dict) or not w.get("ip"):
@@ -321,6 +327,7 @@ CLUSTER_PRIMARY=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRIMARY=//p' | head
 DOMAIN=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^DOMAIN=//p' | head -1)
 FREE_DOMAINS=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^FREE_DOMAINS=//p' | head -1)
 SITE_ORIGIN=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^SITE_ORIGIN=//p' | head -1)
+CERT_DOMAINS=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^CERT_DOMAINS=//p' | head -1)
 PRO_DOMAIN=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_DOMAIN=//p' | head -1)
 PRO_DNS_IP=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_DNS_IP=//p' | head -1)
 PRO_CP_IP=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_CP_IP=//p' | head -1)
@@ -438,7 +445,15 @@ prepare_local_stage() {
 		info "$f ($(wc -c <"$f" | tr -d ' ') байт)"
 	done
 
-	# секреты Pro-нод (из GitHub Secrets / окружения) — попадут в /etc/pereval/node.env
+	# секреты нод (из GitHub Secrets / окружения) — попадут в /etc/pereval/node.env
+	if [[ -n ${FREE_PRIMARY_SECRET:-} ]]; then
+		cat >"$LOCAL_STAGE/node.primary.env" <<EOF
+CP_ORIGIN=$CP_ORIGIN
+NODE_SECRET=$FREE_PRIMARY_SECRET
+EOF
+		chmod 600 "$LOCAL_STAGE/node.primary.env"
+		info "подготовлен node.env для Free primary (cert_sync)"
+	fi
 	if [[ -n ${PRO_DNS_SECRET:-} ]]; then
 		cat >"$LOCAL_STAGE/node.pro-dns.env" <<EOF
 CP_ORIGIN=$CP_ORIGIN
@@ -463,9 +478,14 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 
-STAGE="$1"; STAMP="$2"; SERVER_IP="$3"; DOMAIN="$4"; NODE_ROLE="${5:-primary}"; FREE_DOMAINS="${6:-$4}"
+STAGE="$1"; STAMP="$2"; SERVER_IP="$3"; DOMAIN="$4"; NODE_ROLE="${5:-primary}"; FREE_DOMAINS="${6:-$4}"; CP_ORIGIN="${7:-}"; CERT_DOMAINS="${8:-}"
 BACKUP="/var/backups/geoblock/$STAMP"
 LIB_DIR="/usr/local/lib/pereval"
+ETC_DIR="/etc/pereval"
+NODE_ENV_DST="/etc/pereval/node.env"
+CERT_SYNC_DST="/usr/local/bin/pereval-cert-sync.py"
+CERT_SYNC_UNIT="/etc/systemd/system/pereval-cert-sync.service"
+CERT_SYNC_TIMER="/etc/systemd/system/pereval-cert-sync.timer"
 DNSMASQ_DST="/etc/dnsmasq.conf"
 DNSMASQ_BASE_DST="/etc/nginx/geoblock/dnsmasq-base.conf"
 DNSMASQ_OLD="/etc/dnsmasq.d/dnsmasq-geoblock.conf"
@@ -514,7 +534,7 @@ fi
 mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" "$LIB_DIR" /etc/sysctl.d
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json stats_collector.py doh_proxy.py healthcheck.py poolrouting.py dnscommon.py; do
+for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json stats_collector.py doh_proxy.py healthcheck.py poolrouting.py dnscommon.py cert_sync.py; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
 say "файлы получены (роль узла: $NODE_ROLE)"
@@ -643,18 +663,24 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: 
 	fi
 fi
 
-# --- TLS-сертификат: привязка к Let's Encrypt или временный самоподписанный --
+# --- TLS-сертификат: боевой приезжает с control plane (cert_sync, ниже). Пока его нет —
+#     старый lineage Let's Encrypt этой ноды (если остался) или временный самоподписанный.
 LE_LIVE="/etc/letsencrypt/live/$DOMAIN"
-if [[ -f "$LE_LIVE/fullchain.pem" && -f "$LE_LIVE/privkey.pem" ]]; then
-	ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
-	ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
-elif [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
-	openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
-		-subj "/CN=$DOMAIN" \
-		-keyout "$SSL_DIR/privkey.pem" \
-		-out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
-	chmod 600 "$SSL_DIR/privkey.pem"
-	say "создан временный самоподписанный сертификат для $DOMAIN"
+if [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
+	if [[ -f "$LE_LIVE/fullchain.pem" && -f "$LE_LIVE/privkey.pem" ]]; then
+		ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
+		ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
+		say "временно использую сертификат из $LE_LIVE"
+	else
+		SAN="DNS:$DOMAIN"
+		for d in $FREE_DOMAINS; do [[ $d == "$DOMAIN" ]] || SAN="$SAN,DNS:$d"; done
+		openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+			-subj "/CN=$DOMAIN" -addext "subjectAltName=$SAN" \
+			-keyout "$SSL_DIR/privkey.pem" \
+			-out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
+		chmod 600 "$SSL_DIR/privkey.pem"
+		say "создан временный самоподписанный сертификат для $FREE_DOMAINS"
+	fi
 fi
 
 # --- общие Python-модули (poolrouting, dnscommon) --------------------------
@@ -847,44 +873,68 @@ else
 	fi
 fi
 
-# --- выпуск и автопродление сертификата Let's Encrypt (только на Primary) -
+# --- единый TLS-сертификат с control plane (только на Primary) ---------------
+# Один wildcard на всю инфраструктуру выпускается на pereval.top и раздаётся
+# через /api/internal/v1/node/cert. Secret ноды — FREE_PRIMARY_SECRET → node.env.
 if [[ $NODE_ROLE != "primary" ]]; then
-	say "узел с ролью worker — пропуск выпуска сертификата Let's Encrypt (используется локальный сертификат)"
-elif [[ $DOMAIN == *.example || $DOMAIN == *.invalid || $DOMAIN == *.localhost ]]; then
-	say "ВНИМАНИЕ: домен $DOMAIN тестовый — пропуск выпуска сертификата Let's Encrypt (укажите настоящий meta.origin в services.yaml)"
+	say "узел с ролью worker — TLS не терминирует, сертификат не нужен"
 else
-	if ! command -v certbot >/dev/null 2>&1; then
-		say "устанавливаю certbot..."
-		DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq >/dev/null
-		DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq certbot >/dev/null
-		say "certbot установлен"
-	fi
-
-	mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-	cat >/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
-#!/usr/bin/env bash
-systemctl reload nginx
-HOOK
-	chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-
+	# certbot этой ноды больше не нужен: его lineage заменяет единый сертификат
 	if systemctl list-unit-files certbot.timer >/dev/null 2>&1; then
-		systemctl enable --now certbot.timer >/dev/null 2>&1 || true
-		say "автопродление certbot.timer активно"
+		systemctl disable --now certbot.timer >/dev/null 2>&1 || true
+	fi
+	rm -f /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
+	mkdir -p "$ETC_DIR"; chmod 0750 "$ETC_DIR"
+	if [[ -f "$STAGE/node.env" ]]; then
+		install -m 0640 "$STAGE/node.env" "$NODE_ENV_DST"
+		say "обновлён $NODE_ENV_DST"
+	elif [[ ! -f "$NODE_ENV_DST" ]]; then
+		cat >"$NODE_ENV_DST" <<ENVEOF
+CP_ORIGIN=${CP_ORIGIN:-https://pereval.top}
+NODE_SECRET=
+ENVEOF
+		chmod 0640 "$NODE_ENV_DST"
+		say "создан шаблон $NODE_ENV_DST — впишите NODE_SECRET (web: pnpm admin node add primary free_primary $SERVER_IP)"
 	fi
 
-	CERT_ARGS=()
-	for d in $FREE_DOMAINS; do CERT_ARGS+=(-d "$d"); done
-	say "сертификат Let's Encrypt для: $FREE_DOMAINS (имена должны резолвиться в этот узел)"
-	if certbot certonly --webroot -w "$WEB_DIR" "${CERT_ARGS[@]}" --cert-name "$DOMAIN" \
-		--non-interactive --agree-tos --register-unsafely-without-email \
-		--keep-until-expiring --expand >/tmp/certbot.log 2>&1; then
-		ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
-		ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
-		nginx -t 2>/tmp/nginx-test.log && systemctl reload nginx
-		say "сертификат Let's Encrypt для $DOMAIN активен"
+	install -m 0755 "$STAGE/cert_sync.py" "$CERT_SYNC_DST"
+	EXPECT_ARGS=""
+	for d in $FREE_DOMAINS; do EXPECT_ARGS="$EXPECT_ARGS --expect $d"; done
+	cat >"$CERT_SYNC_UNIT" <<UNIT
+[Unit]
+Description=Pereval: fetch the shared TLS certificate from control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=$NODE_ENV_DST
+ExecStart=/usr/bin/python3 $CERT_SYNC_DST --out-dir $SSL_DIR --key-mode 0600$EXPECT_ARGS --reload 'nginx -t && systemctl reload nginx'
+UNIT
+	cat >"$CERT_SYNC_TIMER" <<UNIT
+[Unit]
+Description=Pereval: hourly TLS certificate sync with control plane
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=10min
+Unit=pereval-cert-sync.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable --now pereval-cert-sync.timer >/dev/null 2>&1 || true
+	if grep -qE '^NODE_SECRET=.+' "$NODE_ENV_DST"; then
+		if systemctl start pereval-cert-sync.service; then
+			say "сертификат синхронизирован с control plane ($(python3 -c "import json;print(json.load(open('$SSL_DIR/.cert-sync.json'))['not_after'])" 2>/dev/null || echo 'без изменений'))"
+		else
+			say "ВНИМАНИЕ: cert_sync не смог получить сертификат (journalctl -u pereval-cert-sync); работает текущий"
+		fi
 	else
-		say "ВНИМАНИЕ: certbot не смог выпустить сертификат для $DOMAIN (см. /tmp/certbot.log)"
-		cat /tmp/certbot.log >&2 || true
+		say "ВНИМАНИЕ: NODE_SECRET пуст — боевой сертификат не получен. Выпустите единый сертификат на CP (web/deploy/issue-cert.sh) и задайте FREE_PRIMARY_SECRET"
 	fi
 fi
 
@@ -951,7 +1001,9 @@ AGENT_UNIT="/etc/systemd/system/pereval-pro-agent.service"
 COLLECTOR_DST="/usr/local/bin/pereval-stats-collector.py"
 STATS_UNIT_DST="/etc/systemd/system/pereval-stats.service"
 STATS_STATE_DIR="/var/lib/pereval-stats"
-HOOK="/etc/letsencrypt/renewal-hooks/deploy/pereval-pro-dns.sh"
+CERT_SYNC_DST="/usr/local/bin/pereval-cert-sync.py"
+CERT_SYNC_UNIT="/etc/systemd/system/pereval-cert-sync.service"
+CERT_SYNC_TIMER="/etc/systemd/system/pereval-cert-sync.timer"
 
 say()  { printf '    %s\n' "$*"; }
 fail() { printf 'ошибка на сервере (%s): %s\n' "$SERVER_IP" "$*" >&2; exit 1; }
@@ -1015,7 +1067,7 @@ ENVEOF
 fi
 
 if [[ $NODE_ROLE == "pro-dns" ]]; then
-	for f in pro-dns-nginx.conf cache-dnsmasq.conf pro-policy-map.json pro-nodes.json pro_dns.py; do
+	for f in pro-dns-nginx.conf cache-dnsmasq.conf pro-policy-map.json pro-nodes.json pro_dns.py cert_sync.py; do
 		[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал"
 	done
 	id -u pereval-dns >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin pereval-dns
@@ -1025,33 +1077,55 @@ if [[ $NODE_ROLE == "pro-dns" ]]; then
 	install -m 0644 "$STAGE/pro-nodes.json"      "$ETC_DIR/pro-nodes.json"
 	install -m 0755 "$STAGE/pro_dns.py"          "$PRO_DNS_DST"
 
-	# сертификат: копия из Let's Encrypt (wildcard, выпускается вручную) или временный самоподписанный
-	cat >"$HOOK.tmp" <<'HOOKEOF'
-#!/usr/bin/env bash
-# deploy-hook certbot: копирует wildcard-сертификат в /etc/pereval/ssl, перезагружает nginx и pro_dns
-set -e
-DOMAIN_DIR="${RENEWED_LINEAGE:-/etc/letsencrypt/live/__PRO_DOMAIN__}"
-install -m 0644 -o root -g pereval-dns "$DOMAIN_DIR/fullchain.pem" /etc/pereval/ssl/fullchain.pem
-install -m 0640 -o root -g pereval-dns "$DOMAIN_DIR/privkey.pem"   /etc/pereval/ssl/privkey.pem
-nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
-systemctl kill -s HUP pereval-pro-dns.service 2>/dev/null || true
-HOOKEOF
-	sed -i "s/__PRO_DOMAIN__/$PRO_DOMAIN/" "$HOOK.tmp"
-	mkdir -p "$(dirname "$HOOK")"
-	install -m 0755 "$HOOK.tmp" "$HOOK"; rm -f "$HOOK.tmp"
-	LE_LIVE="/etc/letsencrypt/live/$PRO_DOMAIN"
-	if [[ -f "$LE_LIVE/fullchain.pem" && -f "$LE_LIVE/privkey.pem" ]]; then
-		RENEWED_LINEAGE="$LE_LIVE" bash "$HOOK" || true
-		say "сертификат Let's Encrypt скопирован из $LE_LIVE"
-	elif [[ ! -f "$SSL_DIR/fullchain.pem" ]]; then
+	# сертификат: единый wildcard с control plane (cert_sync по таймеру); пока его нет — самоподписанный
+	rm -f /etc/letsencrypt/renewal-hooks/deploy/pereval-pro-dns.sh
+	systemctl disable --now certbot.timer >/dev/null 2>&1 || true
+	if [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
 		openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -subj "/CN=$PRO_DOMAIN" \
 			-addext "subjectAltName=DNS:$PRO_DOMAIN,DNS:*.$PRO_DOMAIN" \
 			-keyout "$SSL_DIR/privkey.pem" -out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
-		chgrp pereval-dns "$SSL_DIR/privkey.pem"; chmod 0640 "$SSL_DIR/privkey.pem"
-		say "ВНИМАНИЕ: временный самоподписанный сертификат. Выпустите wildcard: certbot certonly --manual --preferred-challenges dns -d $PRO_DOMAIN -d '*.$PRO_DOMAIN' --deploy-hook $HOOK"
+		say "создан временный самоподписанный сертификат для $PRO_DOMAIN"
 	fi
-	# certbot.timer не умеет продлевать manual-lineage — не шумим
-	systemctl disable --now certbot.timer >/dev/null 2>&1 || true
+	chgrp pereval-dns "$SSL_DIR/privkey.pem" "$SSL_DIR/fullchain.pem" 2>/dev/null || true
+	chmod 0640 "$SSL_DIR/privkey.pem"; chmod 0644 "$SSL_DIR/fullchain.pem"
+	install -m 0755 "$STAGE/cert_sync.py" "$CERT_SYNC_DST"
+	cat >"$CERT_SYNC_UNIT" <<UNIT
+[Unit]
+Description=Pereval: fetch the shared TLS certificate from control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=$NODE_ENV_DST
+ExecStart=/usr/bin/python3 $CERT_SYNC_DST --out-dir $SSL_DIR --group pereval-dns --key-mode 0640 --expect $PRO_DOMAIN --expect token.$PRO_DOMAIN --reload 'nginx -t && systemctl reload nginx' --reload 'systemctl kill -s HUP pereval-pro-dns.service || true'
+UNIT
+	cat >"$CERT_SYNC_TIMER" <<UNIT
+[Unit]
+Description=Pereval: hourly TLS certificate sync with control plane
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=10min
+Unit=pereval-cert-sync.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable --now pereval-cert-sync.timer >/dev/null 2>&1 || true
+	# первая синхронизация — до запуска nginx/pro_dns, чтобы DoT/DoH сразу поднялись с боевым сертификатом
+	if grep -qE '^NODE_SECRET=.+' "$NODE_ENV_DST"; then
+		if python3 "$CERT_SYNC_DST" --out-dir "$SSL_DIR" --group pereval-dns --key-mode 0640 --expect "$PRO_DOMAIN" --expect "token.$PRO_DOMAIN" \
+			--cp-origin "$(sed -n 's/^CP_ORIGIN=//p' "$NODE_ENV_DST" | head -1)" --node-secret "$(sed -n 's/^NODE_SECRET=//p' "$NODE_ENV_DST" | head -1)"; then
+			say "сертификат синхронизирован с control plane"
+		else
+			say "ВНИМАНИЕ: cert_sync не смог получить сертификат с control plane — работает текущий"
+		fi
+	else
+		say "ВНИМАНИЕ: NODE_SECRET пуст — боевой сертификат не получен (web/deploy/issue-cert.sh на CP, затем PRO_DNS_SECRET)"
+	fi
 
 	# локальный кеш-резолвер dnsmasq на 127.0.0.1:53
 	dnsmasq --test -C "$STAGE/cache-dnsmasq.conf" || fail "dnsmasq не принимает cache-dnsmasq.conf"
@@ -1307,7 +1381,7 @@ DRYPRE
 		if ((is_pro)); then
 			if [[ $node_role == "pro-dns" ]]; then
 				for f in "${PRO_DNS_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-dns ($PRO_DOMAIN)"; done
-				printf '    затем: dnsmasq(cache) :53, resolv.conf, nginx (DoH), pereval-pro-dns (:53/:853/:8057), сертификат из /etc/letsencrypt/live/%s или самоподписанный\n' "$PRO_DOMAIN"
+				printf '    затем: dnsmasq(cache) :53, resolv.conf, nginx (DoH), pereval-pro-dns (:53/:853/:8057), pereval-cert-sync.timer (единый сертификат с CP: %s)\n' "$CERT_DOMAINS"
 			else
 				for f in "${PRO_WORKER_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-worker"; done
 				printf '    затем: nginx (SNI/Host-прокси), nftables pereval_pro, pereval-pro-agent, pereval-stats\n'
@@ -1323,9 +1397,10 @@ DRYPRE
 		printf '    %-34s -> %s\n' "$SRC_DIR/stats_collector.py" "/usr/local/bin/pereval-stats-collector.py"
 		printf '    %-34s -> %s\n' "$SRC_DIR/doh_proxy.py" "/usr/local/bin/pereval-doh-proxy.py"
 		printf '    %-34s -> %s\n' "$SRC_DIR/healthcheck.py" "/usr/local/bin/pereval-healthcheck.py"
+		[[ $node_role == "primary" ]] && printf '    %-34s -> %s\n' "$SRC_DIR/cert_sync.py" "/usr/local/bin/pereval-cert-sync.py"
 		printf '    %-34s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
 		if [[ $node_role == "primary" ]]; then
-			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, restart pereval-healthcheck, certbot (%s), удаление pereval-leads\n' "$FREE_DOMAINS"
+			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, restart pereval-healthcheck, pereval-cert-sync.timer (единый сертификат с CP: %s), удаление pereval-leads\n' "$CERT_DOMAINS"
 		else
 			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats (прямой выход origin)\n'
 		fi
@@ -1390,7 +1465,6 @@ command -v dnsmasq >/dev/null 2>&1 || need_pkgs+=(dnsmasq)
 command -v python3 >/dev/null 2>&1 || need_pkgs+=(python3)
 command -v openssl >/dev/null 2>&1 || need_pkgs+=(openssl)
 if [[ "${NODE_ROLE_HINT:-}" == "pro-worker" ]]; then command -v nft >/dev/null 2>&1 || need_pkgs+=(nftables); fi
-if [[ "${NODE_ROLE_HINT:-}" == "pro-dns" ]]; then command -v certbot >/dev/null 2>&1 || need_pkgs+=(certbot); fi
 command -v dig >/dev/null 2>&1 || need_pkgs+=(dnsutils)
 command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)
 command -v bmon >/dev/null 2>&1 || need_pkgs+=(bmon)
@@ -1452,7 +1526,7 @@ PRE
 			"$sudo_cmd bash -c 'if [ -f \"$stage/node.$node_role.env\" ]; then cp \"$stage/node.$node_role.env\" \"$stage/node.env\"; fi; bash \"$stage/apply-pro.sh\" \"$stage\" \"$stamp\" \"$node_ip\" \"$PRO_DOMAIN\" \"$node_role\" \"$PRO_DNS_IP\" \"$trusted\" \"$CP_ORIGIN\"'" || apply_rc=$?
 	else
 		ssh "${ssh_opts[@]}" "$target" \
-			"$sudo_cmd bash '$stage/apply.sh' '$stage' '$stamp' '$node_ip' '$DOMAIN' '$node_role' '$FREE_DOMAINS'" || apply_rc=$?
+			"$sudo_cmd bash -c 'if [ -f \"$stage/node.$node_role.env\" ]; then cp \"$stage/node.$node_role.env\" \"$stage/node.env\"; fi; bash \"$stage/apply.sh\" \"$stage\" \"$stamp\" \"$node_ip\" \"$DOMAIN\" \"$node_role\" \"$FREE_DOMAINS\" \"$CP_ORIGIN\" \"$CERT_DOMAINS\"'" || apply_rc=$?
 	fi
 
 	ssh "${ssh_opts[@]}" "$target" "rm -rf '$stage'" 2>/dev/null || true

@@ -1,7 +1,13 @@
 {
   "meta": {
     "name": "Перевал",
-    "origin": "https://pereval.top"
+    "origin": "https://pereval.top",
+    "cert_domains": [
+      "pereval.top",
+      "*.pereval.top",
+      "*.pro.pereval.top",
+      "pereval.portbuddy.tech"
+    ]
   },
   "free": {
     "domain": "free.pereval.top",

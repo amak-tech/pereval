@@ -11,6 +11,8 @@ const schema = z.object({
   FREE_DNS_IP: z.string().default("153.80.200.170"),
   PRO_DOMAIN: z.string().default("pro.pereval.top"),
   PRO_DNS_IP: z.string().default(""),
+  /** каталог с копией единого сертификата (fullchain.pem + privkey.pem), публикует nginx-контейнер */
+  CERT_DIR: z.string().default(""),
   DATABASE_URL: z.string().default("postgres://pereval:pereval@localhost:5432/pereval"),
 
   AUTH_SECRET: z.string().min(16).default("dev-only-secret-change-me-please-0000"),

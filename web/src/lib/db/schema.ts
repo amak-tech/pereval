@@ -233,7 +233,8 @@ export const aclDynamic = pgTable(
   (t) => [index("acl_dynamic_expires_idx").on(t.expiresAt)],
 );
 
-export type NodeKind = "pro_dns" | "pro_worker" | "dedicated";
+/** free_primary — Free Primary (получает единый сертификат); pro_dns / pro_worker — Pro; dedicated — задел. */
+export type NodeKind = "free_primary" | "pro_dns" | "pro_worker" | "dedicated";
 
 export const nodes = pgTable("nodes", {
   id: text("id")

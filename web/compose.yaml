@@ -3,8 +3,13 @@
 #   cp deploy/.env.example .env && $EDITOR .env
 #   docker compose pull && docker compose up -d
 #
-# nginx терминирует TLS (Let's Encrypt через certbot, HTTP-01), проксирует в app:3000,
+# nginx терминирует TLS единым wildcard-сертификатом инфраструктуры (pereval.top,
+# *.pereval.top, *.pro.pereval.top, устаревшие Free-имена), проксирует в app:3000,
 # ставит X-Real-IP (единственный доверенный источник IP клиента для приложения).
+#
+# Сертификат выпускается вручную (DNS-01): ./deploy/issue-cert.sh. nginx-контейнер
+# публикует копию в /etc/letsencrypt/pereval (права для app), а ноды забирают её через
+# /api/internal/v1/node/cert (cert_sync.py).
 name: pereval
 
 services:
@@ -16,6 +21,9 @@ services:
     environment:
       DATABASE_URL: postgres://pereval:${POSTGRES_PASSWORD}@postgres:5432/pereval
       TRUSTED_PROXY_IPS: nginx
+      CERT_DIR: /etc/letsencrypt/pereval
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +44,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://pereval:${POSTGRES_PASSWORD}@postgres:5432/pereval
+      CERT_DIR: /etc/letsencrypt/pereval
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
     depends_on:
       app:
         condition: service_healthy
@@ -92,20 +103,14 @@ services:
     restart: unless-stopped
     logging: *log
 
+  # Только инструмент: запускается вручную через ./deploy/issue-cert.sh (DNS-01 с TXT-записями).
+  # Автопродление невозможно (manual-плагин), напоминания шлёт jobs/certwatch.
   certbot:
     image: certbot/certbot:latest
-    environment:
-      SITE_DOMAIN: ${SITE_DOMAIN:-pereval.top}
-      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+    profiles: ["tools"]
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-www:/var/www/certbot
-      - ./deploy/certbot-loop.sh:/certbot-loop.sh:ro
-    entrypoint: ["sh", "/certbot-loop.sh"]
-    depends_on:
-      - nginx
-    restart: unless-stopped
-    logging: *log
 
 volumes:
   pgdata:

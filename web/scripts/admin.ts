@@ -6,15 +6,17 @@
  *   subs                          подписки
  *   grant <email> <days>          выдать/продлить доступ вручную (без оплаты)
  *   revoke <email>                отключить доступ (expired)
- *   node add <name> <kind> [ip]   зарегистрировать ноду (kind: pro_dns | pro_worker | dedicated); печатает секрет один раз
+ *   node add <name> <kind> [ip]   зарегистрировать ноду (kind: free_primary | pro_dns | pro_worker | dedicated); печатает секрет один раз
  *   node list
  *   resend-link <email>           отправить ссылку входа
  *   webhook replay <id>           переиграть сохранённый вебхук
+ *   cert names | cert status      имена единого сертификата (для deploy/issue-cert.sh) | что лежит на CP и что отдают хосты
  *   policy | acl                  показать текущий снапшот
  */
 import { desc, eq } from "drizzle-orm";
 import { db, schema, sql } from "@/lib/db/client";
 import { createNode } from "@/lib/nodes";
+import type { NodeKind } from "@/lib/db/schema";
 import { ensureUserByEmail, createLoginLink } from "@/lib/auth";
 import { enqueueMail } from "@/lib/mail";
 import { magicLinkMail } from "@/lib/mail-templates";
@@ -78,9 +80,10 @@ async function main(argv: string[]): Promise<number> {
         for (const n of await db().select().from(schema.nodes)) console.log(`${n.name}\t${n.kind}\t${n.ip ?? "-"}\t${n.enabled ? "on" : "off"}\tlast_seen=${n.lastSeenAt?.toISOString() ?? "-"}`);
         return 0;
       }
-      if (sub !== "add" || !name || !kind) throw new Error("node add <name> <pro_dns|pro_worker|dedicated> [ip]");
-      if (!["pro_dns", "pro_worker", "dedicated"].includes(kind)) throw new Error("kind: pro_dns | pro_worker | dedicated");
-      const { secret } = await createNode(name, kind as "pro_dns" | "pro_worker" | "dedicated", ip ?? null);
+      const KINDS: NodeKind[] = ["free_primary", "pro_dns", "pro_worker", "dedicated"];
+      if (sub !== "add" || !name || !kind) throw new Error(`node add <name> <${KINDS.join("|")}> [ip]`);
+      if (!KINDS.includes(kind as NodeKind)) throw new Error(`kind: ${KINDS.join(" | ")}`);
+      const { secret } = await createNode(name, kind as NodeKind, ip ?? null);
       console.log(`Нода ${name} создана. Секрет (показывается один раз):\n${secret}\n\nЗапишите его в /etc/pereval/node.env как NODE_SECRET.`);
       return 0;
     }
@@ -92,6 +95,20 @@ async function main(argv: string[]): Promise<number> {
       const tpl = magicLinkMail(url);
       await enqueueMail({ to: email.toLowerCase(), subject: tpl.subject, text: tpl.text, html: tpl.html });
       console.log(`ссылка поставлена в очередь; для ручной выдачи: ${url}`);
+      return 0;
+    }
+    case "cert": {
+      const [sub] = rest;
+      const cw = await import("@/jobs/certwatch");
+      if (sub === "names") {
+        console.log(cw.certNames().join(" "));
+        return 0;
+      }
+      if (sub !== "status") throw new Error("cert names | cert status");
+      const st = await cw.certStatus();
+      console.log(`эталон: ${st.source ?? "нет"}; до ${st.notAfter?.toISOString().slice(0, 10) ?? "?"} (${st.daysLeft ?? "?"} дн.); имена: ${st.names.join(", ") || "?"}`);
+      for (const h of st.hosts) console.log(cw.formatHostLine(h));
+      console.log(`TXT при продлении: ${cw.acmeTxtRecords().join("; ")}`);
       return 0;
     }
     case "webhook": {

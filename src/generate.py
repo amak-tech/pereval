@@ -786,6 +786,7 @@ def cluster_nodes_json(doc, primary_ip):
         ("domain", domain),
         ("free_domains", free_domains(doc)),
         ("site_origin", doc.meta.get("origin", "").rstrip("/")),
+        ("cert_domains", cert_domains(doc)),
         ("include_primary_in_dns", bool(doc.nodes.include_primary_in_dns)),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.nodes.pools.items())),
@@ -800,6 +801,7 @@ def pro_nodes_json(doc):
         ("dns_ip", doc.pro.dns_ip),
         ("cp_ip", doc.pro.cp_ip),
         ("site_origin", doc.meta.get("origin", "").rstrip("/")),
+        ("cert_domains", cert_domains(doc)),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.pro.pools.items())),
         ("workers", [w.as_dict(idx) for idx, w in enumerate(doc.pro.workers, 1)]),
@@ -871,6 +873,7 @@ def services_json(doc, primary_ip):
         ("meta", OrderedDict([
             ("name", doc.meta.get("name", "")),
             ("origin", doc.meta.get("origin", "").rstrip("/")),
+            ("cert_domains", cert_domains(doc)),
         ])),
         ("free", OrderedDict([
             ("domain", free_domain),
@@ -953,6 +956,32 @@ def free_domains(doc):
     return out
 
 
+def cert_domains(doc):
+    """Имена единого wildcard-сертификата (один lineage на всю инфраструктуру):
+    сайт/кабинет, *.site (free., pro., www.), *.pro (DoT-токены <token>.pro.…)
+    и устаревшие Free-домены вне зоны сайта (pereval.portbuddy.tech)."""
+    site = site_domain(doc)
+    pro_domain = doc.pro.domain or ("pro.%s" % site if site else "")
+    out = []
+
+    def add(name):
+        if name and name not in out:
+            out.append(name)
+
+    add(site)
+    if site:
+        add("*.%s" % site)
+    if pro_domain:
+        add("*.%s" % pro_domain)
+    for d in free_domains(doc):
+        if site and (d == site or d.endswith("." + site)):
+            continue  # покрыто *.site
+        if pro_domain and d.endswith("." + pro_domain):
+            continue
+        add(d)
+    return out
+
+
 def resolve_template_path(templates_dir, tpl_name):
     """Находит шаблон по относительному пути в templates/ (с фолбэком на плоский каталог)."""
     candidate = templates_dir / tpl_name
@@ -986,7 +1015,8 @@ def build_values(doc, ip, source):
         "free_domains": " ".join(fdomains),
         "free_server_names": " ".join(fdomains),
         "free_sni_targets": "\n".join("        %-32s 127.0.0.1:8443;" % d for d in fdomains),
-        "certbot_domains": " ".join("-d %s" % d for d in fdomains),
+        "certbot_domains": " ".join("-d '%s'" % d for d in cert_domains(doc)),
+        "cert_domains": " ".join(cert_domains(doc)),
         "pro_domain": pro_domain,
         "pro_dns_ip": doc.pro.dns_ip or "",
         "cp_ip": doc.pro.cp_ip or "",

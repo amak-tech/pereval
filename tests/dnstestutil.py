@@ -142,16 +142,18 @@ def openssl_available():
     return shutil.which("openssl") is not None
 
 
-def gen_self_signed(directory, cn="pro.test"):
-    """Самоподписанный RSA-2048 сертификат через openssl CLI. -> (cert_path, key_path)."""
+def gen_self_signed(directory, cn="pro.test", san=None, days=2):
+    """Самоподписанный RSA-2048 сертификат через openssl CLI. -> (cert_path, key_path).
+    san — список DNS-имён для subjectAltName (например ["pereval.test", "*.pereval.test"])."""
     directory = Path(directory)
-    cert = directory / ("%s.crt.pem" % cn)
-    key = directory / ("%s.key.pem" % cn)
-    subprocess.run(
-        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key),
-         "-out", str(cert), "-days", "2", "-subj", "/CN=%s" % cn],
-        check=True, capture_output=True,
-    )
+    directory.mkdir(parents=True, exist_ok=True)
+    cert = directory / ("%s.crt.pem" % cn.replace("*", "wildcard"))
+    key = directory / ("%s.key.pem" % cn.replace("*", "wildcard"))
+    cmd = ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key),
+           "-out", str(cert), "-days", str(days), "-subj", "/CN=%s" % cn]
+    if san:
+        cmd += ["-addext", "subjectAltName=" + ",".join("DNS:%s" % n for n in san)]
+    subprocess.run(cmd, check=True, capture_output=True)
     return str(cert), str(key)
 
 
