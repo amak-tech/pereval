@@ -28,6 +28,8 @@
       <string>{{dns_payload_uuid}}</string>
       <key>PayloadVersion</key>
       <integer>1</integer>
+      <key>ProhibitDisablement</key>
+      <false/>
     </dict>
   </array>
   <key>PayloadDescription</key>
@@ -38,6 +40,8 @@
   <string>{{profile_identifier}}</string>
   <key>PayloadRemovalDisallowed</key>
   <false/>
+  <key>PayloadScope</key>
+  <string>System</string>
   <key>PayloadType</key>
   <string>Configuration</string>
   <key>PayloadUUID</key>
