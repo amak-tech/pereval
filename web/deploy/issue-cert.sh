@@ -43,9 +43,9 @@ force_args=()
 mkdir -p dns01
 rm -f dns01/records.txt
 
-# временный самоподписанный каталог мешает certbot (он создал бы lineage <domain>-0001)
+# старые версии клали временный самоподписанный в каталог certbot — он мешает выпуску
 "${COMPOSE[@]}" run --rm -T --entrypoint sh certbot -c \
-	"if [ -f /etc/letsencrypt/live/$SITE_DOMAIN/.selfsigned ]; then rm -rf /etc/letsencrypt/live/$SITE_DOMAIN; echo 'временный самоподписанный удалён'; fi"
+	"if [ -f /etc/letsencrypt/live/$SITE_DOMAIN/.selfsigned ]; then rm -rf /etc/letsencrypt/live/$SITE_DOMAIN; echo 'устаревший временный сертификат из live/ удалён'; fi"
 
 echo
 echo "TXT-записи появятся в $(pwd)/dns01/records.txt — добавьте их у регистратора; certbot дождётся их в DNS сам."
@@ -59,7 +59,6 @@ if "${COMPOSE[@]}" run --rm -T certbot certonly --manual --preferred-challenges 
 	echo "Готово. Ноды подхватят сертификат по таймеру pereval-cert-sync (до 1 ч)."
 else
 	rc=$?
-	echo "certbot завершился с ошибкой ($rc). Восстанавливаю временный сертификат, если боевого нет." >&2
-	"${COMPOSE[@]}" exec -T nginx sh /docker-entrypoint.d/40-pereval-certs.sh publish || true
+	echo "certbot завершился с ошибкой ($rc), см. dns01/issue.log и /var/log/letsencrypt в volume letsencrypt." >&2
 	exit "$rc"
 fi

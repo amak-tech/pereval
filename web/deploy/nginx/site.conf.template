@@ -1,4 +1,5 @@
 # Шаблон обрабатывается entrypoint'ом образа nginx (envsubst): ${SITE_DOMAIN}
+# Сертификат — копия в /etc/letsencrypt/pereval (публикует 40-pereval-certs.sh), не каталог certbot.
 
 server {
     listen 80 default_server;
@@ -24,8 +25,8 @@ server {
     listen 443 ssl;
     http2 on;
     server_name www.${SITE_DOMAIN};
-    ssl_certificate     /etc/letsencrypt/live/${SITE_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${SITE_DOMAIN}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/pereval/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/pereval/privkey.pem;
     return 301 https://${SITE_DOMAIN}$request_uri;
 }
 
@@ -34,8 +35,8 @@ server {
     http2 on;
     server_name ${SITE_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${SITE_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${SITE_DOMAIN}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/pereval/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/pereval/privkey.pem;
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
