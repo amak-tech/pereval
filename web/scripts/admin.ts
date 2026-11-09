@@ -17,7 +17,7 @@ import { desc, eq } from "drizzle-orm";
 import { db, schema, sql } from "@/lib/db/client";
 import { createNode } from "@/lib/nodes";
 import type { NodeKind } from "@/lib/db/schema";
-import { ensureUserByEmail, createLoginLink } from "@/lib/auth";
+import { ensureUserByEmail, createLoginLink } from "@/lib/auth-core";
 import { enqueueMail } from "@/lib/mail";
 import { magicLinkMail } from "@/lib/mail-templates";
 import { bumpPolicyVersion, buildPolicySnapshot } from "@/lib/policy";

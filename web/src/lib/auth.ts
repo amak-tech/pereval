@@ -2,13 +2,11 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import Nodemailer from "next-auth/providers/nodemailer";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { env } from "@/lib/env";
 import { enqueueMail } from "@/lib/mail";
 import { magicLinkMail } from "@/lib/mail-templates";
 import { allow, cooldownLeft, touch } from "@/lib/ratelimit";
-import { hashAuthToken } from "@/lib/crypto";
 
 /**
  * Auth.js v5: Google OIDC + magic-link по email. Сессии в Postgres (database strategy).
@@ -96,42 +94,7 @@ export const authConfig: NextAuthConfig = {
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
 
-/** Пользователь по email (lower-case) или null. */
-export async function findUserByEmail(email: string) {
-  const [row] = await db().select().from(schema.users).where(eq(schema.users.email, email.toLowerCase())).limit(1);
-  return row ?? null;
-}
-
-/** Создаёт пользователя (если нет) и возвращает его. Используется вебхуком оплаты и лидами. */
-export async function ensureUserByEmail(email: string) {
-  const lower = email.toLowerCase();
-  const existing = await findUserByEmail(lower);
-  if (existing) return existing;
-  const [created] = await db().insert(schema.users).values({ email: lower }).onConflictDoNothing().returning();
-  if (created) {
-    await db().insert(schema.usersMeta).values({ userId: created.id }).onConflictDoNothing();
-    return created;
-  }
-  return (await findUserByEmail(lower))!;
-}
-
-/**
- * Одноразовая ссылка входа, совместимая с Auth.js (Nodemailer-провайдер):
- * в verification_tokens хранится sha256(token + AUTH_SECRET), как делает @auth/core.
- */
-export async function createLoginLink(email: string, ttlSeconds: number, callbackPath = "/account"): Promise<string> {
-  const e = env();
-  const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-  const lower = email.toLowerCase();
-  await db().insert(schema.verificationTokens).values({
-    identifier: lower,
-    token: hashAuthToken(token, e.AUTH_SECRET),
-    expires: new Date(Date.now() + ttlSeconds * 1000),
-  });
-  const callbackUrl = `${e.PUBLIC_ORIGIN}${callbackPath}`;
-  const url = `${e.PUBLIC_ORIGIN}/api/auth/callback/nodemailer?callbackUrl=${encodeURIComponent(callbackUrl)}&token=${token}&email=${encodeURIComponent(lower)}`;
-  return `${e.PUBLIC_ORIGIN}/account/verify?u=${encodeURIComponent(url)}`;
-}
+export { findUserByEmail, ensureUserByEmail, createLoginLink } from "@/lib/auth-core";
 
 export async function requireUser(): Promise<{ id: string; email: string }> {
   const session = await auth();

@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/env";
+
+// Без импорта next/server: этот модуль попадает в бандлы jobs/admin (esbuild, ESM, внешние пакеты),
+// а bare-импорт "next/server" в Node ESM не резолвится. Web-стандартного Response достаточно.
 
 export class HttpError extends Error {
   status: number;
@@ -12,14 +14,14 @@ export class HttpError extends Error {
   }
 }
 
-export function json(data: unknown, init?: ResponseInit): NextResponse {
-  return NextResponse.json(data, {
-    ...init,
-    headers: { "Cache-Control": "no-store", ...(init?.headers ?? {}) },
-  });
+export function json(data: unknown, init?: ResponseInit): Response {
+  const headers = new Headers(init?.headers);
+  headers.set("Cache-Control", "no-store");
+  if (!headers.has("content-type")) headers.set("content-type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(data), { ...init, headers });
 }
 
-export function fail(status: number, message: string, code = "error"): NextResponse {
+export function fail(status: number, message: string, code = "error"): Response {
   return json({ ok: false, error: code, message }, { status });
 }
 

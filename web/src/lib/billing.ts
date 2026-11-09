@@ -2,7 +2,7 @@ import { and, desc, eq, gt, inArray, lt } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { env } from "@/lib/env";
 import { HttpError } from "@/lib/http";
-import { ensureUserByEmail, createLoginLink } from "@/lib/auth";
+import { ensureUserByEmail, createLoginLink } from "@/lib/auth-core";
 import * as lava from "@/lib/lava";
 import { enqueueAdminMail, enqueueMail } from "@/lib/mail";
 import {
