@@ -9,7 +9,7 @@ case "${1:-app}" in
     exec node server.js
     ;;
   jobs)
-    exec node dist/jobs.mjs
+    exec node dist/index.mjs
     ;;
   migrate)
     exec node dist/migrate.mjs
