@@ -626,8 +626,8 @@ passthrough:
 # =============================================================================
 pro:
   domain: pro.pereval.top                  # DoH https://pro.pereval.top/dns/<token>, DoT <token>.pro.pereval.top
-  dns_ip: 203.0.113.10                     # TODO: IP VPS pro-dns (заглушка TEST-NET-3)
-  cp_ip: 203.0.113.20                      # TODO: IP VPS pereval.top (control plane) — для nftables на воркерах
+  dns_ip: 85.209.148.147                   # VPS pro-dns
+  cp_ip: 91.149.179.184                    # VPS pereval.top (control plane) — для nftables на воркерах
   pools:
     default:
       note: Общий пул Pro.
@@ -638,7 +638,7 @@ pro:
       note: Стриминги и соцсети Pro — тяжёлый трафик.
       fallback: default
   workers:
-    - ip: 203.0.113.30                     # TODO: IP VPS pro-worker-1 (заглушка TEST-NET-3)
+    - ip: 151.247.25.209                   # VPS pro-worker-1
       name: pro-worker-1
       pools: [default, ai, media]
   categories:

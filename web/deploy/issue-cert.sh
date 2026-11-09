@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# Выпуск / продление ЕДИНОГО wildcard-сертификата Перевала на control plane (DNS-01 вручную).
+# Выпуск / продление ЕДИНОГО wildcard-сертификата Перевала на control plane (DNS-01).
 #
-#   cd /opt/pereval && ./deploy/issue-cert.sh          # продлить, если осталось < 30 дней
-#   FORCE=1 ./deploy/issue-cert.sh                      # перевыпустить принудительно
+#   cd /opt/pereval && ./deploy/issue-cert.sh            # продлить, если осталось < 30 дней
+#   FORCE=1 ./deploy/issue-cert.sh                        # перевыпустить принудительно
+#   nohup ./deploy/issue-cert.sh >dns01/issue.log 2>&1 &  # в фоне: TXT-записи появятся в dns01/records.txt,
+#                                                         # certbot сам дождётся их в DNS (до 48 ч) и выпустит сертификат
 #
 # Имена: SITE_DOMAIN, *.SITE_DOMAIN, *.PRO_DOMAIN и CERT_EXTRA_DOMAINS из .env (устаревшие
 # Free-имена вне зоны сайта, например pereval.portbuddy.tech). Если контейнер app запущен,
 # список берётся из каталога приложения (services.yaml → cert_domains).
 #
-# certbot попросит TXT-записи _acme-challenge.<имя> (для apex и *.apex — две записи на одно имя).
-# После выпуска nginx публикует копию для нод и перечитывает конфиг; ноды забирают
-# сертификат по таймеру в течение часа (быстрее: systemctl start pereval-cert-sync на ноде).
+# TXT-записи: _acme-challenge.<имя> (для apex и *.apex — две записи с одним именем). Значения
+# пишет deploy/certbot-auth-hook.sh в dns01/records.txt. После выпуска nginx публикует копию
+# для нод и перечитывает конфиг; ноды забирают сертификат по таймеру в течение часа
+# (быстрее: systemctl start pereval-cert-sync на ноде).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -37,22 +40,26 @@ email_args=(--register-unsafely-without-email)
 force_args=()
 [[ ${FORCE:-0} == 1 ]] && force_args=(--force-renewal)
 
+mkdir -p dns01
+rm -f dns01/records.txt
+
 # временный самоподписанный каталог мешает certbot (он создал бы lineage <domain>-0001)
-"${COMPOSE[@]}" run --rm --entrypoint sh certbot -c \
+"${COMPOSE[@]}" run --rm -T --entrypoint sh certbot -c \
 	"if [ -f /etc/letsencrypt/live/$SITE_DOMAIN/.selfsigned ]; then rm -rf /etc/letsencrypt/live/$SITE_DOMAIN; echo 'временный самоподписанный удалён'; fi"
 
 echo
-echo "Добавьте TXT-записи, которые попросит certbot, дождитесь их появления (dig TXT _acme-challenge.<имя> @1.1.1.1) и только затем нажимайте Enter."
+echo "TXT-записи появятся в $(pwd)/dns01/records.txt — добавьте их у регистратора; certbot дождётся их в DNS сам."
 echo
-if "${COMPOSE[@]}" run --rm certbot certonly --manual --preferred-challenges dns \
+if "${COMPOSE[@]}" run --rm -T certbot certonly --manual --preferred-challenges dns \
+	--manual-auth-hook /hooks/auth.sh --non-interactive \
 	--cert-name "$SITE_DOMAIN" "${args[@]}" --agree-tos "${email_args[@]}" \
 	--keep-until-expiring --expand "${force_args[@]}"; then
 	echo
-	"${COMPOSE[@]}" exec nginx sh /docker-entrypoint.d/40-pereval-certs.sh publish
+	"${COMPOSE[@]}" exec -T nginx sh /docker-entrypoint.d/40-pereval-certs.sh publish
 	echo "Готово. Ноды подхватят сертификат по таймеру pereval-cert-sync (до 1 ч)."
 else
 	rc=$?
 	echo "certbot завершился с ошибкой ($rc). Восстанавливаю временный сертификат, если боевого нет." >&2
-	"${COMPOSE[@]}" exec nginx sh /docker-entrypoint.d/40-pereval-certs.sh publish || true
+	"${COMPOSE[@]}" exec -T nginx sh /docker-entrypoint.d/40-pereval-certs.sh publish || true
 	exit "$rc"
 fi

@@ -49,7 +49,7 @@
   },
   "pro": {
     "domain": "pro.pereval.top",
-    "dns_ip": "203.0.113.10",
+    "dns_ip": "85.209.148.147",
     "doh_url_template": "https://pro.pereval.top/dns/{token}",
     "dot_host_template": "{token}.pro.pereval.top",
     "pools": {
@@ -71,7 +71,7 @@
     },
     "workers": [
       {
-        "ip": "203.0.113.30",
+        "ip": "151.247.25.209",
         "name": "pro-worker-1",
         "weight": 1,
         "pools": [

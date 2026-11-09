@@ -111,6 +111,8 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-www:/var/www/certbot
+      - ./deploy/certbot-auth-hook.sh:/hooks/auth.sh:ro
+      - ./dns01:/dns01            # сюда hook пишет TXT-записи для DNS-01 (dns01/records.txt)
 
 volumes:
   pgdata:

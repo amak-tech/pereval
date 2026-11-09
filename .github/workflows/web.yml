@@ -101,6 +101,9 @@ jobs:
     if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.deploy)
     runs-on: ubuntu-latest
     environment: pereval-top
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v5
       - name: Deploy via SSH (docker compose pull && up -d)
@@ -109,11 +112,15 @@ jobs:
           CP_SSH_USER: ${{ secrets.CP_SSH_USER }}
           CP_SSH_KEY: ${{ secrets.CP_SSH_KEY }}
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.image.outputs.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
           KEY="$(mktemp)"; trap 'rm -f "$KEY"' EXIT
           printf '%s\n' "$CP_SSH_KEY" > "$KEY"; chmod 600 "$KEY"
           SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes $CP_SSH_USER@$CP_HOST"
           $SSH 'mkdir -p /opt/pereval/deploy/nginx'
+          # образ в GHCR приватный: логинимся на сервере токеном этого запуска (живёт только на время job)
+          printf '%s' "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           scp -i "$KEY" -o StrictHostKeyChecking=accept-new -r web/compose.yaml web/deploy "$CP_SSH_USER@$CP_HOST:/opt/pereval/"
           $SSH "cd /opt/pereval && test -f .env || { echo 'нет /opt/pereval/.env — создайте из deploy/.env.example'; exit 1; }"
           $SSH "cd /opt/pereval && echo 'APP_IMAGE=$IMAGE' > .image.env && docker compose --env-file .env --env-file .image.env pull app jobs && docker compose --env-file .env --env-file .image.env up -d --remove-orphans && docker compose ps"
