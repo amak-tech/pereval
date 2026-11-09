@@ -34,9 +34,9 @@
 
 ## Какие сервисы работают через Перевал
 
-На сайте **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services)** поддерживаются самые востребованные сервисы для работы с ИИ и разработки (64 сервиса) с удобным поиском и проверкой:
+На сайте **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services)** поддерживаются самые востребованные сервисы для работы с ИИ и разработки (65 сервисов) с удобным поиском и проверкой:
 
-- **ИИ и языковые модели:** ChatGPT (OpenAI), Claude (Anthropic), Google Gemini, AI Studio, NotebookLM и Jules, Grok (xAI), Microsoft Copilot, Cursor, Windsurf / Codeium, OpenRouter, Groq, Lambda Labs, Lightning AI, Augment Code, Cline, Trae, Qoder, Manus, Genspark, Langdock, DeepL.
+- **ИИ и языковые модели:** ChatGPT (OpenAI), Claude (Anthropic), Google Gemini, AI Studio, NotebookLM и Jules, Grok (xAI), Microsoft Copilot, GitHub Copilot, Cursor, Windsurf / Codeium, OpenRouter, Groq, Lambda Labs, Lightning AI, Augment Code, Cline, Trae, Qoder, Manus, Genspark, Langdock, DeepL.
 - **Инструменты разработки, SaaS и облака:** JetBrains (IDE, AI Assistant, Toolbox, YouTrack, Qodana), HashiCorp (Terraform, Vagrant), Atlassian (Jira, Confluence), Sentry, MongoDB, Redis, Neo4j, Liquibase, Grafana, Graylog, Snyk, PostHog, Amplitude, Pingdom, Buf, Spacelift, Algolia, GitGuardian, Swagger, Netlify, Heroku, Framer, Ngrok, Tailscale, HTTP Toolkit, Oracle, Liberica JDK, Qt, Bitnami, NVIDIA Developer, Mattermost, Outline, ClickUp, Zapier.
 
 > Полный и всегда актуальный список поддерживаемых сайтов и доменных зон доступен на сайте: **[pereval.portbuddy.tech](https://pereval.portbuddy.tech/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services_footer)**.
