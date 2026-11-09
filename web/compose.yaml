@@ -22,6 +22,8 @@ services:
       DATABASE_URL: postgres://pereval:${POSTGRES_PASSWORD}@postgres:5432/pereval
       TRUSTED_PROXY_IPS: nginx
       CERT_DIR: /etc/letsencrypt/pereval
+      # Auth.js строит URL (redirect_uri для Google) от этого адреса, а не от Host внутри контейнера (0.0.0.0:3000)
+      AUTH_URL: ${PUBLIC_ORIGIN:-https://pereval.top}
     volumes:
       - letsencrypt:/etc/letsencrypt:ro
     depends_on:
