@@ -44,6 +44,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const ga = process.env.GA_MEASUREMENT_ID ?? "G-3BY15ZZD8D";
+  const gtm = process.env.GTM_CONTAINER_ID ?? "GTM-NKC68GDT";
   return (
     <html lang="ru" className={inter.variable}>
       <body className="min-h-dvh flex flex-col">
@@ -58,11 +59,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <SiteFooter />
-        {ga ? (
+        {ga || gtm ? (
           <>
-            <Script src={`https://www.googletagmanager.com/gtag/js?id=${ga}`} strategy="afterInteractive" />
+            {/* Google Tag Manager (контейнер) + Google Analytics 4 (gtag). Общий dataLayer. */}
+            {gtm ? <Script src={`https://www.googletagmanager.com/gtm.js?id=${gtm}`} strategy="afterInteractive" /> : null}
+            {ga ? <Script src={`https://www.googletagmanager.com/gtag/js?id=${ga}`} strategy="afterInteractive" /> : null}
             <Script id="gtag-init" strategy="afterInteractive">
-              {`window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', '${ga}');`}
+              {`window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());${ga ? `gtag('config', '${ga}');` : ""}`}
             </Script>
           </>
         ) : null}
