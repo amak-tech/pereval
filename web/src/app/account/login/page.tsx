@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 const ERRORS: Record<string, string> = {
   Verification: "Ссылка устарела или уже была использована. Запросите новую.",
   AccessDenied: "Доступ запрещён.",
+  Email: "Укажите корректный email.",
   OAuthAccountNotLinked: "Этот email уже используется с другим способом входа. Войдите по ссылке на email.",
   Configuration: "Вход временно недоступен. Напишите в поддержку.",
   default: "Не удалось войти. Попробуйте ещё раз.",
@@ -25,7 +26,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const session = await auth();
   if (session?.user) redirect("/account");
   const sp = await searchParams;
-  const sent = sp.sent === "1";
   const error = typeof sp.error === "string" ? (ERRORS[sp.error] ?? ERRORS.default) : null;
   const googleEnabled = !!(env().AUTH_GOOGLE_ID && env().AUTH_GOOGLE_SECRET);
 
@@ -37,11 +37,6 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         Кабинет доступен после оплаты подписки. Ещё нет подписки? <Link href="/pro#buy">Оформить {SITE.name} Pro</Link>.
       </p>
 
-      {sent ? (
-        <div className="mt-6 rounded-xl border border-ok bg-ok-bg px-4 py-3 text-ok" role="status">
-          Если аккаунт с этим email существует, мы отправили ссылку для входа. Проверьте почту (и папку «Спам»). Ссылка действует 15 минут.
-        </div>
-      ) : null}
       {error ? (
         <div className="mt-6 rounded-xl border border-err bg-err-bg px-4 py-3 text-err" role="alert">
           {error}
@@ -71,14 +66,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
         {googleEnabled ? <div className="flex items-center gap-3 text-xs text-mute"><span className="h-px flex-1 bg-line" />или<span className="h-px flex-1 bg-line" /></div> : null}
 
-        <form
-          action={async (formData) => {
-            "use server";
-            const email = String(formData.get("email") ?? "").trim().toLowerCase();
-            await signIn("nodemailer", { email, redirectTo: "/account" });
-          }}
-          className="grid gap-3"
-        >
+        {/* Обычный POST без server action: не зависит от свежести JS во вкладке, ответ — 303 на /account/login/sent */}
+        <form method="post" action="/api/account/login-link" className="grid gap-3">
           <label className="grid gap-1.5">
             <span className="text-sm font-semibold">Email, на который оформлена подписка</span>
             <input

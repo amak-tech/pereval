@@ -62,7 +62,7 @@ server {
         proxy_pass http://app;
     }
 
-    location ~ ^/api/(billing/checkout|leads|account/(ips|token|ddns-key)) {
+    location ~ ^/api/(billing/checkout|leads|account/(ips|token|ddns-key|login-link)) {
         limit_req zone=forms burst=10 nodelay;
         proxy_pass http://app;
     }

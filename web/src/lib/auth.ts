@@ -57,7 +57,7 @@ export const authConfig: NextAuthConfig = {
   providers: providers(),
   pages: {
     signIn: "/account/login",
-    verifyRequest: "/account/login?sent=1",
+    verifyRequest: "/account/login/sent",
     error: "/account/login",
   },
   callbacks: {
@@ -65,8 +65,8 @@ export const authConfig: NextAuthConfig = {
       // Запрос magic-link: cooldown 60 с на адрес (анти-спам, анти-энумерация по времени ответа).
       if (account?.provider === "nodemailer" && email?.verificationRequest) {
         const key = `magic:${(user.email ?? "").toLowerCase()}`;
-        if (cooldownLeft(key, 60_000) > 0) return "/account/login?sent=1";
-        if (!allow(`magic-hour:${(user.email ?? "").toLowerCase()}`, 6, 3_600_000)) return "/account/login?sent=1";
+        if (cooldownLeft(key, 60_000) > 0) return "/account/login/sent";
+        if (!allow(`magic-hour:${(user.email ?? "").toLowerCase()}`, 6, 3_600_000)) return "/account/login/sent";
         touch(key);
       }
       return true;
