@@ -6,8 +6,11 @@ import { CircleCheck, CircleX, LoaderCircle, RefreshCw } from "lucide-react";
 type ProbeState = "idle" | "running" | "ok" | "fail";
 type Probe = { name: string; host: string; url: string; state: ProbeState; ms: number | null };
 
+// claude.ai отдаёт Cross-Origin-Resource-Policy: same-origin — браузер отбрасывает такой ответ как сетевую
+// ошибку, и проверка ложно показывает «нет ответа». Поэтому для Claude проверяем anthropic.com из того же
+// набора доменов (резолвится в ту же ноду прокси).
 const TARGETS: { name: string; host: string; url: string }[] = [
-  { name: "Claude", host: "claude.ai", url: "https://claude.ai/favicon.ico" },
+  { name: "Claude", host: "anthropic.com", url: "https://www.anthropic.com/favicon.ico" },
   { name: "ChatGPT", host: "chatgpt.com", url: "https://chatgpt.com/favicon.ico" },
   { name: "Gemini", host: "gemini.google.com", url: "https://gemini.google.com/favicon.ico" },
   { name: "Cursor", host: "cursor.com", url: "https://cursor.com/favicon.ico" },
@@ -20,6 +23,7 @@ const TIMEOUT_MS = 8000;
  * Проверка из браузера: запрашиваем favicon нескольких сервисов в режиме no-cors и засекаем время.
  * Ответ непрозрачный, поэтому «ок» означает «TCP/TLS-соединение установлено и ответ получен»,
  * а «нет ответа» — таймаут или сетевую ошибку (DNS не применился, порт 443 закрыт, сервис недоступен).
+ * Цели выбираем без заголовка Cross-Origin-Resource-Policy: с ним fetch в no-cors падает, хотя соединение есть.
  */
 export function ConnectivityCheck() {
   const [probes, setProbes] = useState<Probe[]>(TARGETS.map((t) => ({ ...t, state: "idle", ms: null })));
