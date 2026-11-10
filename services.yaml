@@ -71,7 +71,11 @@ nodes:
 
     - ip: 151.247.25.123
       name: nl-worker-1
-      pools: [default, ai, media]
+      pools: [default, media]
+
+    - ip: 144.31.159.147
+      name: free-worker-ai-1
+      pools: [ai]
 
 dnsmasq_options:
   - listen-address=0.0.0.0
