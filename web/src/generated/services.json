@@ -67,6 +67,11 @@
         "note": "Стриминги и TikTok Pro — тяжёлый трафик.",
         "fallback": "default",
         "strict_allowlist": false
+      },
+      "reserve": {
+        "note": "Карантин — воркер выведен из обслуживания (его выходной IP Google относит к RU/недоступному региону; см. YouTube \"GL\" перед вводом в пул ai).",
+        "fallback": null,
+        "strict_allowlist": false
       }
     },
     "workers": [
@@ -76,15 +81,16 @@
         "weight": 1,
         "pools": [
           "default",
-          "media"
+          "media",
+          "ai"
         ]
       },
       {
-        "ip": "151.247.25.133",
+        "ip": "141.11.197.239",
         "name": "pro-worker-ai-1",
         "weight": 1,
         "pools": [
-          "ai"
+          "reserve"
         ]
       }
     ]
