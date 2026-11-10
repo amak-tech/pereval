@@ -1,0 +1,1094 @@
+{
+  "meta": {
+    "name": "Перевал",
+    "origin": "https://pereval.top",
+    "cert_domains": [
+      "pereval.top",
+      "*.pereval.top",
+      "*.pro.pereval.top",
+      "pereval.portbuddy.tech"
+    ]
+  },
+  "free": {
+    "domain": "free.pereval.top",
+    "legacy_domains": [
+      "pereval.portbuddy.tech"
+    ],
+    "dns_ip": "153.80.200.170",
+    "doh_url": "https://free.pereval.top/dns-query",
+    "dot_host": "free.pereval.top",
+    "pools": {
+      "default": {
+        "note": "Общий пул — всё, у чего пул не задан явно.",
+        "fallback": null,
+        "strict_allowlist": false
+      },
+      "ai": {
+        "note": "ИИ-платформы — важно, чтобы все запросы сервиса шли с одного IP/локации.",
+        "fallback": "default",
+        "strict_allowlist": false
+      },
+      "media": {
+        "note": "Тяжёлый трафик (видео, стриминги, соцсети) — отдельные ноды, чтобы не мешать ИИ.",
+        "fallback": "default",
+        "strict_allowlist": false
+      }
+    },
+    "workers": [
+      {
+        "ip": "151.247.25.123",
+        "name": "nl-worker-1",
+        "weight": 1,
+        "pools": [
+          "default",
+          "media"
+        ]
+      },
+      {
+        "ip": "144.31.159.147",
+        "name": "free-worker-ai-1",
+        "weight": 1,
+        "pools": [
+          "ai"
+        ]
+      }
+    ]
+  },
+  "pro": {
+    "domain": "pro.pereval.top",
+    "dns_ip": "85.209.148.147",
+    "doh_url_template": "https://pro.pereval.top/dns/{token}",
+    "dot_host_template": "{token}.pro.pereval.top",
+    "pools": {
+      "default": {
+        "note": "Общий пул Pro.",
+        "fallback": null,
+        "strict_allowlist": false
+      },
+      "ai": {
+        "note": "ИИ-платформы Pro — постоянный IP на сервис.",
+        "fallback": "default",
+        "strict_allowlist": false
+      },
+      "media": {
+        "note": "Стриминги и TikTok Pro — тяжёлый трафик.",
+        "fallback": "default",
+        "strict_allowlist": false
+      },
+      "reserve": {
+        "note": "Карантин — воркер выведен из обслуживания (его выходной IP Google относит к RU/недоступному региону; см. YouTube \"GL\" перед вводом в пул ai).",
+        "fallback": null,
+        "strict_allowlist": false
+      }
+    },
+    "workers": [
+      {
+        "ip": "141.11.197.214",
+        "name": "pro-worker-default-1",
+        "weight": 1,
+        "pools": [
+          "default",
+          "media",
+          "ai"
+        ]
+      },
+      {
+        "ip": "141.11.197.239",
+        "name": "pro-worker-ai-1",
+        "weight": 1,
+        "pools": [
+          "reserve"
+        ]
+      }
+    ]
+  },
+  "categories": [
+    {
+      "id": "ai",
+      "name": "ИИ и языковые модели",
+      "tier": "free",
+      "pool": "ai",
+      "services": [
+        {
+          "name": "Anthropic / Claude",
+          "pool": "ai",
+          "domains": [
+            "claude.ai",
+            "claude.com",
+            "anthropic.com",
+            "anthropic.qualtrics.com",
+            "intercom.io",
+            "downloads.intercomcdn.com",
+            "vector.co"
+          ]
+        },
+        {
+          "name": "OpenAI / ChatGPT",
+          "pool": "ai",
+          "domains": [
+            "openai.com",
+            "chatgpt.com",
+            "oaistatic.com",
+            "oaiusercontent.com",
+            "oaistatsig.com",
+            "chat.com",
+            "ai.com",
+            "sora.com",
+            "chatgpt.site",
+            "searchgpt.com",
+            "crixet.com",
+            "openai.org",
+            "openaimerge.com",
+            "openaicom.imgix.net",
+            "openai.com.cdn.cloudflare.net",
+            "production-openaicom-storage.azureedge.net",
+            "openaiapi-site.azureedge.net",
+            "openaicom-api-bdcpf8c6d2e9atf6.z01.azurefd.net",
+            "openaicomproductionae4b.blob.core.windows.net",
+            "openaiassets.blob.core.windows.net",
+            "statsig.com",
+            "statsigapi.net",
+            "statsigcdn.com",
+            "featuregates.org",
+            "featureassets.org",
+            "assetsconfigcdn.org",
+            "prodregistryv2.org",
+            "beyondwickedmapping.org",
+            "livekit.cloud",
+            "auth0.com",
+            "arkoselabs.com",
+            "workos.com",
+            "workoscdn.com",
+            "workos-dns.com",
+            "workos.imgix.net",
+            "browser-intake-datadoghq.com",
+            "http-intake.logs.datadoghq.com",
+            "openai.qualtrics.com",
+            "ct.sendgrid.net",
+            "js.intercomcdn.com"
+          ]
+        },
+        {
+          "name": "Google Gemini / AI Studio / NotebookLM / Jules / Antigravity",
+          "pool": "ai",
+          "domains": [
+            "gemini.google",
+            "gemini.google.com",
+            "aistudio.google.com",
+            "makersuite.google.com",
+            "ai.studio",
+            "ai.dev",
+            "bard.google.com",
+            "ai.google.dev",
+            "generativeai.google",
+            "generativelanguage.googleapis.com",
+            "alkalimakersuite-pa.clients6.google.com",
+            "alkalimakersuite-pa.googleapis.com",
+            "alkalimakersuiteapplets.pa.clients6.google.com",
+            "alkalimakersuiteapplets.pa.googleapis.com",
+            "webchannel-alkalimakersuite-pa.clients6.google.com",
+            "webchannel-alkalimakersuite-pa.googleapis.com",
+            "alkalicore-pa.clients6.google.com",
+            "alkalicore-pa.googleapis.com",
+            "makersuite-pa.clients6.google.com",
+            "makersuite-pa.googleapis.com",
+            "waa-pa.clients6.google.com",
+            "waa-pa.googleapis.com",
+            "cloudconsole-pa.clients6.google.com",
+            "people-pa.clients6.google.com",
+            "notifications-pa.clients6.google.com",
+            "notifications-pa.googleapis.com",
+            "searchnotifications-pa.clients6.google.com",
+            "searchnotifications-pa.googleapis.com",
+            "signaller-pa.clients6.google.com",
+            "signaler-pa.clients6.google.com",
+            "signaler-pa.googleapis.com",
+            "scf.usercontent.goog",
+            "safecontentframe.static.usercontent.goog",
+            "notebooklm.google",
+            "notebook.google",
+            "notebook.google.com",
+            "notebooklm.google.com",
+            "notebook.cloud.google.com",
+            "notebooklm.cloud.google.com",
+            "notebooklm-pa.googleapis.com",
+            "notebooklm-pa.clients6.google.com",
+            "notebooklm.googleapis.com",
+            "notebooklm.clients6.google.com",
+            "labstailwind.pa.googleapis.com",
+            "labstailwind-pa.googleapis.com",
+            "labstailwind-pa.clients6.google.com",
+            "tailwind-pa.googleapis.com",
+            "tailwind-pa.clients6.google.com",
+            "jules.google",
+            "jules.google.com",
+            "labs.google",
+            "labs.google.com",
+            "opal.google",
+            "opal.google.com",
+            "flow.google",
+            "flow.google.com",
+            "aitestkitchen.withgoogle.com",
+            "deepmind.google",
+            "deepmind.com",
+            "antigravity.google",
+            "antigravity.google.com",
+            "antigravity-pa.googleapis.com",
+            "antigravity.googleapis.com",
+            "antigravity-unleash.goog",
+            "antigravity-auto-updater-974169037036.us-central1.run.app",
+            "antigravity-cli-auto-updater-974169037036.us-central1.run.app",
+            "antigravity-hub-auto-updater-974169037036.us-central1.run.app",
+            "cloudcode-pa.googleapis.com",
+            "daily-cloudcode-pa.googleapis.com",
+            "daily-cloudcode-pa.sandbox.googleapis.com",
+            "preprod-daily-cloudcode-pa.sandbox.googleapis.com",
+            "autopush-cloudcode-pa.sandbox.googleapis.com",
+            "cloudaicompanion.googleapis.com",
+            "staging-cloudaicompanion.sandbox.googleapis.com",
+            "aicode.googleapis.com",
+            "businessaicode.googleapis.com",
+            "aiplatform.googleapis.com",
+            "iamcredentials.googleapis.com",
+            "jetski-webchannel.googleapis.com",
+            "aisandbox-pa.googleapis.com",
+            "aisandbox-pa.clients6.google.com",
+            "aida.googleapis.com",
+            "geller-pa.googleapis.com",
+            "geller-pa.clients6.google.com",
+            "proactivebackend-pa.googleapis.com",
+            "proactivebackend-pa.clients6.google.com",
+            "robinfrontend-pa.googleapis.com",
+            "robinfrontend-pa.clients6.google.com",
+            "speechs3proto2-pa.googleapis.com",
+            "speechs3proto2-pa.clients6.google.com",
+            "taskassist-pa.googleapis.com",
+            "taskassist-pa.clients6.google.com",
+            "tasks-pa.googleapis.com",
+            "tasks-pa.clients6.google.com",
+            "tasks.googleapis.com",
+            "assistantfrontend-pa.googleapis.com",
+            "assistantfrontend-pa.clients6.google.com",
+            "assistant-s3-pa.googleapis.com",
+            "lamssettings-pa.googleapis.com",
+            "lamssettings-pa.clients6.google.com",
+            "appsgenaiserver-pa.clients.google.com",
+            "appsgenaiserver-pa.clients6.google.com",
+            "appsgenaiserver-pa.googleapis.com",
+            "stitch.withgoogle.com",
+            "gemini.gstatic.com",
+            "geminiweb-pa.clients.google.com",
+            "geminiweb-pa.clients6.google.com",
+            "geminiweb-pa.googleapis.com"
+          ]
+        },
+        {
+          "name": "xAI / Grok",
+          "pool": "ai",
+          "domains": [
+            "x.ai",
+            "grok.com"
+          ]
+        },
+        {
+          "name": "Microsoft Copilot",
+          "pool": "ai",
+          "domains": [
+            "copilot.microsoft.com",
+            "copilot.cloud.microsoft",
+            "m365.cloud.microsoft",
+            "copilot.com",
+            "copilot-stg.com",
+            "designer.microsoft.com",
+            "location.microsoft.com",
+            "sydney.bing.com",
+            "edgeservices.bing.com",
+            "bingapis.com",
+            "r.bing.com",
+            "th.bing.com",
+            "bing-shopping.microsoft-falcon.io",
+            "gateway.bingviz.microsoft.net",
+            "gateway.bingviz.microsoftapp.net",
+            "api.microsoftapp.net",
+            "copilotprodattachments.blob.core.windows.net",
+            "production-copilot-host-westus.webpubsub.azure.com",
+            "odc.officeapps.live.com",
+            "api.msn.com",
+            "assets.msn.com",
+            "edge.microsoft.com"
+          ]
+        },
+        {
+          "name": "GitHub Copilot",
+          "pool": "ai",
+          "domains": [
+            "githubcopilot.com",
+            "api.githubcopilot.com",
+            "api.individual.githubcopilot.com",
+            "api.business.githubcopilot.com",
+            "api.enterprise.githubcopilot.com",
+            "proxy.individual.githubcopilot.com",
+            "proxy.business.githubcopilot.com",
+            "proxy.enterprise.githubcopilot.com",
+            "telemetry.individual.githubcopilot.com",
+            "telemetry.business.githubcopilot.com",
+            "telemetry.enterprise.githubcopilot.com",
+            "origin-tracker.individual.githubcopilot.com",
+            "origin-tracker.business.githubcopilot.com",
+            "origin-tracker.enterprise.githubcopilot.com",
+            "exp-tas.githubcopilot.com",
+            "exp.individual.githubcopilot.com",
+            "exp.business.githubcopilot.com",
+            "exp.enterprise.githubcopilot.com",
+            "copilot-proxy.githubusercontent.com",
+            "origin-tracker.githubusercontent.com",
+            "copilot-telemetry.githubusercontent.com",
+            "copilot-telemetry-service.githubusercontent.com",
+            "copilot-content.githubusercontent.com",
+            "copilot-custom-models.githubusercontent.com",
+            "copilot.github.com",
+            "copilot-reports.github.com",
+            "collector.github.com",
+            "api.mcp.github.com",
+            "default.exp-tas.com",
+            "github.ai",
+            "models.github.ai",
+            "githubnext.com",
+            "copilot-workspace.githubnext.com",
+            "ai.azure.com",
+            "api.catalog.azureml.ms"
+          ]
+        },
+        {
+          "name": "Cursor",
+          "pool": "ai",
+          "domains": [
+            "cursor.sh",
+            "cursor.com",
+            "cursorapi.com",
+            "cursor-cdn.com"
+          ]
+        },
+        {
+          "name": "Windsurf / Codeium",
+          "pool": "ai",
+          "domains": [
+            "windsurf.com",
+            "codeium.com"
+          ]
+        },
+        {
+          "name": "OpenRouter",
+          "pool": "ai",
+          "domains": [
+            "openrouter.ai"
+          ]
+        },
+        {
+          "name": "Groq",
+          "pool": "ai",
+          "domains": [
+            "groq.com"
+          ]
+        },
+        {
+          "name": "Lambda Labs",
+          "pool": "ai",
+          "domains": [
+            "lambdalabs.com"
+          ]
+        },
+        {
+          "name": "Lightning AI",
+          "pool": "ai",
+          "domains": [
+            "lightning.ai"
+          ]
+        },
+        {
+          "name": "Augment Code",
+          "pool": "ai",
+          "domains": [
+            "augmentcode.com"
+          ]
+        },
+        {
+          "name": "Cline",
+          "pool": "ai",
+          "domains": [
+            "data.cline.bot"
+          ]
+        },
+        {
+          "name": "Trae",
+          "pool": "ai",
+          "domains": [
+            "trae.ai"
+          ]
+        },
+        {
+          "name": "Qoder",
+          "pool": "ai",
+          "domains": [
+            "qoder.com"
+          ]
+        },
+        {
+          "name": "Manus",
+          "pool": "ai",
+          "domains": [
+            "manus.im",
+            "files.manus.cdn"
+          ]
+        },
+        {
+          "name": "Genspark",
+          "pool": "ai",
+          "domains": [
+            "genspark.ai"
+          ]
+        },
+        {
+          "name": "Langdock",
+          "pool": "ai",
+          "domains": [
+            "langdock.com"
+          ]
+        },
+        {
+          "name": "Reve",
+          "pool": "ai",
+          "domains": [
+            "reve.com"
+          ]
+        },
+        {
+          "name": "Vizard",
+          "pool": "ai",
+          "domains": [
+            "vizard.ai"
+          ]
+        },
+        {
+          "name": "DeepL",
+          "pool": "ai",
+          "domains": [
+            "deepl.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dev",
+      "name": "Инструменты разработки, SaaS и облака",
+      "tier": "free",
+      "pool": "default",
+      "services": [
+        {
+          "name": "JetBrains",
+          "pool": "default",
+          "domains": [
+            "jetbrains.com",
+            "myjetbrains.com",
+            "jetbrains.space",
+            "jetbrains.team",
+            "jetbrains.cloud",
+            "api.jetbrains.ai",
+            "youtrack.cloud",
+            "toolbox.app",
+            "qodana.cloud",
+            "dvxdiz880bm14.cloudfront.net",
+            "d1do0znm134sif.cloudfront.net",
+            "api.app.prod.grazie.aws.intellij.net",
+            "api.ai.jetbrains.com.cn",
+            "jb.gg",
+            "ingrazzio-cloud-prod.labs.jb.gg",
+            "junie.jetbrains.com"
+          ]
+        },
+        {
+          "name": "HashiCorp",
+          "pool": "default",
+          "domains": [
+            "hashicorp.com",
+            "terraform.io",
+            "vagrantcloud.com"
+          ]
+        },
+        {
+          "name": "Atlassian",
+          "pool": "default",
+          "domains": [
+            "atlassian.com"
+          ]
+        },
+        {
+          "name": "Sentry",
+          "pool": "default",
+          "domains": [
+            "sentry.io",
+            "sentry.dev"
+          ]
+        },
+        {
+          "name": "Neon",
+          "pool": "default",
+          "domains": [
+            "neon.com",
+            "neon.tech",
+            "neon.build",
+            "neon.new",
+            "neonapi.io",
+            "neonstatus.com",
+            "7687492087503394.hostedstatus.com",
+            "dfv3qgd2ykmrx.cloudfront.net",
+            "d2a07l6itrasqg.cloudfront.net"
+          ]
+        },
+        {
+          "name": "MongoDB",
+          "pool": "default",
+          "domains": [
+            "mongodb.com"
+          ]
+        },
+        {
+          "name": "Liquibase",
+          "pool": "default",
+          "domains": [
+            "docs.liquibase.com"
+          ]
+        },
+        {
+          "name": "Redis",
+          "pool": "default",
+          "domains": [
+            "redis.io",
+            "redislabs.com"
+          ]
+        },
+        {
+          "name": "Neo4j",
+          "pool": "default",
+          "domains": [
+            "neo4j.com"
+          ]
+        },
+        {
+          "name": "Grafana",
+          "pool": "default",
+          "domains": [
+            "grafana.com"
+          ]
+        },
+        {
+          "name": "Graylog",
+          "pool": "default",
+          "domains": [
+            "graylog.org"
+          ]
+        },
+        {
+          "name": "Snyk",
+          "pool": "default",
+          "domains": [
+            "snyk.io"
+          ]
+        },
+        {
+          "name": "Pingdom",
+          "pool": "default",
+          "domains": [
+            "pingdom.com"
+          ]
+        },
+        {
+          "name": "PostHog",
+          "pool": "default",
+          "domains": [
+            "posthog.com"
+          ]
+        },
+        {
+          "name": "Amplitude",
+          "pool": "default",
+          "domains": [
+            "amplitude.com"
+          ]
+        },
+        {
+          "name": "Buf",
+          "pool": "default",
+          "domains": [
+            "buf.build"
+          ]
+        },
+        {
+          "name": "Spacelift",
+          "pool": "default",
+          "domains": [
+            "spacelift.io"
+          ]
+        },
+        {
+          "name": "Algolia",
+          "pool": "default",
+          "domains": [
+            "dashboard.algolia.com"
+          ]
+        },
+        {
+          "name": "GitGuardian",
+          "pool": "default",
+          "domains": [
+            "dashboard.gitguardian.com"
+          ]
+        },
+        {
+          "name": "Healthchecks.io",
+          "pool": "default",
+          "domains": [
+            "hc-ping.com",
+            "hchk.io"
+          ]
+        },
+        {
+          "name": "Swagger / SmartBear",
+          "pool": "default",
+          "domains": [
+            "swagger.io",
+            "smartbear.com",
+            "smartbear.co"
+          ]
+        },
+        {
+          "name": "Heroku",
+          "pool": "default",
+          "domains": [
+            "assets.heroku.com",
+            "herokucdn.com"
+          ]
+        },
+        {
+          "name": "Netlify",
+          "pool": "default",
+          "domains": [
+            "netlify.com"
+          ]
+        },
+        {
+          "name": "Framer",
+          "pool": "default",
+          "domains": [
+            "framer.com",
+            "framer.app",
+            "framerstatic.com",
+            "framercanvas.com",
+            "framerusercontent.com",
+            "framercdn.com"
+          ]
+        },
+        {
+          "name": "Capacitor",
+          "pool": "default",
+          "domains": [
+            "capacitorjs.com"
+          ]
+        },
+        {
+          "name": "React Flow",
+          "pool": "default",
+          "domains": [
+            "reactflow.dev"
+          ]
+        },
+        {
+          "name": "ngrok",
+          "pool": "default",
+          "domains": [
+            "ngrok.com",
+            "connect.ngrok-agent.com"
+          ]
+        },
+        {
+          "name": "Tailscale",
+          "pool": "default",
+          "domains": [
+            "pkgs.tailscale.com"
+          ]
+        },
+        {
+          "name": "HTTP Toolkit",
+          "pool": "default",
+          "domains": [
+            "httptoolkit.com"
+          ]
+        },
+        {
+          "name": "ZeroSSL",
+          "pool": "default",
+          "domains": [
+            "zerossl.com"
+          ]
+        },
+        {
+          "name": "Mailinator",
+          "pool": "default",
+          "domains": [
+            "mailinator.com"
+          ]
+        },
+        {
+          "name": "PX6",
+          "pool": "default",
+          "domains": [
+            "px6.net"
+          ]
+        },
+        {
+          "name": "Oracle Cloud",
+          "pool": "default",
+          "domains": [
+            "oracle.com",
+            "oraclecloud.com"
+          ]
+        },
+        {
+          "name": "BellSoft Liberica",
+          "pool": "default",
+          "domains": [
+            "bell-sw.com"
+          ]
+        },
+        {
+          "name": "Qt",
+          "pool": "default",
+          "domains": [
+            "qt.io"
+          ]
+        },
+        {
+          "name": "Bitnami",
+          "pool": "default",
+          "domains": [
+            "bitnami.com"
+          ]
+        },
+        {
+          "name": "NVIDIA Developer",
+          "pool": "default",
+          "domains": [
+            "developer.nvidia.com"
+          ]
+        },
+        {
+          "name": "Mattermost",
+          "pool": "default",
+          "domains": [
+            "mattermost.com"
+          ]
+        },
+        {
+          "name": "Outline",
+          "pool": "default",
+          "domains": [
+            "getoutline.com"
+          ]
+        },
+        {
+          "name": "ClickUp",
+          "pool": "default",
+          "domains": [
+            "clickup.com"
+          ]
+        },
+        {
+          "name": "Zapier",
+          "pool": "default",
+          "domains": [
+            "zapier.com"
+          ]
+        },
+        {
+          "name": "Strava",
+          "pool": "default",
+          "domains": [
+            "strava.com"
+          ]
+        },
+        {
+          "name": "FatSecret",
+          "pool": "default",
+          "domains": [
+            "fatsecret.com"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "media",
+      "name": "Музыка, видео и TikTok",
+      "tier": "pro",
+      "pool": "media",
+      "services": [
+        {
+          "name": "Spotify",
+          "pool": "media",
+          "domains": [
+            "spotify.com",
+            "scdn.co",
+            "spotifycdn.com",
+            "spotifycdn.net",
+            "spoti.fi"
+          ]
+        },
+        {
+          "name": "Netflix",
+          "pool": "media",
+          "domains": [
+            "netflix.com",
+            "nflxext.com",
+            "nflximg.net",
+            "nflxso.net"
+          ]
+        },
+        {
+          "name": "Twitch",
+          "pool": "media",
+          "domains": [
+            "twitch.tv",
+            "ttvnw.net",
+            "jtvnw.net",
+            "twitchcdn.net",
+            "twitchsvc.net"
+          ]
+        },
+        {
+          "name": "TikTok",
+          "pool": "media",
+          "domains": [
+            "tiktok.com",
+            "tiktokcdn.com",
+            "tiktokcdn-us.com",
+            "tiktokcdn-eu.com",
+            "tiktokv.com",
+            "tiktokv.us",
+            "tiktokstatic.com",
+            "ttwstatic.com",
+            "byteoversea.com",
+            "ibyteimg.com",
+            "ibytedtos.com",
+            "muscdn.com",
+            "musical.ly"
+          ]
+        },
+        {
+          "name": "ElevenLabs / Suno",
+          "pool": "ai",
+          "domains": [
+            "elevenlabs.io",
+            "suno.com",
+            "suno.ai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "work",
+      "name": "Рабочие инструменты и учёба",
+      "tier": "pro",
+      "pool": "default",
+      "services": [
+        {
+          "name": "Notion",
+          "pool": "default",
+          "domains": [
+            "notion.so",
+            "notion.site",
+            "notion.com",
+            "notion.new",
+            "notionusercontent.com",
+            "notion-static.com",
+            "makenotion.com"
+          ]
+        },
+        {
+          "name": "Miro",
+          "pool": "default",
+          "domains": [
+            "miro.com",
+            "realtimeboard.com"
+          ]
+        },
+        {
+          "name": "Canva",
+          "pool": "default",
+          "domains": [
+            "canva.com",
+            "canva.link"
+          ]
+        },
+        {
+          "name": "Adobe (Firefly, Creative Cloud)",
+          "pool": "default",
+          "domains": [
+            "adobe.com",
+            "adobelogin.com",
+            "adobe.io"
+          ]
+        },
+        {
+          "name": "Airtable",
+          "pool": "default",
+          "domains": [
+            "airtable.com",
+            "airtableusercontent.com",
+            "airtableblocks.com"
+          ]
+        },
+        {
+          "name": "Grammarly",
+          "pool": "default",
+          "domains": [
+            "grammarly.com",
+            "grammarly.io"
+          ]
+        },
+        {
+          "name": "Coursera",
+          "pool": "default",
+          "domains": [
+            "coursera.org"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "games",
+      "name": "Игры и консоли",
+      "tier": "pro",
+      "pool": "default",
+      "services": [
+        {
+          "name": "Supercell (Brawl Stars, Clash Royale, Clash of Clans)",
+          "pool": "default",
+          "domains": [
+            "supercell.com",
+            "supercellid.com",
+            "supercellgames.com",
+            "brawlstarsgame.com",
+            "clashroyale.com",
+            "clashofclans.com"
+          ]
+        },
+        {
+          "name": "Xbox",
+          "pool": "default",
+          "domains": [
+            "xbox.com",
+            "xboxlive.com",
+            "xboxservices.com"
+          ]
+        },
+        {
+          "name": "PlayStation Network",
+          "pool": "default",
+          "domains": [
+            "playstation.com",
+            "playstation.net",
+            "sonyentertainmentnetwork.com"
+          ]
+        },
+        {
+          "name": "NVIDIA GeForce NOW",
+          "pool": "default",
+          "domains": [
+            "geforcenow.com",
+            "nvidiagrid.net"
+          ]
+        }
+      ]
+    }
+  ],
+  "disabled": [
+    {
+      "name": "Общая инфраструктура Google и Firebase",
+      "note": "Через эти домены идёт и посторонний трафик. Если направить их через прокси, ломаются приложения Android и синхронизация браузера. Включать по одному, только если соответствующий сервис не работает.",
+      "domains": [
+        "clients6.google.com",
+        "firebaseinstallations.googleapis.com",
+        "gvt1.com",
+        "lookerstudio.google.com",
+        "news.google.com",
+        "suggestqueries.google.com"
+      ]
+    },
+    {
+      "name": "Сообщается, но не подтверждено",
+      "note": "О региональных ограничениях сообщают, но подтвердить не удалось. Обычно это значит, что ограничение снято или относится к аккаунту, а не к адресу. Пробы 2026-11-10 из РФ и РБ против эталона с нидерландского воркера: Docker Hub (включая auth/registry), Figma и Slack открываются одинаково отовсюду. Проверьте со своего подключения перед включением.",
+      "domains": [
+        "hub.docker.com",
+        "registry-1.docker.io",
+        "auth.docker.io",
+        "production.cloudflare.docker.com",
+        "figma.com",
+        "slack.com",
+        "stripe.com",
+        "console.aws.amazon.com",
+        "portal.azure.com",
+        "console.cloud.google.com"
+      ]
+    }
+  ],
+  "passthrough": {
+    "note": "Российские сервисы, которые сами блокируют зарубежные адреса, включая казахстанские. Должны разрешаться обычным образом и подключаться напрямую.",
+    "domains": [
+      "1018213540.rsc.cdn77.org",
+      "avtodor-tr.ru",
+      "b2c-ticket-sentry.onelya.ru",
+      "bitrix.info",
+      "bkvet.ru",
+      "cdn1.ozonusercontent.com",
+      "cms1.dzvr.ru",
+      "consultant.ru",
+      "counter.yadro.ru",
+      "dzvr.ru",
+      "emex.ru",
+      "fairplay-proxy.ott.yandex.ru",
+      "fssp.gov.ru",
+      "gorzdrav.spb.ru",
+      "gosuslugi.ru",
+      "gov.ru",
+      "graphql.kinopoisk.ru",
+      "gu-st.ru",
+      "lemanapro.ru",
+      "leroymerlin.ru",
+      "magnit.ru",
+      "mobileapp.russianpost.ru",
+      "mos.ru",
+      "mosenergosbyt.ru",
+      "mosreg.ru",
+      "nalog.ru",
+      "ozon.ru",
+      "pesc.ru",
+      "pochta.ru",
+      "reso.ru",
+      "rosreestr.gov.ru",
+      "rzd-bonus.ru",
+      "rzd.ru",
+      "sys.refocus.ru",
+      "vshark.ttk.ru",
+      "widevine-proxy.ott.yandex.ru",
+      "xn--90aijkdmaud0d.xn--p1ai",
+      "yandex.net"
+    ]
+  },
+  "counts": {
+    "free_categories": 2,
+    "free_services": 65,
+    "free_domains": 316,
+    "pro_categories": 3,
+    "pro_services": 16,
+    "pro_domains": 64
+  }
+}

@@ -1,0 +1,122 @@
+# Перевал control plane — pereval.top
+#
+#   cp deploy/.env.example .env && $EDITOR .env
+#   docker compose pull && docker compose up -d
+#
+# nginx терминирует TLS единым wildcard-сертификатом инфраструктуры (pereval.top,
+# *.pereval.top, *.pro.pereval.top, устаревшие Free-имена), проксирует в app:3000,
+# ставит X-Real-IP (единственный доверенный источник IP клиента для приложения).
+#
+# Сертификат выпускается вручную (DNS-01): ./deploy/issue-cert.sh. nginx-контейнер
+# публикует копию в /etc/letsencrypt/pereval (права для app), а ноды забирают её через
+# /api/internal/v1/node/cert (cert_sync.py).
+name: pereval
+
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/amak-tech/pereval-web:latest}
+    build: .
+    command: ["app"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://pereval:${POSTGRES_PASSWORD}@postgres:5432/pereval
+      TRUSTED_PROXY_IPS: nginx
+      CERT_DIR: /etc/letsencrypt/pereval
+      # Auth.js строит URL (redirect_uri для Google) от этого адреса, а не от Host внутри контейнера (0.0.0.0:3000)
+      AUTH_URL: ${PUBLIC_ORIGIN:-https://pereval.top}
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: &log
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  jobs:
+    image: ${APP_IMAGE:-ghcr.io/amak-tech/pereval-web:latest}
+    build: .
+    command: ["jobs"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://pereval:${POSTGRES_PASSWORD}@postgres:5432/pereval
+      CERT_DIR: /etc/letsencrypt/pereval
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *log
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pereval
+      POSTGRES_DB: pereval
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pereval -d pereval"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *log
+
+  backup:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: "30"
+    volumes:
+      - /var/backups/pereval:/backups
+      - ./deploy/backup-loop.sh:/backup-loop.sh:ro
+    entrypoint: ["sh", "/backup-loop.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *log
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-pereval.top}
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/site.conf.template:/etc/nginx/templates/site.conf.template:ro
+      - ./deploy/nginx/entrypoint-extra.sh:/docker-entrypoint.d/40-pereval-certs.sh:ro
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *log
+
+  # Только инструмент: запускается вручную через ./deploy/issue-cert.sh (DNS-01 с TXT-записями).
+  # Автопродление невозможно (manual-плагин), напоминания шлёт jobs/certwatch.
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["tools"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+      - ./deploy/certbot-auth-hook.sh:/hooks/auth.sh:ro
+      - ./dns01:/dns01            # сюда hook пишет TXT-записи для DNS-01 (dns01/records.txt)
+
+volumes:
+  pgdata:
+  letsencrypt:
+  certbot-www:

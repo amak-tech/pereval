@@ -1,40 +1,69 @@
-# Единый источник данных: категории, сервисы и их домены.
+# Единый источник данных: домены, пулы воркеров, категории, сервисы и их домены.
 #
-# Из этого файла generate.py собирает dnsmasq-geoblock.conf и index.html:
+# Из этого файла generate.py собирает конфиги dnsmasq/nginx для всех нод и
+# каталог сервисов для веб-приложения (web/src/generated/services.json):
 #
-#     python3 generate.py services.yaml 153.80.200.170
+#     python3 src/generate.py services.yaml 153.80.200.170
 #
 # Структура:
-#   meta             название, домен сайта и дата обновления для страницы
-#   nodes            конфигурация основного узла (primary) и пула воркеров (workers)
+#   meta             название и адрес сайта (лендинг, кабинет, API)
+#   free             домены DNS бесплатной версии (основной + устаревшие, которые
+#                    продолжают работать для старых профилей)
+#   nodes            кластер Free: основной узел (primary), пулы и воркеры
 #   dnsmasq_options  строки, которые попадут в блок опций dnsmasq как есть
-#   categories       категория -> сервисы -> домены. Поддомены включаются
-#                    автоматически: anthropic.com покрывает api.anthropic.com,
-#                    поэтому дочерние записи указывать не нужно
+#   categories       Free-каталог: категория (id, pool) -> сервисы (pool) -> домены.
+#                    Поддомены включаются автоматически: anthropic.com покрывает
+#                    api.anthropic.com, поэтому дочерние записи указывать не нужно
 #   disabled         группы доменов, закомментированных в конфиге, с пояснением
 #   passthrough      домены, которые НЕЛЬЗЯ проксировать: российские сервисы,
 #                    блокирующие зарубежные адреса, включая казахстанские
+#   pro              инфраструктура и каталог платной версии (DNS-нода, пулы,
+#                    воркеры, категории)
+#
+# Пулы воркеров. У каждого сервиса есть пул: явно у сервиса, иначе у категории,
+# иначе «default». Все домены сервиса резолвятся в ОДНУ ноду пула (выбор
+# детерминированный, rendezvous-хэш по имени сервиса) — важно для сервисов,
+# которым нужен постоянный IP (ИИ-платформы). «Тяжёлые» сервисы (видео, соцсети)
+# можно вынести в отдельный пул на другие ноды. Пул без живых нод уходит
+# в fallback, затем на primary.
 #
 # После правок стоит прогнать проверку — она ловит дубли, конфликты
-# с passthrough и уже покрытые поддомены:
+# с passthrough, неизвестные пулы и уже покрытые поддомены:
 #
-#     python3 generate.py services.yaml 153.80.200.170 --check
+#     python3 src/generate.py services.yaml 153.80.200.170 --check
 
 meta:
   name: Перевал
-  origin: https://pereval.portbuddy.tech
+  origin: https://pereval.top
+
+free:
+  domain: free.pereval.top                 # DoH https://free.pereval.top/dns-query, DoT free.pereval.top
+  legacy_domains:
+    - pereval.portbuddy.tech               # старое имя: DoH/DoT продолжают работать, сайт -> 301 на origin
+
 nodes:
   primary: 153.80.200.170
   include_primary_in_dns: false   # false = отдавать в DNS только здоровые воркеры; true = включать primary наравне с воркерами
   probe_sni: claude.ai
+  pools:
+    default:
+      note: Общий пул — всё, у чего пул не задан явно.
+    ai:
+      note: ИИ-платформы — важно, чтобы все запросы сервиса шли с одного IP/локации.
+      fallback: default
+    media:
+      note: Тяжёлый трафик (видео, стриминги, соцсети) — отдельные ноды, чтобы не мешать ИИ.
+      fallback: default
   workers:
     # Добавляйте сюда дополнительные VPS-воркеры по мере роста нагрузки.
+    # pools — в каких пулах участвует нода (по умолчанию только default).
     # По умолчанию для подключения к воркерам используются те же SSH-пользователь,
     # SSH-ключ и порт, что и для основного узла (primary).
     # При необходимости можно переопределить их для конкретного воркера напрямую
     # или через секреты GitHub Actions (переменные окружения):
     # - ip: 153.80.200.171
-    #   name: kz-worker-1
+    #   name: kz-media-1
+    #   pools: [media]
     #   weight: 1
     #   ssh_user_env: WORKER1_SSH_USER   # опционально: имя env-переменной (или ssh_user: ubuntu)
     #   ssh_key_env: WORKER1_SSH_KEY     # опционально: имя env-переменной с приватным ключом или путём (или ssh_key: ~/.ssh/id_ed25519)
@@ -42,6 +71,11 @@ nodes:
 
     - ip: 151.247.25.123
       name: nl-worker-1
+      pools: [default, media]
+
+    - ip: 144.31.159.147
+      name: free-worker-ai-1
+      pools: [ai]
 
 dnsmasq_options:
   - listen-address=0.0.0.0
@@ -60,7 +94,9 @@ dnsmasq_options:
   - filter-rr=HTTPS,SVCB
   - local-ttl=60
 categories:
-  - name: ИИ и языковые модели
+  - id: ai
+    name: ИИ и языковые модели
+    pool: ai
     services:
       - name: Anthropic / Claude
         domains:
@@ -341,7 +377,9 @@ categories:
       - name: DeepL
         domains:
           - deepl.com
-  - name: Инструменты разработки, SaaS и облака
+  - id: dev
+    name: Инструменты разработки, SaaS и облака
+    pool: default
     services:
       - name: JetBrains
         domains:
@@ -526,8 +564,9 @@ disabled:
   - name: Сообщается, но не подтверждено
     note: >-
       О региональных ограничениях сообщают, но подтвердить не удалось. Обычно это значит, что
-      ограничение снято или относится к аккаунту, а не к адресу. Проверьте со своего подключения
-      перед включением.
+      ограничение снято или относится к аккаунту, а не к адресу. Пробы 2026-11-10 из РФ и РБ
+      против эталона с нидерландского воркера: Docker Hub (включая auth/registry), Figma и Slack
+      открываются одинаково отовсюду. Проверьте со своего подключения перед включением.
     domains:
       - hub.docker.com
       - registry-1.docker.io
@@ -535,7 +574,6 @@ disabled:
       - production.cloudflare.docker.com
       - figma.com
       - slack.com
-      - grammarly.com
       - stripe.com
       - console.aws.amazon.com
       - portal.azure.com
@@ -583,3 +621,154 @@ passthrough:
     - widevine-proxy.ott.yandex.ru
     - xn--90aijkdmaud0d.xn--p1ai
     - yandex.net
+
+# =============================================================================
+# Перевал Pro — платная версия. Отдельная DNS-нода и отдельные прокси-воркеры.
+# Каталог Pro = все категории Free (они тоже уходят через Pro-воркеры)
+# + категории ниже. Списки доменов — стартовые, проверяйте каждый сервис
+# с Pro-воркера перед публикацией на странице.
+# =============================================================================
+pro:
+  domain: pro.pereval.top                  # DoH https://pro.pereval.top/dns/<token>, DoT <token>.pro.pereval.top
+  dns_ip: 85.209.148.147                   # VPS pro-dns
+  cp_ip: 91.149.179.184                    # VPS pereval.top (control plane) — для nftables на воркерах
+  pools:
+    default:
+      note: Общий пул Pro.
+    ai:
+      note: ИИ-платформы Pro — постоянный IP на сервис.
+      fallback: default
+    media:
+      note: Стриминги и TikTok Pro — тяжёлый трафик.
+      fallback: default
+    reserve:
+      note: Карантин — воркер выведен из обслуживания (его выходной IP Google относит к RU/недоступному региону; см. YouTube "GL" перед вводом в пул ai).
+  workers:
+    # Каждый Pro-воркер — отдельная нода в CP со своим Bearer-секретом (pnpm admin node add <name> pro_worker <ip>).
+    # deploy.sh берёт секрет из env-переменной secret_env (по умолчанию <NAME>_SECRET: pro-worker-ai-1 →
+    # PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET. Переменные пробрасывает deploy.yml.
+    - ip: 141.11.197.214                   # VPS pro-worker-default-1 — общий пул (+ media и временно ai через тот же воркер)
+      name: pro-worker-default-1
+      pools: [default, media, ai]
+    - ip: 141.11.197.239                   # VPS pro-worker-ai-1 — в карантине: 151.247.25.133 и 141.11.197.239 Google считает RU, Gemini отдаёт «регион недоступен»
+      name: pro-worker-ai-1
+      pools: [reserve]
+  categories:
+    # Каталог Pro намеренно короткий: только сервисы, геоблок которых подтверждён пробами
+    # из РФ (Yandex Cloud) и РБ (Белтелеком) против эталона с нидерландского воркера 2026-11-10,
+    # и за которые есть реальный спрос. Что не геоблокируется (Reddit, Pinterest, Trello,
+    # Duolingo, Figma, Slack, Docker Hub) — в Pro не держим.
+    - id: media
+      name: Музыка, видео и TikTok
+      pool: media
+      services:
+        - name: Spotify                      # закрыт для РФ (why-not-available), в РБ работает
+          domains:
+            - spotify.com
+            - scdn.co
+            - spotifycdn.com
+            - spotifycdn.net
+            - spoti.fi
+        - name: Netflix                      # закрыт для РФ; оплата из РФ невозможна, поэтому не в заголовках
+          # Видео-CDN nflxvideo.net намеренно не проксируется: регион определяется
+          # на netflix.com, а сам поток идёт напрямую с Open Connect — так работают
+          # классические Smart DNS и не расходуется канал воркера.
+          domains:
+            - netflix.com
+            - nflxext.com
+            - nflximg.net
+            - nflxso.net
+        - name: Twitch                       # не геоблок, а замедление у провайдеров РФ: через воркер идёт 1080p
+          domains:
+            - twitch.tv
+            - ttvnw.net
+            - jtvnw.net
+            - twitchcdn.net
+            - twitchsvc.net
+        - name: TikTok                       # с 2022 для РФ урезанный режим: старая лента, без загрузки
+          domains:
+            - tiktok.com
+            - tiktokcdn.com
+            - tiktokcdn-us.com
+            - tiktokcdn-eu.com
+            - tiktokv.com
+            - tiktokv.us
+            - tiktokstatic.com
+            - ttwstatic.com
+            - byteoversea.com
+            - ibyteimg.com
+            - ibytedtos.com
+            - muscdn.com
+            - musical.ly
+        - name: ElevenLabs / Suno            # ElevenLabs: geo-restriction для РФ и РБ
+          pool: ai
+          domains:
+            - elevenlabs.io
+            - suno.com
+            - suno.ai
+    - id: work
+      name: Рабочие инструменты и учёба
+      pool: default
+      services:
+        - name: Notion                       # с сентября 2024 закрыт для РФ (403), в РБ работает
+          domains:
+            - notion.so
+            - notion.site
+            - notion.com
+            - notion.new
+            - notionusercontent.com
+            - notion-static.com
+            - makenotion.com
+        - name: Miro                         # с 15.10.2026 геоблок IP РФ и РБ, включая бесплатные аккаунты
+          domains:
+            - miro.com
+            - realtimeboard.com
+        - name: Canva                        # закрыт для РФ с июня 2022
+          domains:
+            - canva.com
+            - canva.link
+        - name: Adobe (Firefly, Creative Cloud)  # Firefly: denied для РФ и РБ; adobe.com целиком закрыт для РБ
+          domains:
+            - adobe.com
+            - adobelogin.com
+            - adobe.io
+        - name: Airtable                     # с 19.02.2026 закрыт для РФ (обрыв TLS), в РБ работает
+          domains:
+            - airtable.com
+            - airtableusercontent.com
+            - airtableblocks.com
+        - name: Grammarly                    # 451 для РБ, обрыв TLS для РФ
+          domains:
+            - grammarly.com
+            - grammarly.io
+        - name: Coursera                     # закрыт для РФ (обрыв TLS), в РБ работает
+          domains:
+            - coursera.org
+    - id: games
+      name: Игры и консоли
+      pool: default
+      services:
+        # ВАЖНО: SNI-прокси пропускает только TCP 80/443 — через него проходит
+        # логин, магазин и API, но не UDP-трафик игровых серверов и стриминга.
+        - name: Supercell (Brawl Stars, Clash Royale, Clash of Clans)
+          domains:
+            - supercell.com
+            - supercellid.com
+            - supercellgames.com
+            - brawlstarsgame.com
+            - clashroyale.com
+            - clashofclans.com
+        - name: Xbox                         # вход в Xbox Live из РФ: ошибка 0x80a40401
+          domains:
+            - xbox.com
+            - xboxlive.com
+            - xboxservices.com
+        - name: PlayStation Network
+          domains:
+            - playstation.com
+            - playstation.net
+            - sonyentertainmentnetwork.com
+        - name: NVIDIA GeForce NOW           # РФ и РБ вне списка регионов GFN
+          domains:
+            - geforcenow.com
+            - nvidiagrid.net

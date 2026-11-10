@@ -5,6 +5,9 @@
 #
 #   ./deploy.sh <ip-сервера> <путь-к-ssh-ключу> [пользователь] [опции]
 #
+# Роли узлов: primary / worker (Free-кластер), pro-dns / pro-worker (Перевал Pro).
+# Сайт, кабинет и API (pereval.top) разворачиваются отдельно — web/compose.yaml.
+#
 # Что делает:
 #   1. проверяет, что локальные файлы существуют, свежие и без незакрытых {{...}}
 #   2. определяет список целевых узлов (воркеры из cluster-nodes.json -> основной узел)
@@ -25,42 +28,57 @@ set -euo pipefail
 
 BUILD_DIR="${BUILD_DIR:-build}"
 SRC_DIR="${SRC_DIR:-src}"
-ASSETS_DIR="${ASSETS_DIR:-assets}"
 
-DNSMASQ_CONF="$BUILD_DIR/dnsmasq-geoblock.conf"
-NGINX_CONF="$BUILD_DIR/nginx.conf"
-NGINX_MAPS=("$BUILD_DIR/nginx-sni-allow.map" "$BUILD_DIR/nginx-host-allow.map")
-NGINX_WORKER_CONFS=("$BUILD_DIR/nginx-workers-stream.conf" "$BUILD_DIR/nginx-workers-http.conf")
-SERVICE_MAP="$BUILD_DIR/service-map.json"
-CLUSTER_NODES="$BUILD_DIR/cluster-nodes.json"
-STATS_COLLECTOR="$SRC_DIR/stats_collector.py"
-DOH_PROXY="$SRC_DIR/doh_proxy.py"
-HEALTHCHECK="$SRC_DIR/healthcheck.py"
-LEADS_SERVICE="$SRC_DIR/leads_service.py"
-WEB_FILES=(
-	"$BUILD_DIR/index.html"
-	"$BUILD_DIR/pro.html"
-	"$BUILD_DIR/dedicated.html"
-	"$BUILD_DIR/stats.html"
-	"$BUILD_DIR/terms.html"
-	"$BUILD_DIR/privacy.html"
-	"$BUILD_DIR/dns.mobileconfig"
-	"$ASSETS_DIR/favicon.svg"
-	"$ASSETS_DIR/favicon.ico"
-	"$ASSETS_DIR/apple-touch-icon.png"
-	"$BUILD_DIR/og-image.svg"
-	"$BUILD_DIR/og-image.png"
-	"$BUILD_DIR/robots.txt"
-	"$BUILD_DIR/sitemap.xml"
+# --- манифесты файлов по ролям --------------------------------------------
+# Общие Python-модули (ставятся в /usr/local/lib/pereval на всех узлах)
+LIB_FILES=("$SRC_DIR/poolrouting.py" "$SRC_DIR/dnscommon.py")
+# Free-кластер (primary / worker)
+FREE_FILES=(
+	"$BUILD_DIR/dnsmasq-geoblock.conf"
+	"$BUILD_DIR/nginx.conf"
+	"$BUILD_DIR/nginx-sni-allow.map"
+	"$BUILD_DIR/nginx-host-allow.map"
+	"$BUILD_DIR/nginx-workers-stream.conf"
+	"$BUILD_DIR/nginx-workers-http.conf"
+	"$BUILD_DIR/service-map.json"
+	"$BUILD_DIR/cluster-nodes.json"
+	"$SRC_DIR/stats_collector.py"
+	"$SRC_DIR/doh_proxy.py"
+	"$SRC_DIR/healthcheck.py"
+	"$SRC_DIR/cert_sync.py"
 )
+# Pro DNS-нода
+PRO_DNS_FILES=(
+	"$BUILD_DIR/pro-dns-nginx.conf"
+	"$BUILD_DIR/cache-dnsmasq.conf"
+	"$BUILD_DIR/pro-policy-map.json"
+	"$BUILD_DIR/pro-nodes.json"
+	"$SRC_DIR/pro_dns.py"
+	"$SRC_DIR/healthcheck.py"
+	"$SRC_DIR/cert_sync.py"
+)
+# Pro прокси-воркер
+PRO_WORKER_FILES=(
+	"$BUILD_DIR/pro-worker-nginx.conf"
+	"$BUILD_DIR/pro-nginx-sni-allow.map"
+	"$BUILD_DIR/pro-nginx-host-allow.map"
+	"$BUILD_DIR/pro-service-map.json"
+	"$BUILD_DIR/pro-nodes.json"
+	"$SRC_DIR/pro_node_agent.py"
+	"$SRC_DIR/stats_collector.py"
+)
+DNSMASQ_CONF="$BUILD_DIR/dnsmasq-geoblock.conf"
+CLUSTER_NODES="$BUILD_DIR/cluster-nodes.json"
+PRO_NODES="$BUILD_DIR/pro-nodes.json"
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
 DRY_RUN=0
 FORCE=0
-ROLE="auto"          # auto | primary | worker
+ROLE="auto"          # auto | primary | worker | pro-dns | pro-worker
 DEPLOY_ALL=0         # 1 = принудительно развернуть воркеры + primary
 PRIMARY_ONLY=0       # 1 = развернуть только указанный узел без обхода воркеров
+DEPLOY_PRO=0         # 1 = развернуть Pro: DNS-ноду, затем Pro-воркеры (из pro-nodes.json)
 
 RED=$'\033[31m'; GRN=$'\033[32m'; YEL=$'\033[33m'; DIM=$'\033[2m'; OFF=$'\033[0m'
 [[ -t 1 ]] || { RED=; GRN=; YEL=; DIM=; OFF=; }
@@ -82,9 +100,11 @@ usage() {
 
 Опции:
   -p, --port ПОРТ          порт SSH по умолчанию (по умолчанию 22)
-  -r, --role РОЛЬ          роль узла: auto (по умолчанию), primary или worker
-  -a, --all                развернуть на все воркеры из cluster-nodes.json, затем на primary
+  -r, --role РОЛЬ          роль узла: auto (по умолчанию), primary, worker, pro-dns или pro-worker
+  -a, --all                развернуть на все Free-воркеры из cluster-nodes.json, затем на primary
       --primary-only       развернуть только на основной узел (пропустить пул воркеров)
+      --pro                развернуть Pro: DNS-ноду (pro.dns_ip), затем Pro-воркеры из pro-nodes.json
+                           (ip-сервера при этом игнорируется; SSH-реквизиты наследуются)
   -n, --dry-run            показать план развёртывания без подключения и изменений
   -f, --force              не останавливаться на предупреждениях
   -h, --help               эта справка
@@ -93,7 +113,18 @@ usage() {
   ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519
   ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519 ubuntu --all
   ./deploy.sh 153.80.200.171 ~/.ssh/id_ed25519 root --role worker
+  ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519 root --pro
+  ./deploy.sh 203.0.113.10 ~/.ssh/id_ed25519 root --role pro-dns
   ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519 ubuntu --port 2222 --dry-run
+
+Секреты нод (см. web: pnpm admin node add): FREE_PRIMARY_SECRET (Free primary: забирает единый TLS-сертификат
+с control plane), PRO_DNS_SECRET, и по одному на Pro-воркер — в переменных окружения, попадут в /etc/pereval/node.env.
+Секрет Pro-воркера берётся из переменной secret_env воркера в services.yaml (по умолчанию <NAME>_SECRET,
+например PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET.
+CP_ORIGIN по умолчанию = site_origin из services.yaml.
+TLS: один wildcard-сертификат (cert_domains в cluster-nodes.json) выпускается на control plane
+(web/deploy/issue-cert.sh) и раздаётся нодам скриптом cert_sync.py по systemd-таймеру; certbot на нодах не нужен.
+Сайт, кабинет и API (pereval.top) разворачиваются отдельно: web/compose.yaml + .github/workflows/web.yml.
 USAGE
 }
 
@@ -107,6 +138,7 @@ while (($#)); do
 		-f|--force)        FORCE=1; shift ;;
 		-a|--all)          DEPLOY_ALL=1; shift ;;
 		--primary-only)    PRIMARY_ONLY=1; shift ;;
+		--pro)             DEPLOY_PRO=1; shift ;;
 		-p|--port)         SSH_PORT="${2:-}"; [[ -n $SSH_PORT ]] || die "--port без значения"; shift 2 ;;
 		--port=*)          SSH_PORT="${1#*=}"; shift ;;
 		-r|--role)         ROLE="${2:-}"; [[ -n $ROLE ]] || die "--role без значения"; shift 2 ;;
@@ -134,7 +166,8 @@ validate_ipv4() {
 
 validate_ipv4 "$SERVER_IP"
 [[ $SSH_PORT =~ ^[0-9]+$ ]] && ((SSH_PORT > 0 && SSH_PORT < 65536)) || die "некорректный порт SSH: $SSH_PORT"
-[[ $ROLE == "auto" || $ROLE == "primary" || $ROLE == "worker" ]] || die "некорректная роль --role: $ROLE (ожидается auto, primary или worker)"
+[[ $ROLE == "auto" || $ROLE == "primary" || $ROLE == "worker" || $ROLE == "pro-dns" || $ROLE == "pro-worker" ]] \
+	|| die "некорректная роль --role: $ROLE (ожидается auto, primary, worker, pro-dns или pro-worker)"
 
 TEMP_KEY_FILES=()
 ACTIVE_CTLS=()
@@ -198,19 +231,27 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 step "Проверяю локальные файлы"
 
-LOCAL_FILES=(
-	"$DNSMASQ_CONF"
-	"$NGINX_CONF"
-	"${NGINX_MAPS[@]}"
-	"${NGINX_WORKER_CONFS[@]}"
-	"$SERVICE_MAP"
-	"$CLUSTER_NODES"
-	"$STATS_COLLECTOR"
-	"$DOH_PROXY"
-	"$HEALTHCHECK"
-	"$LEADS_SERVICE"
-	"${WEB_FILES[@]}"
-)
+# Какие роли будем разворачивать в этом запуске
+NEED_FREE=1; NEED_PRO=0
+if [[ $ROLE == "pro-dns" || $ROLE == "pro-worker" ]]; then NEED_FREE=0; NEED_PRO=1; fi
+if ((DEPLOY_PRO)); then NEED_FREE=0; NEED_PRO=1; fi
+
+LOCAL_FILES=("${LIB_FILES[@]}")
+((NEED_FREE)) && LOCAL_FILES+=("${FREE_FILES[@]}")
+((NEED_PRO)) && LOCAL_FILES+=("${PRO_DNS_FILES[@]}" "${PRO_WORKER_FILES[@]}")
+# убираем дубли, сохраняя порядок
+_uniq=()
+for f in "${LOCAL_FILES[@]}"; do
+	skip=0
+	for u in ${_uniq[@]+"${_uniq[@]}"}; do [[ $u == "$f" ]] && { skip=1; break; }; done
+	((skip)) || _uniq+=("$f")
+done
+LOCAL_FILES=("${_uniq[@]}")
+# опциональные карты пулов со strict_allowlist
+for f in "$BUILD_DIR"/nginx-sni-allow.*.map "$BUILD_DIR"/nginx-host-allow.*.map "$BUILD_DIR"/pro-nginx-sni-allow.*.map "$BUILD_DIR"/pro-nginx-host-allow.*.map; do
+	[[ -f $f ]] && LOCAL_FILES+=("$f")
+done
+
 missing=()
 for f in "${LOCAL_FILES[@]}"; do
 	[[ -f $f ]] || missing+=("$f")
@@ -222,57 +263,95 @@ fi
 
 # несведённые подстановки означают, что генератор падал на середине
 for f in "${LOCAL_FILES[@]}"; do
-	[[ $f == *.png || $f == *.ico || $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" || $f == "$LEADS_SERVICE" ]] && continue
+	[[ $f == *.py ]] && continue
 	if grep -q '{{[a-z_]*}}' "$f"; then
 		die "в $f остались подстановки {{...}} — генератор не доработал"
 	fi
 done
 
-# списки уникальных доменов в dnsmasq и nginx-sni/host-allow.map должны совпадать
-n_dnsmasq=$(awk -F/ '/^address=\//{print $2}' "$DNSMASQ_CONF" | sort -u | wc -l | tr -d ' ')
-for m in "${NGINX_MAPS[@]}"; do
-	n_map=$(grep -c '^\.' "$m" || true)
-	((n_dnsmasq == n_map)) || die "в $DNSMASQ_CONF $n_dnsmasq уникальных доменов, а в $m — $n_map
+n_dnsmasq=0
+if ((NEED_FREE)); then
+	# списки уникальных доменов в dnsmasq и nginx-sni/host-allow.map должны совпадать
+	n_dnsmasq=$(awk -F/ '/^address=\//{print $2}' "$DNSMASQ_CONF" | sort -u | wc -l | tr -d ' ')
+	for m in "$BUILD_DIR/nginx-sni-allow.map" "$BUILD_DIR/nginx-host-allow.map"; do
+		n_map=$(grep -c '^\.' "$m" || true)
+		((n_dnsmasq == n_map)) || die "в $DNSMASQ_CONF $n_dnsmasq уникальных доменов, а в $m — $n_map
     пересоберите оба файла одним запуском $SRC_DIR/generate.py"
-done
-info "$n_dnsmasq доменов, списки dnsmasq и nginx совпадают"
+	done
+	info "$n_dnsmasq доменов, списки dnsmasq и nginx совпадают"
+fi
+if ((NEED_PRO)); then
+	n_pro=$(grep -c '^\.' "$BUILD_DIR/pro-nginx-sni-allow.map" || true)
+	n_pro_host=$(grep -c '^\.' "$BUILD_DIR/pro-nginx-host-allow.map" || true)
+	((n_pro == n_pro_host)) || die "pro-nginx-sni-allow.map ($n_pro) и pro-nginx-host-allow.map ($n_pro_host) расходятся"
+	info "Pro: $n_pro доменов в allow-картах"
+fi
 
-DOMAIN=$(sed -n '/<key>ServerName<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;q;}' "$BUILD_DIR/dns.mobileconfig")
-[[ -n $DOMAIN ]] || die "не удалось определить ServerName из dns.mobileconfig"
-info "домен сервера: $DOMAIN"
-
-# Разбираем cluster-nodes.json через python3
-CLUSTER_META=$(python3 - "$CLUSTER_NODES" <<'PY'
+# Разбираем cluster-nodes.json и pro-nodes.json через python3
+CLUSTER_META=$(python3 - "$CLUSTER_NODES" "$PRO_NODES" <<'PYMETA'
 import json, sys
 from pathlib import Path
-data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-primary = data.get("primary") or ""
-print(f"PRIMARY={primary}")
-for idx, w in enumerate(data.get("workers") or [], 1):
-    if not isinstance(w, dict) or not w.get("ip"):
-        continue
-    fields = [
-        w.get("ip") or "",
-        w.get("name") or f"worker-{idx}",
-        str(w.get("weight") or 1),
-        w.get("ssh_user") or "",
-        w.get("ssh_user_env") or "",
-        w.get("ssh_key") or "",
-        w.get("ssh_key_env") or "",
-        str(w.get("ssh_port") or ""),
-    ]
-    print("WORKER=" + "|".join(fields))
-PY
+def load(p):
+    p = Path(p)
+    return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+data = load(sys.argv[1])
+pro = load(sys.argv[2])
+print(f"PRIMARY={data.get('primary') or ''}")
+print(f"DOMAIN={data.get('domain') or ''}")
+print("FREE_DOMAINS=" + " ".join(data.get("free_domains") or ([data["domain"]] if data.get("domain") else [])))
+print(f"SITE_ORIGIN={data.get('site_origin') or ''}")
+print("CERT_DOMAINS=" + " ".join(data.get("cert_domains") or pro.get("cert_domains") or []))
+def worker_lines(prefix, workers):
+    for idx, w in enumerate(workers or [], 1):
+        if not isinstance(w, dict) or not w.get("ip"):
+            continue
+        fields = [
+            w.get("ip") or "",
+            w.get("name") or f"worker-{idx}",
+            str(w.get("weight") or 1),
+            w.get("ssh_user") or "",
+            w.get("ssh_user_env") or "",
+            w.get("ssh_key") or "",
+            w.get("ssh_key_env") or "",
+            str(w.get("ssh_port") or ""),
+            ",".join(w.get("pools") or ["default"]),
+            w.get("secret_env") or "",
+        ]
+        print(prefix + "|".join(fields))
+worker_lines("WORKER=", data.get("workers"))
+print(f"PRO_DOMAIN={pro.get('domain') or ''}")
+print(f"PRO_DNS_IP={pro.get('dns_ip') or ''}")
+print(f"PRO_CP_IP={pro.get('cp_ip') or ''}")
+worker_lines("PRO_WORKER=", pro.get("workers"))
+PYMETA
 )
 
 CLUSTER_PRIMARY=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRIMARY=//p' | head -1)
+DOMAIN=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^DOMAIN=//p' | head -1)
+FREE_DOMAINS=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^FREE_DOMAINS=//p' | head -1)
+SITE_ORIGIN=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^SITE_ORIGIN=//p' | head -1)
+CERT_DOMAINS=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^CERT_DOMAINS=//p' | head -1)
+PRO_DOMAIN=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_DOMAIN=//p' | head -1)
+PRO_DNS_IP=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_DNS_IP=//p' | head -1)
+PRO_CP_IP=$(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_CP_IP=//p' | head -1)
+CP_ORIGIN="${CP_ORIGIN:-$SITE_ORIGIN}"
+[[ -n $DOMAIN ]] || die "не удалось определить домен из $CLUSTER_NODES"
+info "DNS-домены Free: $FREE_DOMAINS; сайт: $SITE_ORIGIN"
 WORKER_LINES=()
 while IFS= read -r line; do
 	[[ -n $line ]] && WORKER_LINES+=("$line")
 done < <(printf '%s\n' "$CLUSTER_META" | sed -n 's/^WORKER=//p')
+PRO_WORKER_LINES=()
+while IFS= read -r line; do
+	[[ -n $line ]] && PRO_WORKER_LINES+=("$line")
+done < <(printf '%s\n' "$CLUSTER_META" | sed -n 's/^PRO_WORKER=//p')
+if ((NEED_PRO)); then
+	[[ -n $PRO_DOMAIN && -n $PRO_DNS_IP ]] || die "в $PRO_NODES нет domain/dns_ip — заполните секцию pro в $SOURCE_YAML"
+	info "Pro: домен $PRO_DOMAIN, DNS-нода $PRO_DNS_IP, воркеров: ${#PRO_WORKER_LINES[@]}"
+fi
 
 # Проверяем соответствие IP в собранных конфигах (для primary / auto)
-if [[ $ROLE != "worker" ]]; then
+if ((NEED_FREE)) && [[ $ROLE != "worker" ]]; then
 	ip_known=0
 	[[ $SERVER_IP == "$CLUSTER_PRIMARY" ]] && ip_known=1
 	if grep -q "/$SERVER_IP\$" "$DNSMASQ_CONF"; then
@@ -294,7 +373,7 @@ fi
 
 if [[ -f $SOURCE_YAML ]]; then
 	for f in "${LOCAL_FILES[@]}"; do
-		[[ $f == "$STATS_COLLECTOR" || $f == "$DOH_PROXY" || $f == "$HEALTHCHECK" || $f == "$LEADS_SERVICE" || $f == "$ASSETS_DIR/"* ]] && continue
+		[[ $f == *.py ]] && continue
 		if [[ $SOURCE_YAML -nt $f ]]; then
 			warn "$SOURCE_YAML новее, чем $f — возможно, забыли пересобрать"
 			((FORCE)) || die "перезапустите $SRC_DIR/generate.py или добавьте --force"
@@ -356,6 +435,43 @@ resolve_worker_port() {
 	fi
 }
 
+# Какая env-переменная хранит секрет Pro-воркера: secret_env из services.yaml, иначе общий PRO_WORKER_SECRET.
+# Печатает имя переменной (пусто, если секрета нет ни в одной).
+resolve_pro_worker_secret_var() {
+	local secret_env="$1"
+	if [[ -n $secret_env && -n ${!secret_env:-} ]]; then
+		printf '%s' "$secret_env"
+	elif [[ -n ${PRO_WORKER_SECRET:-} ]]; then
+		printf '%s' "PRO_WORKER_SECRET"
+	fi
+}
+
+# Готовит $LOCAL_STAGE/node.pro-worker.env для конкретного воркера (вызывается перед каждым deploy_node pro-worker).
+# Без секрета файл удаляется: на ноде останется прежний /etc/pereval/node.env.
+stage_pro_worker_env() {
+	local w_name="$1" secret_env="$2"
+	local var
+	var=$(resolve_pro_worker_secret_var "$secret_env")
+	rm -f "$LOCAL_STAGE/node.pro-worker.env"
+	if [[ -z $var ]]; then
+		[[ -n $w_name ]] && warn "pro-worker $w_name: нет секрета ни в ${secret_env:-secret_env}, ни в PRO_WORKER_SECRET — node.env на ноде не обновляется"
+		return 0
+	fi
+	cat >"$LOCAL_STAGE/node.pro-worker.env" <<EOF
+CP_ORIGIN=$CP_ORIGIN
+NODE_SECRET=${!var}
+TRUSTED_IPS=$PRO_DNS_IP,$PRO_CP_IP,$CLUSTER_PRIMARY
+EOF
+	chmod 600 "$LOCAL_STAGE/node.pro-worker.env"
+	if [[ -n $w_name ]]; then
+		if [[ $var == PRO_WORKER_SECRET && -n $secret_env ]]; then
+			warn "pro-worker $w_name: переменная $secret_env не задана — используется общий PRO_WORKER_SECRET (в CP нода будет видна как общая)"
+		else
+			info "pro-worker $w_name: node.env из $var"
+		fi
+	fi
+}
+
 # ----------------------------------------- формирование apply.sh в stage
 
 prepare_local_stage() {
@@ -369,26 +485,39 @@ prepare_local_stage() {
 		info "$f ($(wc -c <"$f" | tr -d ' ') байт)"
 	done
 
-	if [[ -n ${SMTP_USERNAME:-} || -n ${SMTP_PASSWORD:-} ]]; then
-		cat >"$LOCAL_STAGE/leads.env" <<EOF
-SMTP_HOST=${SMTP_HOST:-smtp-pulse.com}
-SMTP_PORT=${SMTP_PORT:-2525}
-SMTP_USERNAME=${SMTP_USERNAME:-}
-SMTP_PASSWORD=${SMTP_PASSWORD:-}
-MAIL_FROM=${MAIL_FROM:-no-reply@portbuddy.dev}
-MAIL_FROM_NAME=${MAIL_FROM_NAME:-Port Buddy}
-ADMIN_EMAIL=${ADMIN_EMAIL:-admin@portbuddy.dev}
+	# секреты нод (из GitHub Secrets / окружения) — попадут в /etc/pereval/node.env
+	if [[ -n ${FREE_PRIMARY_SECRET:-} ]]; then
+		cat >"$LOCAL_STAGE/node.primary.env" <<EOF
+CP_ORIGIN=$CP_ORIGIN
+NODE_SECRET=$FREE_PRIMARY_SECRET
 EOF
-		chmod 600 "$LOCAL_STAGE/leads.env"
-		info "подготовлен файл секретов SMTP (leads.env)"
+		chmod 600 "$LOCAL_STAGE/node.primary.env"
+		info "подготовлен node.env для Free primary (cert_sync)"
 	fi
+	if [[ -n ${PRO_DNS_SECRET:-} ]]; then
+		cat >"$LOCAL_STAGE/node.pro-dns.env" <<EOF
+CP_ORIGIN=$CP_ORIGIN
+NODE_SECRET=$PRO_DNS_SECRET
+PRO_DNS_IP=$PRO_DNS_IP
+PRO_DOMAIN=$PRO_DOMAIN
+EOF
+		chmod 600 "$LOCAL_STAGE/node.pro-dns.env"
+		info "подготовлен node.env для pro-dns"
+	fi
+	stage_pro_worker_env "" ""
 
 	cat >"$LOCAL_STAGE/apply.sh" <<'REMOTE'
 #!/usr/bin/env bash
 set -euo pipefail
 
-STAGE="$1"; STAMP="$2"; SERVER_IP="$3"; DOMAIN="$4"; NODE_ROLE="${5:-primary}"
+STAGE="$1"; STAMP="$2"; SERVER_IP="$3"; DOMAIN="$4"; NODE_ROLE="${5:-primary}"; FREE_DOMAINS="${6:-$4}"; CP_ORIGIN="${7:-}"; CERT_DOMAINS="${8:-}"
 BACKUP="/var/backups/geoblock/$STAMP"
+LIB_DIR="/usr/local/lib/pereval"
+ETC_DIR="/etc/pereval"
+NODE_ENV_DST="/etc/pereval/node.env"
+CERT_SYNC_DST="/usr/local/bin/pereval-cert-sync.py"
+CERT_SYNC_UNIT="/etc/systemd/system/pereval-cert-sync.service"
+CERT_SYNC_TIMER="/etc/systemd/system/pereval-cert-sync.timer"
 DNSMASQ_DST="/etc/dnsmasq.conf"
 DNSMASQ_BASE_DST="/etc/nginx/geoblock/dnsmasq-base.conf"
 DNSMASQ_OLD="/etc/dnsmasq.d/dnsmasq-geoblock.conf"
@@ -405,12 +534,8 @@ DOH_UNIT_DST="/etc/systemd/system/pereval-doh.service"
 HC_DST="/usr/local/bin/pereval-healthcheck.py"
 HC_UNIT_DST="/etc/systemd/system/pereval-healthcheck.service"
 HC_STATE_DIR="/var/lib/pereval-healthcheck"
+LEADS_UNIT_DST="/etc/systemd/system/pereval-leads.service"   # устаревший сервис заявок — удаляется
 LEADS_DST="/usr/local/bin/pereval-leads.py"
-LEADS_UNIT_DST="/etc/systemd/system/pereval-leads.service"
-LEADS_STATE_DIR="/var/lib/pereval-leads"
-LEADS_VENV_DIR="/opt/pereval-leads/venv"
-LEADS_ENV_DIR="/etc/pereval"
-LEADS_ENV_DST="/etc/pereval/leads.env"
 
 say()  { printf '    %s\n' "$*"; }
 fail() { printf 'ошибка на сервере (%s): %s\n' "$SERVER_IP" "$*" >&2; exit 1; }
@@ -438,19 +563,17 @@ RESCONF
 	fi
 fi
 
-mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" "$LEADS_STATE_DIR" "$LEADS_ENV_DIR" /etc/sysctl.d
-chmod 0700 "$LEADS_STATE_DIR" "$LEADS_ENV_DIR"
+mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" "$LIB_DIR" /etc/sysctl.d
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json stats_collector.py doh_proxy.py healthcheck.py leads_service.py index.html pro.html dedicated.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml; do
+for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json stats_collector.py doh_proxy.py healthcheck.py poolrouting.py dnscommon.py cert_sync.py; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
-say "получено 26 файлов (роль узла: $NODE_ROLE)"
+say "файлы получены (роль узла: $NODE_ROLE)"
 
 # Для воркера формируем локальный dnsmasq.conf со своим IP и прямые nginx-workers-*.conf,
 # чтобы воркер всегда выходил напрямую в интернет со своего IP без петель.
 if [[ $NODE_ROLE == "worker" ]]; then
-	python3 "$STAGE/healthcheck.py" -c >/dev/null 2>&1 || true
 	python3 - "$STAGE/dnsmasq-geoblock.conf" "$STAGE/dnsmasq-node.conf" "$SERVER_IP" <<'PY'
 import sys
 from pathlib import Path
@@ -505,29 +628,14 @@ backup_one "$DOH_DST"                              pereval-doh-proxy.py
 backup_one "$DOH_UNIT_DST"                         pereval-doh.service
 backup_one "$HC_DST"                               pereval-healthcheck.py
 backup_one "$HC_UNIT_DST"                          pereval-healthcheck.service
-backup_one "$LEADS_DST"                            pereval-leads.py
-backup_one "$LEADS_UNIT_DST"                       pereval-leads.service
-backup_one "$LEADS_ENV_DST"                        leads.env
-backup_one "$WEB_DIR/index.html"                   index.html
-backup_one "$WEB_DIR/pro.html"                     pro.html
-backup_one "$WEB_DIR/dedicated.html"               dedicated.html
-backup_one "$WEB_DIR/stats.html"                   stats.html
-backup_one "$WEB_DIR/terms.html"                   terms.html
-backup_one "$WEB_DIR/privacy.html"                 privacy.html
-backup_one "$WEB_DIR/dns.mobileconfig"             dns.mobileconfig
-backup_one "$WEB_DIR/favicon.svg"                  favicon.svg
-backup_one "$WEB_DIR/favicon.ico"                  favicon.ico
-backup_one "$WEB_DIR/apple-touch-icon.png"         apple-touch-icon.png
-backup_one "$WEB_DIR/og-image.svg"                 og-image.svg
-backup_one "$WEB_DIR/og-image.png"                 og-image.png
-backup_one "$WEB_DIR/robots.txt"                   robots.txt
-backup_one "$WEB_DIR/sitemap.xml"                  sitemap.xml
+backup_one "$LIB_DIR/poolrouting.py"               poolrouting.py
+backup_one "$LIB_DIR/dnscommon.py"                 dnscommon.py
 backup_one "$SYSCTL_DST"                           99-geoblock-highload.conf
 say "резервные копии: $BACKUP"
 
 restore() {
 	printf 'откатываю изменения\n' >&2
-	for name in dnsmasq.conf dnsmasq-base.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json pereval-stats-collector.py pereval-stats.service pereval-doh-proxy.py pereval-doh.service pereval-healthcheck.py pereval-healthcheck.service pereval-leads.py pereval-leads.service leads.env index.html pro.html dedicated.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml 99-geoblock-highload.conf; do
+	for name in dnsmasq.conf dnsmasq-base.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json pereval-stats-collector.py pereval-stats.service pereval-doh-proxy.py pereval-doh.service pereval-healthcheck.py pereval-healthcheck.service poolrouting.py dnscommon.py 99-geoblock-highload.conf; do
 		if [[ -f "$BACKUP/$name" ]]; then
 			case "$name" in
 				dnsmasq.conf)                                                                                                    cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
@@ -540,10 +648,7 @@ restore() {
 				pereval-doh.service)                                                                                             cp -a "$BACKUP/$name" "$DOH_UNIT_DST" ;;
 				pereval-healthcheck.py)                                                                                          cp -a "$BACKUP/$name" "$HC_DST" ;;
 				pereval-healthcheck.service)                                                                                     cp -a "$BACKUP/$name" "$HC_UNIT_DST" ;;
-				pereval-leads.py)                                                                                                cp -a "$BACKUP/$name" "$LEADS_DST" ;;
-				pereval-leads.service)                                                                                           cp -a "$BACKUP/$name" "$LEADS_UNIT_DST" ;;
-				leads.env)                                                                                                       cp -a "$BACKUP/$name" "$LEADS_ENV_DST" ;;
-				index.html|pro.html|dedicated.html|stats.html|terms.html|privacy.html|dns.mobileconfig|favicon.svg|favicon.ico|apple-touch-icon.png|og-image.svg|og-image.png|robots.txt|sitemap.xml) cp -a "$BACKUP/$name" "$WEB_DIR/$name" ;;
+				poolrouting.py|dnscommon.py)                                                                                     cp -a "$BACKUP/$name" "$LIB_DIR/$name" ;;
 				*)                                                                                                               cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
 			esac
 		fi
@@ -555,7 +660,6 @@ restore() {
 	systemctl restart pereval-stats.service 2>/dev/null || true
 	if [[ $NODE_ROLE == "primary" ]]; then
 		systemctl restart pereval-healthcheck.service 2>/dev/null || true
-		systemctl restart pereval-leads.service 2>/dev/null || true
 	fi
 }
 
@@ -591,41 +695,46 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: 
 	fi
 fi
 
-# --- TLS-сертификат: привязка к Let's Encrypt или временный самоподписанный --
+# --- TLS-сертификат: боевой приезжает с control plane (cert_sync, ниже). Пока его нет —
+#     старый lineage Let's Encrypt этой ноды (если остался) или временный самоподписанный.
 LE_LIVE="/etc/letsencrypt/live/$DOMAIN"
-if [[ -f "$LE_LIVE/fullchain.pem" && -f "$LE_LIVE/privkey.pem" ]]; then
-	ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
-	ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
-elif [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
-	openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
-		-subj "/CN=$DOMAIN" \
-		-keyout "$SSL_DIR/privkey.pem" \
-		-out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
-	chmod 600 "$SSL_DIR/privkey.pem"
-	say "создан временный самоподписанный сертификат для $DOMAIN"
+if [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
+	if [[ -f "$LE_LIVE/fullchain.pem" && -f "$LE_LIVE/privkey.pem" ]]; then
+		ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
+		ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
+		say "временно использую сертификат из $LE_LIVE"
+	else
+		SAN="DNS:$DOMAIN"
+		for d in $FREE_DOMAINS; do [[ $d == "$DOMAIN" ]] || SAN="$SAN,DNS:$d"; done
+		openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+			-subj "/CN=$DOMAIN" -addext "subjectAltName=$SAN" \
+			-keyout "$SSL_DIR/privkey.pem" \
+			-out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
+		chmod 600 "$SSL_DIR/privkey.pem"
+		say "создан временный самоподписанный сертификат для $FREE_DOMAINS"
+	fi
 fi
 
-# --- статика сайта и профиль iOS ------------------------------------------
-install -m 0644 "$STAGE/index.html"            "$WEB_DIR/index.html"
-install -m 0644 "$STAGE/pro.html"              "$WEB_DIR/pro.html"
-install -m 0644 "$STAGE/dedicated.html"        "$WEB_DIR/dedicated.html"
-install -m 0644 "$STAGE/stats.html"            "$WEB_DIR/stats.html"
-install -m 0644 "$STAGE/terms.html"            "$WEB_DIR/terms.html"
-install -m 0644 "$STAGE/privacy.html"          "$WEB_DIR/privacy.html"
-install -m 0644 "$STAGE/dns.mobileconfig"      "$WEB_DIR/dns.mobileconfig"
-install -m 0644 "$STAGE/favicon.svg"           "$WEB_DIR/favicon.svg"
-install -m 0644 "$STAGE/favicon.ico"           "$WEB_DIR/favicon.ico"
-install -m 0644 "$STAGE/apple-touch-icon.png"  "$WEB_DIR/apple-touch-icon.png"
-install -m 0644 "$STAGE/og-image.svg"          "$WEB_DIR/og-image.svg"
-install -m 0644 "$STAGE/og-image.png"          "$WEB_DIR/og-image.png"
-install -m 0644 "$STAGE/robots.txt"            "$WEB_DIR/robots.txt"
-install -m 0644 "$STAGE/sitemap.xml"           "$WEB_DIR/sitemap.xml"
+# --- общие Python-модули (poolrouting, dnscommon) --------------------------
+install -m 0644 "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py"
+install -m 0644 "$STAGE/dnscommon.py"   "$LIB_DIR/dnscommon.py"
+
+# --- статика сайта переехала на $SITE_ORIGIN: чистим старые страницы ---------
+for old in index.html pro.html dedicated.html stats.html terms.html privacy.html dns.mobileconfig favicon.svg favicon.ico apple-touch-icon.png og-image.svg og-image.png robots.txt sitemap.xml; do
+	if [[ -f "$WEB_DIR/$old" ]]; then
+		cp -a "$WEB_DIR/$old" "$BACKUP/$old" 2>/dev/null || true
+		rm -f "$WEB_DIR/$old"
+	fi
+done
 
 # --- nginx: сначала установить, потом проверить, при провале откатить ------
 install -m 0644 "$STAGE/nginx-sni-allow.map"             "$MAP_DIR/nginx-sni-allow.map"
 install -m 0644 "$STAGE/nginx-host-allow.map"            "$MAP_DIR/nginx-host-allow.map"
 install -m 0644 "$STAGE/nginx-workers-stream.node.conf"  "$MAP_DIR/nginx-workers-stream.conf"
 install -m 0644 "$STAGE/nginx-workers-http.node.conf"    "$MAP_DIR/nginx-workers-http.conf"
+for pm in "$STAGE"/nginx-sni-allow.*.map "$STAGE"/nginx-host-allow.*.map; do
+	[[ -f $pm ]] && install -m 0644 "$pm" "$MAP_DIR/$(basename "$pm")"
+done
 install -m 0644 "$STAGE/service-map.json"                "$MAP_DIR/service-map.json"
 install -m 0644 "$STAGE/cluster-nodes.json"              "$MAP_DIR/cluster-nodes.json"
 install -m 0644 "$STAGE/dnsmasq-geoblock.conf"           "$DNSMASQ_BASE_DST"
@@ -689,7 +798,7 @@ After=network.target dnsmasq.service nginx.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $HC_DST --cluster-config $MAP_DIR/cluster-nodes.json --dnsmasq-template $DNSMASQ_BASE_DST --dnsmasq-out $DNSMASQ_DST --nginx-stream-out $MAP_DIR/nginx-workers-stream.conf --nginx-http-out $MAP_DIR/nginx-workers-http.conf --status-out $WEB_DIR/cluster-health.json --state-file $HC_STATE_DIR/state.json --interval 5 --fail-threshold 2 --rise-threshold 2
+ExecStart=/usr/bin/python3 $HC_DST --cluster-config $MAP_DIR/cluster-nodes.json --dnsmasq-template $DNSMASQ_BASE_DST --dnsmasq-out $DNSMASQ_DST --nginx-stream-out $MAP_DIR/nginx-workers-stream.conf --nginx-http-out $MAP_DIR/nginx-workers-http.conf --service-map $MAP_DIR/service-map.json --status-out $WEB_DIR/cluster-health.json --state-file $HC_STATE_DIR/state.json --interval 5 --fail-threshold 2 --rise-threshold 2
 Restart=always
 RestartSec=3
 
@@ -699,58 +808,11 @@ UNIT
 	chmod 0644 "$HC_UNIT_DST"
 fi
 
-# --- сервис сбора заявок и SMTP-уведомлений (pereval-leads.service) -------
-install -m 0755 "$STAGE/leads_service.py"     "$LEADS_DST"
-if [[ $NODE_ROLE == "primary" ]]; then
-	if [[ ! -x "$LEADS_VENV_DIR/bin/python3" ]]; then
-		say "создаю виртуальное окружение $LEADS_VENV_DIR..."
-		mkdir -p "$(dirname "$LEADS_VENV_DIR")"
-		if ! python3 -m venv "$LEADS_VENV_DIR" >/dev/null 2>&1; then
-			DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq >/dev/null
-			DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq python3-venv python3-pip >/dev/null
-			python3 -m venv "$LEADS_VENV_DIR"
-		fi
-	fi
-	if ! "$LEADS_VENV_DIR/bin/python3" -c "import fastapi, uvicorn, pydantic" >/dev/null 2>&1; then
-		say "устанавливаю fastapi, uvicorn, pydantic в $LEADS_VENV_DIR..."
-		"$LEADS_VENV_DIR/bin/pip" install --disable-pip-version-check -q fastapi uvicorn pydantic
-	fi
-	if [[ -f "$STAGE/leads.env" ]]; then
-		install -m 0600 "$STAGE/leads.env" "$LEADS_ENV_DST"
-		say "обновлён файл окружения $LEADS_ENV_DST"
-	elif [[ ! -f "$LEADS_ENV_DST" ]]; then
-		cat >"$LEADS_ENV_DST" <<'ENVEOF'
-SMTP_HOST=smtp-pulse.com
-SMTP_PORT=2525
-SMTP_USERNAME=
-SMTP_PASSWORD=
-MAIL_FROM=no-reply@portbuddy.dev
-MAIL_FROM_NAME=Port Buddy
-ADMIN_EMAIL=admin@portbuddy.dev
-ENVEOF
-		chmod 0600 "$LEADS_ENV_DST"
-		say "создан шаблон окружения $LEADS_ENV_DST (права 0600)"
-	else
-		chmod 0600 "$LEADS_ENV_DST"
-		say "сохранён существующий $LEADS_ENV_DST"
-	fi
-	cat >"$LEADS_UNIT_DST" <<UNIT
-[Unit]
-Description=Pereval demand validation leads and SMTP notification service
-After=network.target nginx.service
-
-[Service]
-Type=simple
-EnvironmentFile=-$LEADS_ENV_DST
-Environment=LEADS_FILE=$LEADS_STATE_DIR/leads.jsonl
-ExecStart=$LEADS_VENV_DIR/bin/python3 $LEADS_DST --host 127.0.0.1 --port 8054
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-	chmod 0644 "$LEADS_UNIT_DST"
+# --- устаревший сервис заявок (pereval-leads) — переехал на сайт -----------
+if systemctl list-unit-files pereval-leads.service >/dev/null 2>&1 || [[ -f $LEADS_UNIT_DST ]]; then
+	systemctl disable --now pereval-leads.service >/dev/null 2>&1 || true
+	rm -f "$LEADS_UNIT_DST" "$LEADS_DST"
+	say "pereval-leads.service удалён (заявки принимает сайт)"
 fi
 
 # --- установка dnsmasq ----------------------------------------------------
@@ -766,6 +828,7 @@ if [[ $NODE_ROLE == "primary" ]]; then
 		--dnsmasq-out "$DNSMASQ_DST" \
 		--nginx-stream-out "$MAP_DIR/nginx-workers-stream.conf" \
 		--nginx-http-out "$MAP_DIR/nginx-workers-http.conf" \
+		--service-map "$MAP_DIR/service-map.json" \
 		--status-out "$WEB_DIR/cluster-health.json" \
 		--state-file "$HC_STATE_DIR/state.json" \
 		--fail-threshold 1 \
@@ -836,58 +899,74 @@ if [[ $NODE_ROLE == "primary" ]]; then
 		fail "pereval-healthcheck.service не поднялся"
 	fi
 	say "демон мониторинга воркеров pereval-healthcheck перезапущен"
-
-	systemctl enable pereval-leads.service >/dev/null 2>&1 || true
-	if ! systemctl restart pereval-leads.service; then
-		journalctl -u pereval-leads.service -n 20 --no-pager >&2 || true
-		restore
-		fail "pereval-leads.service не поднялся"
-	fi
-	say "сервис приёма заявок pereval-leads перезапущен"
 else
 	if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1; then
 		systemctl disable --now pereval-healthcheck.service >/dev/null 2>&1 || true
 	fi
-	if systemctl list-unit-files pereval-leads.service >/dev/null 2>&1; then
-		systemctl disable --now pereval-leads.service >/dev/null 2>&1 || true
-	fi
 fi
 
-# --- выпуск и автопродление сертификата Let's Encrypt (только на Primary) -
+# --- единый TLS-сертификат с control plane (только на Primary) ---------------
+# Один wildcard на всю инфраструктуру выпускается на pereval.top и раздаётся
+# через /api/internal/v1/node/cert. Secret ноды — FREE_PRIMARY_SECRET → node.env.
 if [[ $NODE_ROLE != "primary" ]]; then
-	say "узел с ролью worker — пропуск выпуска сертификата Let's Encrypt (используется локальный сертификат)"
-elif [[ $DOMAIN == *.example || $DOMAIN == *.invalid || $DOMAIN == *.localhost ]]; then
-	say "ВНИМАНИЕ: домен $DOMAIN тестовый — пропуск выпуска сертификата Let's Encrypt (укажите настоящий meta.origin в services.yaml)"
+	say "узел с ролью worker — TLS не терминирует, сертификат не нужен"
 else
-	if ! command -v certbot >/dev/null 2>&1; then
-		say "устанавливаю certbot..."
-		DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq >/dev/null
-		DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq certbot >/dev/null
-		say "certbot установлен"
-	fi
-
-	mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-	cat >/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
-#!/usr/bin/env bash
-systemctl reload nginx
-HOOK
-	chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-
+	# certbot этой ноды больше не нужен: его lineage заменяет единый сертификат
 	if systemctl list-unit-files certbot.timer >/dev/null 2>&1; then
-		systemctl enable --now certbot.timer >/dev/null 2>&1 || true
-		say "автопродление certbot.timer активно"
+		systemctl disable --now certbot.timer >/dev/null 2>&1 || true
+	fi
+	rm -f /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
+	mkdir -p "$ETC_DIR"; chmod 0750 "$ETC_DIR"
+	if [[ -f "$STAGE/node.env" ]]; then
+		install -m 0640 "$STAGE/node.env" "$NODE_ENV_DST"
+		say "обновлён $NODE_ENV_DST"
+	elif [[ ! -f "$NODE_ENV_DST" ]]; then
+		cat >"$NODE_ENV_DST" <<ENVEOF
+CP_ORIGIN=${CP_ORIGIN:-https://pereval.top}
+NODE_SECRET=
+ENVEOF
+		chmod 0640 "$NODE_ENV_DST"
+		say "создан шаблон $NODE_ENV_DST — впишите NODE_SECRET (web: pnpm admin node add primary free_primary $SERVER_IP)"
 	fi
 
-	if certbot certonly --webroot -w "$WEB_DIR" -d "$DOMAIN" \
-		--non-interactive --agree-tos --register-unsafely-without-email \
-		--keep-until-expiring >/tmp/certbot.log 2>&1; then
-		ln -sfn "$LE_LIVE/fullchain.pem" "$SSL_DIR/fullchain.pem"
-		ln -sfn "$LE_LIVE/privkey.pem"   "$SSL_DIR/privkey.pem"
-		nginx -t 2>/tmp/nginx-test.log && systemctl reload nginx
-		say "сертификат Let's Encrypt для $DOMAIN активен"
+	install -m 0755 "$STAGE/cert_sync.py" "$CERT_SYNC_DST"
+	EXPECT_ARGS=""
+	for d in $FREE_DOMAINS; do EXPECT_ARGS="$EXPECT_ARGS --expect $d"; done
+	cat >"$CERT_SYNC_UNIT" <<UNIT
+[Unit]
+Description=Pereval: fetch the shared TLS certificate from control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=$NODE_ENV_DST
+ExecStart=/usr/bin/python3 $CERT_SYNC_DST --out-dir $SSL_DIR --key-mode 0600$EXPECT_ARGS --reload 'nginx -t && systemctl reload nginx'
+UNIT
+	cat >"$CERT_SYNC_TIMER" <<UNIT
+[Unit]
+Description=Pereval: hourly TLS certificate sync with control plane
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=10min
+Unit=pereval-cert-sync.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable --now pereval-cert-sync.timer >/dev/null 2>&1 || true
+	if grep -qE '^NODE_SECRET=.+' "$NODE_ENV_DST"; then
+		if systemctl start pereval-cert-sync.service; then
+			say "сертификат синхронизирован с control plane ($(python3 -c "import json;print(json.load(open('$SSL_DIR/.cert-sync.json'))['not_after'])" 2>/dev/null || echo 'без изменений'))"
+		else
+			say "ВНИМАНИЕ: cert_sync не смог получить сертификат (journalctl -u pereval-cert-sync); работает текущий"
+		fi
 	else
-		say "ВНИМАНИЕ: certbot не смог выпустить сертификат для $DOMAIN (см. /tmp/certbot.log)"
-		cat /tmp/certbot.log >&2 || true
+		say "ВНИМАНИЕ: NODE_SECRET пуст — боевой сертификат не получен. Выпустите единый сертификат на CP (web/deploy/issue-cert.sh) и задайте FREE_PRIMARY_SECRET"
 	fi
 fi
 
@@ -895,7 +974,7 @@ fi
 sleep 1
 EXPECTED_UNITS=(dnsmasq nginx pereval-doh pereval-stats)
 if [[ $NODE_ROLE == "primary" ]]; then
-	EXPECTED_UNITS+=(pereval-healthcheck pereval-leads)
+	EXPECTED_UNITS+=(pereval-healthcheck)
 fi
 for unit in "${EXPECTED_UNITS[@]}"; do
 	systemctl is-active --quiet "$unit" || { restore; fail "$unit не активен после перезапуска"; }
@@ -916,9 +995,6 @@ else
 fi
 
 CHECK_PORTS=(80 443 853 8053)
-if [[ $NODE_ROLE == "primary" ]]; then
-	CHECK_PORTS+=(8054)
-fi
 for port in "${CHECK_PORTS[@]}"; do
 	if ss -tlnH "sport = :$port" | grep -q .; then
 		say "порт $port слушается"
@@ -932,6 +1008,336 @@ done
 
 exit 0
 REMOTE
+
+	cat >"$LOCAL_STAGE/apply-pro.sh" <<'REMOTEPRO'
+#!/usr/bin/env bash
+# Установка Pro-ноды: pro-dns (DNS-нода Перевал Pro) или pro-worker (прокси-воркер с nftables-ACL).
+set -euo pipefail
+
+STAGE="$1"; STAMP="$2"; SERVER_IP="$3"; PRO_DOMAIN="$4"; NODE_ROLE="$5"; PRO_DNS_IP="$6"; TRUSTED_IPS="${7:-}"; CP_ORIGIN="${8:-}"
+BACKUP="/var/backups/pereval-pro/$STAMP"
+LIB_DIR="/usr/local/lib/pereval"
+ETC_DIR="/etc/pereval"
+SSL_DIR="/etc/pereval/ssl"
+NODE_ENV_DST="/etc/pereval/node.env"
+MAP_DIR="/etc/nginx/geoblock"
+NGINX_DST="/etc/nginx/nginx.conf"
+WEB_DIR="/var/www/pereval-pro"
+GEO_WEB_DIR="/var/www/geoblock"
+SYSCTL_DST="/etc/sysctl.d/99-geoblock-highload.conf"
+PRO_DNS_DST="/usr/local/bin/pereval-pro-dns.py"
+PRO_DNS_UNIT="/etc/systemd/system/pereval-pro-dns.service"
+PRO_DNS_STATE="/var/lib/pereval-pro-dns"
+AGENT_DST="/usr/local/bin/pereval-pro-agent.py"
+AGENT_UNIT="/etc/systemd/system/pereval-pro-agent.service"
+COLLECTOR_DST="/usr/local/bin/pereval-stats-collector.py"
+STATS_UNIT_DST="/etc/systemd/system/pereval-stats.service"
+STATS_STATE_DIR="/var/lib/pereval-stats"
+CERT_SYNC_DST="/usr/local/bin/pereval-cert-sync.py"
+CERT_SYNC_UNIT="/etc/systemd/system/pereval-cert-sync.service"
+CERT_SYNC_TIMER="/etc/systemd/system/pereval-cert-sync.timer"
+
+say()  { printf '    %s\n' "$*"; }
+fail() { printf 'ошибка на сервере (%s): %s\n' "$SERVER_IP" "$*" >&2; exit 1; }
+
+mkdir -p "$BACKUP" "$ETC_DIR" "$SSL_DIR" "$LIB_DIR" "$MAP_DIR" "$WEB_DIR/.well-known/acme-challenge" "$GEO_WEB_DIR" "$STATS_STATE_DIR" /etc/sysctl.d
+chmod 0750 "$ETC_DIR"
+
+backup_one() { [[ -f $1 ]] && cp -a "$1" "$BACKUP/$2" || true; }
+backup_one "$NGINX_DST" nginx.conf
+backup_one /etc/dnsmasq.conf dnsmasq.conf
+backup_one "$NODE_ENV_DST" node.env
+backup_one "$MAP_DIR/nginx-sni-allow.map" nginx-sni-allow.map
+backup_one "$MAP_DIR/nginx-host-allow.map" nginx-host-allow.map
+
+restore() {
+	printf 'откатываю изменения\n' >&2
+	[[ -f "$BACKUP/nginx.conf" ]] && cp -a "$BACKUP/nginx.conf" "$NGINX_DST"
+	[[ -f "$BACKUP/dnsmasq.conf" ]] && cp -a "$BACKUP/dnsmasq.conf" /etc/dnsmasq.conf
+	[[ -f "$BACKUP/nginx-sni-allow.map" ]] && cp -a "$BACKUP/nginx-sni-allow.map" "$MAP_DIR/nginx-sni-allow.map"
+	[[ -f "$BACKUP/nginx-host-allow.map" ]] && cp -a "$BACKUP/nginx-host-allow.map" "$MAP_DIR/nginx-host-allow.map"
+	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+	systemctl restart dnsmasq 2>/dev/null || true
+}
+
+# --- sysctl (как на Free-узлах) ----------------------------------------------
+cat >"$SYSCTL_DST" <<'SYSCTL'
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.ip_local_port_range = 10240 65535
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.core.somaxconn = 16384
+net.core.netdev_max_backlog = 16384
+net.ipv4.tcp_max_syn_backlog = 16384
+net.netfilter.nf_conntrack_max = 262144
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 3
+SYSCTL
+sysctl -e -p "$SYSCTL_DST" >/dev/null 2>&1 || true
+
+# --- общие модули ------------------------------------------------------------
+install -m 0644 "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py"
+install -m 0644 "$STAGE/dnscommon.py"   "$LIB_DIR/dnscommon.py"
+install -m 0644 "$STAGE/healthcheck.py" "$LIB_DIR/healthcheck.py"
+
+# --- node.env (секрет ноды для control plane) ---------------------------------
+if [[ -f "$STAGE/node.env" ]]; then
+	install -m 0640 "$STAGE/node.env" "$NODE_ENV_DST"
+	say "обновлён $NODE_ENV_DST"
+elif [[ ! -f "$NODE_ENV_DST" ]]; then
+	cat >"$NODE_ENV_DST" <<ENVEOF
+CP_ORIGIN=${CP_ORIGIN:-https://pereval.top}
+NODE_SECRET=
+PRO_DNS_IP=$PRO_DNS_IP
+PRO_DOMAIN=$PRO_DOMAIN
+TRUSTED_IPS=$TRUSTED_IPS
+ENVEOF
+	chmod 0640 "$NODE_ENV_DST"
+	say "создан шаблон $NODE_ENV_DST — впишите NODE_SECRET (web: pnpm admin node add ...)"
+fi
+
+if [[ $NODE_ROLE == "pro-dns" ]]; then
+	for f in pro-dns-nginx.conf cache-dnsmasq.conf pro-policy-map.json pro-nodes.json pro_dns.py cert_sync.py; do
+		[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал"
+	done
+	id -u pereval-dns >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin pereval-dns
+	mkdir -p "$PRO_DNS_STATE"; chown pereval-dns:pereval-dns "$PRO_DNS_STATE"
+	chgrp pereval-dns "$ETC_DIR" "$NODE_ENV_DST" 2>/dev/null || true
+	install -m 0644 "$STAGE/pro-policy-map.json" "$ETC_DIR/pro-policy-map.json"
+	install -m 0644 "$STAGE/pro-nodes.json"      "$ETC_DIR/pro-nodes.json"
+	install -m 0755 "$STAGE/pro_dns.py"          "$PRO_DNS_DST"
+
+	# сертификат: единый wildcard с control plane (cert_sync по таймеру); пока его нет — самоподписанный
+	rm -f /etc/letsencrypt/renewal-hooks/deploy/pereval-pro-dns.sh
+	systemctl disable --now certbot.timer >/dev/null 2>&1 || true
+	if [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
+		openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -subj "/CN=$PRO_DOMAIN" \
+			-addext "subjectAltName=DNS:$PRO_DOMAIN,DNS:*.$PRO_DOMAIN" \
+			-keyout "$SSL_DIR/privkey.pem" -out "$SSL_DIR/fullchain.pem" >/dev/null 2>&1
+		say "создан временный самоподписанный сертификат для $PRO_DOMAIN"
+	fi
+	chgrp pereval-dns "$SSL_DIR/privkey.pem" "$SSL_DIR/fullchain.pem" 2>/dev/null || true
+	chmod 0640 "$SSL_DIR/privkey.pem"; chmod 0644 "$SSL_DIR/fullchain.pem"
+	install -m 0755 "$STAGE/cert_sync.py" "$CERT_SYNC_DST"
+	cat >"$CERT_SYNC_UNIT" <<UNIT
+[Unit]
+Description=Pereval: fetch the shared TLS certificate from control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=$NODE_ENV_DST
+ExecStart=/usr/bin/python3 $CERT_SYNC_DST --out-dir $SSL_DIR --group pereval-dns --key-mode 0640 --expect $PRO_DOMAIN --expect token.$PRO_DOMAIN --reload 'nginx -t && systemctl reload nginx' --reload 'systemctl kill -s HUP pereval-pro-dns.service || true'
+UNIT
+	cat >"$CERT_SYNC_TIMER" <<UNIT
+[Unit]
+Description=Pereval: hourly TLS certificate sync with control plane
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=10min
+Unit=pereval-cert-sync.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable --now pereval-cert-sync.timer >/dev/null 2>&1 || true
+	# первая синхронизация — до запуска nginx/pro_dns, чтобы DoT/DoH сразу поднялись с боевым сертификатом
+	if grep -qE '^NODE_SECRET=.+' "$NODE_ENV_DST"; then
+		if python3 "$CERT_SYNC_DST" --out-dir "$SSL_DIR" --group pereval-dns --key-mode 0640 --expect "$PRO_DOMAIN" --expect "token.$PRO_DOMAIN" \
+			--cp-origin "$(sed -n 's/^CP_ORIGIN=//p' "$NODE_ENV_DST" | head -1)" --node-secret "$(sed -n 's/^NODE_SECRET=//p' "$NODE_ENV_DST" | head -1)"; then
+			say "сертификат синхронизирован с control plane"
+		else
+			say "ВНИМАНИЕ: cert_sync не смог получить сертификат с control plane — работает текущий"
+		fi
+	else
+		say "ВНИМАНИЕ: NODE_SECRET пуст — боевой сертификат не получен (web/deploy/issue-cert.sh на CP, затем PRO_DNS_SECRET)"
+	fi
+
+	# локальный кеш-резолвер dnsmasq на 127.0.0.1:53
+	dnsmasq --test -C "$STAGE/cache-dnsmasq.conf" || fail "dnsmasq не принимает cache-dnsmasq.conf"
+	install -m 0644 "$STAGE/cache-dnsmasq.conf" /etc/dnsmasq.conf
+	rm -f /etc/dnsmasq.d/dnsmasq-geoblock.conf
+	systemctl enable dnsmasq >/dev/null 2>&1 || true
+	systemctl restart dnsmasq || { restore; fail "dnsmasq не поднялся"; }
+	# системный резолвер ноды -> локальный dnsmasq (после того как он поднялся)
+	if dig +short +time=2 +tries=1 @127.0.0.1 example.com >/dev/null 2>&1; then
+		rm -f /etc/resolv.conf
+		printf 'nameserver 127.0.0.1\noptions edns0 trust-ad\n' >/etc/resolv.conf
+		say "/etc/resolv.conf -> 127.0.0.1 (dnsmasq)"
+	else
+		say "ВНИМАНИЕ: локальный dnsmasq не отвечает, /etc/resolv.conf не трогаю"
+	fi
+
+	# nginx (DoH за TLS)
+	install -m 0644 "$STAGE/pro-dns-nginx.conf" "$NGINX_DST"
+	nginx -t 2>/tmp/nginx-test.log || { cat /tmp/nginx-test.log >&2; restore; fail "nginx -t не прошёл"; }
+	systemctl enable nginx >/dev/null 2>&1 || true
+	systemctl reload nginx 2>/dev/null || systemctl restart nginx || { restore; fail "nginx не поднялся"; }
+
+	cat >"$PRO_DNS_UNIT" <<UNIT
+[Unit]
+Description=Pereval Pro personal DNS (DoH/DoT/Do53) daemon
+After=network-online.target dnsmasq.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pereval-dns
+Group=pereval-dns
+EnvironmentFile=$NODE_ENV_DST
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ExecStart=/usr/bin/python3 $PRO_DNS_DST --listen-ip $PRO_DNS_IP --pro-domain $PRO_DOMAIN --policy-map $ETC_DIR/pro-policy-map.json --policy-cache $PRO_DNS_STATE/policy-cache.json --cert $SSL_DIR/fullchain.pem --key $SSL_DIR/privkey.pem --doh-listen 127.0.0.1:8057 --upstream 127.0.0.1:53 --health-out $WEB_DIR/pro-health.json
+ExecReload=/bin/kill -HUP \$MAINPID
+StateDirectory=pereval-pro-dns
+ReadWritePaths=$WEB_DIR
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	chown -R pereval-dns:pereval-dns "$WEB_DIR"
+	systemctl daemon-reload
+	systemctl enable pereval-pro-dns.service >/dev/null 2>&1 || true
+	systemctl restart pereval-pro-dns.service || { journalctl -u pereval-pro-dns -n 30 --no-pager >&2 || true; fail "pereval-pro-dns не поднялся"; }
+	say "pereval-pro-dns перезапущен"
+
+	sleep 1
+	for unit in dnsmasq nginx pereval-pro-dns; do
+		systemctl is-active --quiet "$unit" || fail "$unit не активен"
+	done
+	for port in 53 853 443 8057; do
+		if ss -tlnH "sport = :$port" | grep -q .; then say "порт $port слушается"; else say "ВНИМАНИЕ: порт $port не слушается"; fi
+	done
+	if command -v dig >/dev/null 2>&1; then
+		rc=$(dig +time=2 +tries=1 @"$PRO_DNS_IP" claude.ai 2>/dev/null | sed -n 's/.*status: \([A-Z]*\).*/\1/p' | head -1)
+		say "проверка: запрос с неизвестного IP -> ${rc:-нет ответа} (ожидается REFUSED)"
+	fi
+
+elif [[ $NODE_ROLE == "pro-worker" ]]; then
+	for f in pro-worker-nginx.conf pro-nginx-sni-allow.map pro-nginx-host-allow.map pro-service-map.json pro-nodes.json pro_node_agent.py stats_collector.py; do
+		[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал"
+	done
+	install -m 0644 "$STAGE/pro-nginx-sni-allow.map"  "$MAP_DIR/nginx-sni-allow.map"
+	install -m 0644 "$STAGE/pro-nginx-host-allow.map" "$MAP_DIR/nginx-host-allow.map"
+	for pm in "$STAGE"/pro-nginx-sni-allow.*.map "$STAGE"/pro-nginx-host-allow.*.map; do
+		[[ -f $pm ]] && install -m 0644 "$pm" "$MAP_DIR/$(basename "${pm#pro-}")"
+	done
+	install -m 0644 "$STAGE/pro-service-map.json" "$MAP_DIR/service-map.json"
+	# карты доп. доменов (Dedicated) — агент заполняет их сам; пустые нужны для nginx -t
+	[[ -f "$MAP_DIR/extra-sni-allow.map" ]]  || : >"$MAP_DIR/extra-sni-allow.map"
+	[[ -f "$MAP_DIR/extra-host-allow.map" ]] || : >"$MAP_DIR/extra-host-allow.map"
+	# cluster-nodes.json для stats_collector: primary = DNS-нода Pro, воркеры = Pro-воркеры
+	python3 - "$STAGE/pro-nodes.json" "$MAP_DIR/cluster-nodes.json" <<'PYC'
+import json, sys
+pro = json.load(open(sys.argv[1], encoding="utf-8"))
+out = {"primary": pro.get("dns_ip"), "domain": pro.get("domain"), "include_primary_in_dns": False,
+       "probe_sni": pro.get("probe_sni") or "claude.ai", "pools": pro.get("pools") or {},
+       "workers": [{k: w.get(k) for k in ("ip", "name", "weight", "pools")} for w in pro.get("workers") or []]}
+json.dump(out, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PYC
+	install -m 0644 "$STAGE/pro-worker-nginx.conf" "$NGINX_DST"
+	nginx -t 2>/tmp/nginx-test.log || { cat /tmp/nginx-test.log >&2; restore; fail "nginx -t не прошёл"; }
+	systemctl enable nginx >/dev/null 2>&1 || true
+	systemctl reload nginx 2>/dev/null || systemctl restart nginx || { restore; fail "nginx не поднялся"; }
+
+	# nftables: доступ к 80/443 только для подписчиков (набор синхронизирует агент)
+	mkdir -p /etc/nftables.d
+	NFT_TRUSTED="$(printf '%s' "$TRUSTED_IPS" | tr ',' ' ' | xargs | tr ' ' ',')"
+	# правило для доверенных IP собираем заранее: внутри ${VAR:+...} фигурные скобки nft ломают раскрытие
+	NFT_TRUSTED_RULE=""
+	if [[ -n $NFT_TRUSTED ]]; then
+		NFT_TRUSTED_RULE="		tcp dport { 80, 443 } ip saddr { $NFT_TRUSTED } accept"
+	fi
+	cat >/etc/nftables.d/pereval-pro.nft <<NFT
+table inet pereval_pro {
+	set pro_clients {
+		type ipv4_addr
+	}
+	chain input {
+		type filter hook input priority -10; policy accept;
+		iif lo accept
+		tcp dport { 80, 443 } ip saddr @pro_clients accept
+$NFT_TRUSTED_RULE
+		tcp dport { 80, 443 } drop
+		udp dport 443 reject
+	}
+}
+NFT
+	if ! grep -q 'nftables.d/pereval-pro.nft' /etc/nftables.conf 2>/dev/null; then
+		printf '\ninclude "/etc/nftables.d/pereval-pro.nft"\n' >>/etc/nftables.conf
+	fi
+	systemctl enable nftables >/dev/null 2>&1 || true
+	nft -f /etc/nftables.d/pereval-pro.nft 2>/dev/null || { nft delete table inet pereval_pro 2>/dev/null || true; nft -f /etc/nftables.d/pereval-pro.nft; }
+	if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+		ufw allow 80/tcp >/dev/null 2>&1 || true
+		ufw allow 443/tcp >/dev/null 2>&1 || true
+	fi
+	say "nftables: таблица pereval_pro применена (доверенные: ${NFT_TRUSTED:-нет})"
+
+	install -m 0755 "$STAGE/pro_node_agent.py" "$AGENT_DST"
+	cat >"$AGENT_UNIT" <<UNIT
+[Unit]
+Description=Pereval Pro worker agent (nftables ACL sync with control plane)
+After=network-online.target nftables.service nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=$NODE_ENV_DST
+ExecStart=/usr/bin/python3 $AGENT_DST
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	install -m 0755 "$STAGE/stats_collector.py" "$COLLECTOR_DST"
+	cat >"$STATS_UNIT_DST" <<UNIT
+[Unit]
+Description=Pereval lightweight nginx proxy usage collector
+After=network.target nginx.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $GEO_WEB_DIR/node-stats.json --output $GEO_WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $PRO_DOMAIN --role worker
+Restart=always
+RestartSec=5
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable pereval-pro-agent.service pereval-stats.service >/dev/null 2>&1 || true
+	systemctl restart pereval-stats.service || { journalctl -u pereval-stats -n 20 --no-pager >&2 || true; fail "pereval-stats не поднялся"; }
+	systemctl restart pereval-pro-agent.service || { journalctl -u pereval-pro-agent -n 30 --no-pager >&2 || true; fail "pereval-pro-agent не поднялся"; }
+	say "pereval-pro-agent и pereval-stats перезапущены"
+
+	sleep 1
+	for unit in nginx pereval-pro-agent pereval-stats; do
+		systemctl is-active --quiet "$unit" || fail "$unit не активен"
+	done
+	for port in 80 443; do
+		if ss -tlnH "sport = :$port" | grep -q .; then say "порт $port слушается (доступ ограничен nftables)"; else say "ВНИМАНИЕ: порт $port не слушается"; fi
+	done
+	say "nft set pro_clients: $(nft -j list set inet pereval_pro pro_clients 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(sum(len(x.get("set",{}).get("elem",[]) or []) for x in d.get("nftables",[]) if "set" in x))' 2>/dev/null || echo '?') адресов"
+else
+	fail "неизвестная роль $NODE_ROLE"
+fi
+
+{ ls -1dt /var/backups/pereval-pro/*/ 2>/dev/null | tail -n +11 | xargs -r rm -rf; } || true
+exit 0
+REMOTEPRO
 }
 
 # ------------------------------------------------ развёртывание одного узла
@@ -943,6 +1349,7 @@ deploy_node() {
 	local node_port="$4"
 	local node_role="$5"
 	local node_name="$6"
+	local node_secret_env="${7:-}"   # pro-worker: имя env-переменной с секретом ноды
 
 	local target="$node_user@$node_ip"
 	local ctl="/tmp/.geoblock-cm-$$-${#ACTIVE_CTLS[@]}"
@@ -959,9 +1366,17 @@ deploy_node() {
 		-o ControlPersist=120
 	)
 
+	local is_pro=0
+	[[ $node_role == "pro-dns" || $node_role == "pro-worker" ]] && is_pro=1
+
 	if ((DRY_RUN)); then
 		step "Пробный запуск [$node_role: $node_name ($target:$node_port)], изменений не будет"
 		info "SSH-пользователь: $node_user | SSH-ключ: $node_key | порт: $node_port | роль: $node_role"
+		if [[ $node_role == "pro-worker" ]]; then
+			local dry_secret_var
+			dry_secret_var=$(resolve_pro_worker_secret_var "$node_secret_env")
+			info "секрет ноды: ${dry_secret_var:-не задан (${node_secret_env:-secret_env} / PRO_WORKER_SECRET пусты — node.env не обновится)}"
+		fi
 		if ssh "${ssh_opts[@]}" -o ConnectTimeout=5 "$target" true 2>/dev/null; then
 			ACTIVE_CTLS+=("$ctl")
 			ACTIVE_TARGETS+=("$target")
@@ -1006,30 +1421,29 @@ DRYPRE
 		else
 			info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates bmon"
 		fi
-		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
-		printf '    %-34s -> %s\n' "$NGINX_CONF" "/etc/nginx/nginx.conf"
-		for m in "${NGINX_MAPS[@]}" "${NGINX_WORKER_CONFS[@]}"; do
-			printf '    %-34s -> %s\n' "$m" "/etc/nginx/geoblock/${m##*/}"
-		done
-		printf '    %-34s -> %s\n' "$SERVICE_MAP" "/etc/nginx/geoblock/${SERVICE_MAP##*/}"
-		printf '    %-34s -> %s\n' "$CLUSTER_NODES" "/etc/nginx/geoblock/${CLUSTER_NODES##*/}"
-		printf '    %-34s -> %s\n' "$STATS_COLLECTOR" "/usr/local/bin/pereval-stats-collector.py"
-		printf '    %-34s -> %s\n' "pereval-stats.service" "/etc/systemd/system/pereval-stats.service"
-		printf '    %-34s -> %s\n' "$DOH_PROXY" "/usr/local/bin/pereval-doh-proxy.py"
-		printf '    %-34s -> %s\n' "pereval-doh.service" "/etc/systemd/system/pereval-doh.service"
-		printf '    %-34s -> %s\n' "$HEALTHCHECK" "/usr/local/bin/pereval-healthcheck.py"
-		printf '    %-34s -> %s\n' "$LEADS_SERVICE" "/usr/local/bin/pereval-leads.py"
-		if [[ $node_role == "primary" ]]; then
-			printf '    %-34s -> %s\n' "pereval-healthcheck.service" "/etc/systemd/system/pereval-healthcheck.service"
-			printf '    %-34s -> %s\n' "pereval-leads.service" "/etc/systemd/system/pereval-leads.service"
-			printf '    %-34s -> %s\n' "leads.env (SMTP)" "/etc/pereval/leads.env"
+		if ((is_pro)); then
+			if [[ $node_role == "pro-dns" ]]; then
+				for f in "${PRO_DNS_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-dns ($PRO_DOMAIN)"; done
+				printf '    затем: dnsmasq(cache) :53, resolv.conf, nginx (DoH), pereval-pro-dns (:53/:853/:8057), pereval-cert-sync.timer (единый сертификат с CP: %s)\n' "$CERT_DOMAINS"
+			else
+				for f in "${PRO_WORKER_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-worker"; done
+				printf '    затем: nginx (SNI/Host-прокси), nftables pereval_pro, pereval-pro-agent, pereval-stats\n'
+			fi
+			return 0
 		fi
-		for w in "${WEB_FILES[@]}"; do
-			printf '    %-34s -> %s\n' "$w" "/var/www/geoblock/${w##*/}"
+		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
+		printf '    %-34s -> %s\n' "$BUILD_DIR/nginx.conf" "/etc/nginx/nginx.conf"
+		for m in nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json; do
+			printf '    %-34s -> %s\n' "$BUILD_DIR/$m" "/etc/nginx/geoblock/$m"
 		done
+		printf '    %-34s -> %s\n' "$SRC_DIR/poolrouting.py, dnscommon.py" "/usr/local/lib/pereval/"
+		printf '    %-34s -> %s\n' "$SRC_DIR/stats_collector.py" "/usr/local/bin/pereval-stats-collector.py"
+		printf '    %-34s -> %s\n' "$SRC_DIR/doh_proxy.py" "/usr/local/bin/pereval-doh-proxy.py"
+		printf '    %-34s -> %s\n' "$SRC_DIR/healthcheck.py" "/usr/local/bin/pereval-healthcheck.py"
+		[[ $node_role == "primary" ]] && printf '    %-34s -> %s\n' "$SRC_DIR/cert_sync.py" "/usr/local/bin/pereval-cert-sync.py"
 		printf '    %-34s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
 		if [[ $node_role == "primary" ]]; then
-			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, restart pereval-healthcheck, certbot (%s)\n' "$DOMAIN"
+			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, restart pereval-healthcheck, pereval-cert-sync.timer (единый сертификат с CP: %s), удаление pereval-leads\n' "$CERT_DOMAINS"
 		else
 			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats (прямой выход origin)\n'
 		fi
@@ -1057,7 +1471,7 @@ DRYPRE
 
 	# Проверка окружения и автоматическая доустановка недостающих сервисов и утилит
 	local preflight
-	preflight=$(ssh "${ssh_opts[@]}" "$target" "$sudo_cmd bash -s" <<'PRE'
+	preflight=$(ssh "${ssh_opts[@]}" "$target" "$sudo_cmd env NODE_ROLE_HINT=$node_role bash -s" <<'PRE'
 set -euo pipefail
 if . /etc/os-release 2>/dev/null; then printf 'os=%s\n' "${PRETTY_NAME:-Linux}"; fi
 
@@ -1092,8 +1506,8 @@ if ! nginx -V 2>&1 | grep -qE -- '--with-stream($| )' && [[ ! -f /usr/lib/nginx/
 fi
 command -v dnsmasq >/dev/null 2>&1 || need_pkgs+=(dnsmasq)
 command -v python3 >/dev/null 2>&1 || need_pkgs+=(python3)
-dpkg -s python3-venv >/dev/null 2>&1 || need_pkgs+=(python3-venv)
 command -v openssl >/dev/null 2>&1 || need_pkgs+=(openssl)
+if [[ "${NODE_ROLE_HINT:-}" == "pro-worker" ]]; then command -v nft >/dev/null 2>&1 || need_pkgs+=(nftables); fi
 command -v dig >/dev/null 2>&1 || need_pkgs+=(dnsutils)
 command -v ss >/dev/null 2>&1 || need_pkgs+=(iproute2)
 command -v bmon >/dev/null 2>&1 || need_pkgs+=(bmon)
@@ -1136,6 +1550,7 @@ PRE
 		|| die "на сервере $node_ip отсутствует tar после автоустановки"
 
 	prepare_local_stage
+	[[ $node_role == "pro-worker" ]] && stage_pro_worker_env "$node_name" "$node_secret_env"
 
 	local stamp
 	stamp=$(date +%Y%m%d-%H%M%S)
@@ -1149,8 +1564,14 @@ PRE
 
 	step "Применяю на сервере $node_ip (роль: $node_role)"
 	local apply_rc=0
-	ssh "${ssh_opts[@]}" "$target" \
-		"$sudo_cmd bash '$stage/apply.sh' '$stage' '$stamp' '$node_ip' '$DOMAIN' '$node_role'" || apply_rc=$?
+	if ((is_pro)); then
+		local trusted="$PRO_DNS_IP,$PRO_CP_IP,$CLUSTER_PRIMARY"
+		ssh "${ssh_opts[@]}" "$target" \
+			"$sudo_cmd bash -c 'if [ -f \"$stage/node.$node_role.env\" ]; then cp \"$stage/node.$node_role.env\" \"$stage/node.env\"; fi; bash \"$stage/apply-pro.sh\" \"$stage\" \"$stamp\" \"$node_ip\" \"$PRO_DOMAIN\" \"$node_role\" \"$PRO_DNS_IP\" \"$trusted\" \"$CP_ORIGIN\"'" || apply_rc=$?
+	else
+		ssh "${ssh_opts[@]}" "$target" \
+			"$sudo_cmd bash -c 'if [ -f \"$stage/node.$node_role.env\" ]; then cp \"$stage/node.$node_role.env\" \"$stage/node.env\"; fi; bash \"$stage/apply.sh\" \"$stage\" \"$stamp\" \"$node_ip\" \"$DOMAIN\" \"$node_role\" \"$FREE_DOMAINS\" \"$CP_ORIGIN\" \"$CERT_DOMAINS\"'" || apply_rc=$?
+	fi
 
 	ssh "${ssh_opts[@]}" "$target" "rm -rf '$stage'" 2>/dev/null || true
 
@@ -1171,6 +1592,31 @@ PRE
 # - Если режим auto (по умолчанию) или --all, и в cluster-nodes.json есть воркеры:
 #   сначала поочерёдно разворачиваем все воркеры (Worker-first), затем основной узел Primary!
 
+if ((DEPLOY_PRO)); then
+	step "Развёртывание Pro: DNS-нода $PRO_DNS_IP, затем воркеры (${#PRO_WORKER_LINES[@]})"
+	deploy_node "$PRO_DNS_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "pro-dns" "pro-dns"
+	for wline in "${PRO_WORKER_LINES[@]}"; do
+		[[ -z $wline ]] && continue
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$wline"
+		validate_ipv4 "$w_ip"
+		eff_user=$(resolve_worker_user "$w_user" "$w_user_env")
+		eff_key=$(resolve_worker_key "$w_key" "$w_key_env" "pro-worker $w_name ($w_ip)")
+		eff_port=$(resolve_worker_port "$w_port")
+		deploy_node "$w_ip" "$eff_user" "$eff_key" "$eff_port" "pro-worker" "$w_name" "$w_secret_env"
+	done
+elif [[ $ROLE == "pro-worker" ]]; then
+	# одиночный воркер: имя и secret_env берём из services.yaml по IP, если он там описан
+	pw_name="$ROLE-$SERVER_IP"; pw_secret_env=""
+	for wline in "${PRO_WORKER_LINES[@]}"; do
+		[[ -z $wline ]] && continue
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$wline"
+		if [[ $w_ip == "$SERVER_IP" ]]; then pw_name="$w_name"; pw_secret_env="$w_secret_env"; break; fi
+	done
+	deploy_node "$SERVER_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "pro-worker" "$pw_name" "$pw_secret_env"
+elif [[ $ROLE == "pro-dns" ]]; then
+	deploy_node "$SERVER_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "$ROLE" "$ROLE-$SERVER_IP"
+else
+
 matched_worker_line=""
 if ((${#WORKER_LINES[@]})); then
 	for wline in "${WORKER_LINES[@]}"; do
@@ -1185,7 +1631,7 @@ fi
 
 if [[ $ROLE == "worker" ]] || { [[ $ROLE == "auto" ]] && (( ! DEPLOY_ALL )) && [[ -n $matched_worker_line ]]; }; then
 	if [[ -n $matched_worker_line ]]; then
-		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port <<<"$matched_worker_line"
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$matched_worker_line"
 		eff_user=$(resolve_worker_user "$w_user" "$w_user_env")
 		eff_key=$(resolve_worker_key "$w_key" "$w_key_env" "worker $w_name ($w_ip)")
 		eff_port=$(resolve_worker_port "$w_port")
@@ -1199,7 +1645,7 @@ else
 	step "Кластерное развёртывание: воркеров=${#WORKER_LINES[@]}, основной узел=$SERVER_IP"
 	for wline in "${WORKER_LINES[@]}"; do
 		[[ -z $wline ]] && continue
-		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port <<<"$wline"
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$wline"
 		validate_ipv4 "$w_ip"
 		eff_user=$(resolve_worker_user "$w_user" "$w_user_env")
 		eff_key=$(resolve_worker_key "$w_key" "$w_key_env" "worker $w_name ($w_ip)")
@@ -1209,8 +1655,14 @@ else
 	deploy_node "$SERVER_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "primary" "primary"
 fi
 
+fi
+
 if (( ! DRY_RUN )); then
 	step "Готово"
-	info "кластер обновлён ($n_dnsmasq доменов)"
-	info "логи: journalctl -u dnsmasq -f  |  journalctl -u pereval-healthcheck -f  |  tail -f /var/log/nginx/sni.log"
+	if ((NEED_PRO)); then
+		info "Pro обновлён ($PRO_DOMAIN). Логи: journalctl -u pereval-pro-dns -f | journalctl -u pereval-pro-agent -f"
+	else
+		info "кластер обновлён ($n_dnsmasq доменов)"
+		info "логи: journalctl -u dnsmasq -f  |  journalctl -u pereval-healthcheck -f  |  tail -f /var/log/nginx/sni.log"
+	fi
 fi

@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+.git
+.env
+.env.*
+!deploy/.env.example
+coverage
+*.log
+.DS_Store
+tests

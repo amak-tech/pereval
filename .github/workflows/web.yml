@@ -1,0 +1,145 @@
+name: Web (pereval.top)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "services.yaml"
+      - "src/generate.py"
+      - "src/poolrouting.py"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - "services.yaml"
+      - "src/generate.py"
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy to pereval.top after build"
+        type: boolean
+        default: true
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/pereval-web
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Catalog freshness (services.json)
+        run: |
+          pip install -q pyyaml
+          python3 src/generate.py services.yaml 153.80.200.170 --check -q
+          python3 -m unittest discover -s tests
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Lint, typecheck, tests
+        working-directory: web
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+      - name: Build (sanity)
+        working-directory: web
+        run: pnpm build
+
+  image:
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/pro' }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.deploy)
+    runs-on: ubuntu-latest
+    environment: pereval-top
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Deploy via SSH (docker compose pull && up -d)
+        env:
+          CP_HOST: ${{ secrets.CP_HOST }}
+          CP_SSH_USER: ${{ secrets.CP_SSH_USER }}
+          CP_SSH_KEY: ${{ secrets.CP_SSH_KEY }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.image.outputs.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          # Секреты приложения: непустые значения переписывают строки в /opt/pereval/.env (источник истины — GitHub Secrets)
+          SYNC_SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SYNC_SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SYNC_SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SYNC_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SYNC_MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          SYNC_MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME }}
+          SYNC_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          SYNC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          SYNC_LAVA_API_KEY: ${{ secrets.LAVA_API_KEY }}
+          SYNC_LAVA_OFFER_ID_PRO: ${{ secrets.LAVA_OFFER_ID_PRO }}
+          SYNC_LAVA_PRODUCT_ID_PRO: ${{ secrets.LAVA_PRODUCT_ID_PRO }}
+          SYNC_LAVA_WEBHOOK_KEY: ${{ secrets.LAVA_WEBHOOK_KEY }}
+          SYNC_AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+          SYNC_AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+        run: |
+          KEY="$(mktemp)"; trap 'rm -f "$KEY"' EXIT
+          printf '%s\n' "$CP_SSH_KEY" > "$KEY"; chmod 600 "$KEY"
+          SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes $CP_SSH_USER@$CP_HOST"
+          $SSH 'mkdir -p /opt/pereval/deploy/nginx'
+          # образ в GHCR приватный: логинимся на сервере токеном этого запуска (живёт только на время job)
+          printf '%s' "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+          scp -i "$KEY" -o StrictHostKeyChecking=accept-new -r web/compose.yaml web/deploy "$CP_SSH_USER@$CP_HOST:/opt/pereval/"
+          $SSH "cd /opt/pereval && test -f .env || { echo 'нет /opt/pereval/.env — создайте из deploy/.env.example'; exit 1; }"
+          # синхронизация секретов в .env: KEY=VALUE построчно через stdin, на сервере upsert (значения в файл, не в командную строку)
+          env | grep '^SYNC_' | sed 's/^SYNC_//' | awk -F= 'length($0) > length($1) + 1' \
+            | $SSH 'cd /opt/pereval && while IFS= read -r line; do k="${line%%=*}"; if grep -q "^$k=" .env; then awk -v l="$line" -v k="$k" "index(\$0, k\"=\")==1 {print l; next} {print}" .env > .env.tmp && cat .env.tmp > .env && rm -f .env.tmp; else printf "%s\n" "$line" >> .env; fi; done; chmod 600 .env; echo "секреты синхронизированы: $(grep -cE "^(SMTP_PASSWORD|LAVA_API_KEY)=.+" .env)/2 ключевых заполнены"'
+          $SSH "cd /opt/pereval && echo 'APP_IMAGE=$IMAGE' > .image.env && docker compose --env-file .env --env-file .image.env pull app jobs && docker compose --env-file .env --env-file .image.env up -d --remove-orphans && docker compose ps"
+          $SSH "cd /opt/pereval && sleep 5 && curl -fsS http://127.0.0.1/healthz && docker compose exec -T app wget -qO- http://127.0.0.1:3000/api/healthz"

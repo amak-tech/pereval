@@ -19,6 +19,11 @@
 изменении состава живых воркеров. Если все воркеры недоступны, включается режим
 fail-open: DNS начинает возвращать IP основного узла (primary), а nginx на
 основном узле переключается на прямое разрешение origin-доменов.
+
+Пулы воркеров: cluster-nodes.json описывает пулы (pools) и принадлежность
+воркеров к ним, service-map.json — пул каждого домена. Для каждого сервиса
+выбирается одна живая нода его пула (rendezvous-хэш, см. poolrouting.py);
+пустой пул уходит по fallback-цепочке, затем на primary.
 """
 
 import argparse
@@ -35,7 +40,40 @@ import subprocess
 import sys
 import time
 
+# poolrouting.py лежит рядом (репозиторий) или в /usr/local/lib/pereval (сервер)
+for _cand in (os.path.dirname(os.path.abspath(__file__)), "/usr/local/lib/pereval"):
+    if _cand not in sys.path:
+        sys.path.insert(0, _cand)
+import poolrouting  # noqa: E402
+
 ADDRESS_LINE_RE = re.compile(r'^(\s*#?\s*address=/([^/\s]+)/)([^\s#]+)(.*)$')
+
+HC_HEADER = (
+    "# -----------------------------------------------------------------------------\n"
+    "# АВТОМАТИЧЕСКИ ОБНОВЛЕНО healthcheck.py — не правьте вручную.\n"
+    "# -----------------------------------------------------------------------------\n"
+)
+
+
+def load_service_map(path: Path) -> dict:
+    """{домен: {service, pool, ...}} из service-map.json (пустой словарь, если файла нет)."""
+    if not path or not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception as exc:
+        print(f"[healthcheck] warning: cannot read service map {path}: {exc}", file=sys.stderr)
+        return {}
+
+
+def domain_pools_from_map(service_map: dict) -> dict:
+    """{домен: пул} из service-map.json."""
+    out = {}
+    for d, info in service_map.items():
+        if isinstance(info, dict):
+            out[d] = str(info.get("pool") or poolrouting.DEFAULT_POOL)
+    return out
 
 
 def atomic_write_text(path: Path, content: str) -> None:
@@ -174,7 +212,8 @@ async def probe_http_healthz(ip: str, port: int, host: str, timeout: float):
 
 
 def render_dnsmasq_conf(template_text: str, dns_ips: list) -> str:
-    """Пересобирает конфиг dnsmasq с указанным списком IP-адресов для всех доменов."""
+    """Пересобирает конфиг dnsmasq, направляя ВСЕ домены на указанный список IP
+    (round-robin). Используется воркерами (один IP — свой) и как запасной путь."""
     if not dns_ips:
         raise ValueError("dns_ips must not be empty")
     n_ips = len(dns_ips)
@@ -216,76 +255,53 @@ def render_dnsmasq_conf(template_text: str, dns_ips: list) -> str:
     return "\n".join(out) + "\n"
 
 
-def render_nginx_stream_workers(healthy_workers: list, tls_port: int = 443) -> str:
-    """Формирует содержимое nginx-workers-stream.conf."""
-    header = (
-        "# -----------------------------------------------------------------------------\n"
-        "# АВТОМАТИЧЕСКИ ОБНОВЛЕНО healthcheck.py — не правьте вручную.\n"
-        "# -----------------------------------------------------------------------------\n\n"
-    )
-    if not healthy_workers:
-        return header + "\n".join([
-            "map $sni_allow_target $sni_upstream {",
-            "    default           $sni_allow_target;",
-            '    "__WORKERS__"     $ssl_preread_server_name:443;',
-            "}",
-            "",
-        ])
-    lines = [
-        "upstream pereval_stream_workers {",
-        "    least_conn;",
-    ]
-    for w in healthy_workers:
-        weight = int(w.get("weight") or 1)
-        lines.append(f"    server {w['ip']}:{tls_port} weight={weight} max_fails=2 fail_timeout=10s;")
-    lines.extend([
-        "}",
-        "",
-        "map $sni_allow_target $sni_upstream {",
-        '    "127.0.0.1:9"     127.0.0.1:9;',
-        '    "127.0.0.1:8443"  127.0.0.1:8443;',
-        "    default           pereval_stream_workers;",
-        '    "__WORKERS__"     pereval_stream_workers;',
-        "}",
-        "",
-    ])
-    return header + "\n".join(lines)
+def render_dnsmasq_conf_pooled(template_text: str, pools: dict, healthy_by_pool: dict,
+                               service_map: dict, last_resort: list) -> str:
+    """Пересобирает конфиг dnsmasq по пулам: каждый домен -> нода пула своего сервиса
+    (rendezvous-хэш по имени сервиса среди здоровых нод пула; пустой пул ->
+    fallback-цепочка -> last_resort, обычно Primary)."""
+    if not last_resort and not any(healthy_by_pool.values()):
+        raise ValueError("no healthy nodes and no last_resort")
+    out = []
+    last_domain = None
+    for line in template_text.splitlines():
+        m = ADDRESS_LINE_RE.match(line)
+        if not m:
+            last_domain = None
+            out.append(line)
+            continue
+        prefix, domain, _old_ip, suffix = m.groups()
+        if domain == last_domain:
+            continue  # старый формат с несколькими IP на домен -> одна строка
+        last_domain = domain
+        info = service_map.get(domain) or {}
+        service = str(info.get("service") or domain)
+        pool = str(info.get("pool") or poolrouting.DEFAULT_POOL)
+        ip = poolrouting.pick(service, pool, pools, healthy_by_pool, last_resort=last_resort)
+        if ip is None:
+            ip = _old_ip
+        out.append(f"{prefix}{ip}{suffix}")
+    return "\n".join(out) + "\n"
 
 
-def render_nginx_http_workers(healthy_workers: list, http_port: int = 80) -> str:
-    """Формирует содержимое nginx-workers-http.conf."""
-    header = (
-        "# -----------------------------------------------------------------------------\n"
-        "# АВТОМАТИЧЕСКИ ОБНОВЛЕНО healthcheck.py — не правьте вручную.\n"
-        "# -----------------------------------------------------------------------------\n\n"
-    )
-    if not healthy_workers:
-        return header + "\n".join([
-            "map $http_allow_target $http_upstream {",
-            "    default           $http_allow_target;",
-            '    "__WORKERS__"     $host;',
-            "}",
-            "",
-        ])
-    lines = [
-        "upstream pereval_http_workers {",
-        "    least_conn;",
-    ]
-    for w in healthy_workers:
-        weight = int(w.get("weight") or 1)
-        lines.append(f"    server {w['ip']}:{http_port} weight={weight} max_fails=2 fail_timeout=10s;")
-    lines.extend([
-        "    keepalive 32;",
-        "}",
-        "",
-        "map $http_allow_target $http_upstream {",
-        '    ""                "";',
-        "    default           pereval_http_workers;",
-        '    "__WORKERS__"     pereval_http_workers;',
-        "}",
-        "",
-    ])
-    return header + "\n".join(lines)
+def render_nginx_stream_workers(healthy_workers: list, tls_port: int = 443, pools: dict = None,
+                                domain_pools: dict = None) -> str:
+    """nginx-workers-stream.conf: upstream на каждый пул + map SNI -> upstream."""
+    pools = poolrouting.normalize_pools(pools or {})
+    healthy_by_pool = poolrouting.workers_by_pool(healthy_workers, pools)
+    weights = {w["ip"]: int(w.get("weight") or 1) for w in healthy_workers}
+    return poolrouting.render_stream_workers(pools, healthy_by_pool, domain_pools or {},
+                                             weights=weights, tls_port=tls_port, header=HC_HEADER)
+
+
+def render_nginx_http_workers(healthy_workers: list, http_port: int = 80, pools: dict = None,
+                              domain_pools: dict = None) -> str:
+    """nginx-workers-http.conf: upstream на каждый пул + map Host -> upstream."""
+    pools = poolrouting.normalize_pools(pools or {})
+    healthy_by_pool = poolrouting.workers_by_pool(healthy_workers, pools)
+    weights = {w["ip"]: int(w.get("weight") or 1) for w in healthy_workers}
+    return poolrouting.render_http_workers(pools, healthy_by_pool, domain_pools or {},
+                                           weights=weights, http_port=http_port, header=HC_HEADER)
 
 
 def load_state(state_file: Path) -> dict:
@@ -317,14 +333,22 @@ def apply_configs_and_reload(
     http_port: int,
     no_service_reload: bool,
     allow_dnsmasq_restart: bool,
+    pools: dict = None,
+    service_map: dict = None,
+    dns_extra_ips: list = None,
 ) -> tuple:
     """Атомарно обновляет конфиги dnsmasq и nginx, проверяет их и перезагружает сервисы."""
     dns_updated = False
     nginx_updated = False
+    pools = poolrouting.normalize_pools(pools or {})
+    service_map = service_map or {}
+    domain_pools = domain_pools_from_map(service_map)
 
-    # 1. Обновление nginx worker upstreams
-    stream_content = render_nginx_stream_workers(healthy_workers, tls_port=tls_port)
-    http_content = render_nginx_http_workers(healthy_workers, http_port=http_port)
+    # 1. Обновление nginx worker upstreams (по пулам)
+    stream_content = render_nginx_stream_workers(healthy_workers, tls_port=tls_port,
+                                                 pools=pools, domain_pools=domain_pools)
+    http_content = render_nginx_http_workers(healthy_workers, http_port=http_port,
+                                             pools=pools, domain_pools=domain_pools)
 
     prev_stream = nginx_stream_out.read_text(encoding="utf-8") if nginx_stream_out.is_file() else None
     prev_http = nginx_http_out.read_text(encoding="utf-8") if nginx_http_out.is_file() else None
@@ -349,7 +373,13 @@ def apply_configs_and_reload(
     # 2. Обновление dnsmasq.conf
     if dnsmasq_template.is_file() and allow_dnsmasq_restart:
         tpl_text = dnsmasq_template.read_text(encoding="utf-8")
-        new_dns_conf = render_dnsmasq_conf(tpl_text, active_dns_ips)
+        if healthy_workers:
+            healthy_by_pool = poolrouting.workers_by_pool(healthy_workers, pools, extra_ips=dns_extra_ips)
+            # last_resort = active_dns_ips: Primary (fail-open) либо все живые ноды
+            new_dns_conf = render_dnsmasq_conf_pooled(tpl_text, pools, healthy_by_pool,
+                                                      service_map, list(active_dns_ips))
+        else:
+            new_dns_conf = render_dnsmasq_conf(tpl_text, active_dns_ips)
         prev_dns = dnsmasq_out.read_text(encoding="utf-8") if dnsmasq_out.is_file() else None
         if prev_dns != new_dns_conf:
             dnsmasq_out.parent.mkdir(parents=True, exist_ok=True)
@@ -382,9 +412,11 @@ async def run_cycle(args, state: dict) -> dict:
 
     cluster = json.loads(args.cluster_config.read_text(encoding="utf-8"))
     primary_ip = cluster.get("primary") or "153.80.200.170"
-    domain = cluster.get("domain") or "pereval.portbuddy.tech"
+    domain = cluster.get("domain") or "free.pereval.top"
     include_primary_in_dns = bool(cluster.get("include_primary_in_dns", False))
     probe_sni = cluster.get("probe_sni") or domain
+    pools = poolrouting.normalize_pools(cluster.get("pools") or {})
+    service_map = load_service_map(args.service_map)
     raw_workers = [
         w for w in (cluster.get("workers") or [])
         if isinstance(w, dict) and w.get("ip") and w.get("ip") != primary_ip
@@ -444,13 +476,15 @@ async def run_cycle(args, state: dict) -> dict:
                       f"(after {wstate['consecutive_failures']} failures)", file=sys.stderr)
 
         is_healthy = bool(wstate["healthy"])
+        w_pools = [str(p) for p in (w.get("pools") or [poolrouting.DEFAULT_POOL])]
         if is_healthy:
-            healthy_workers.append({"ip": ip, "name": name, "weight": weight})
+            healthy_workers.append({"ip": ip, "name": name, "weight": weight, "pools": w_pools})
 
         status_workers.append(OrderedDict([
             ("ip", ip),
             ("name", name),
             ("weight", weight),
+            ("pools", w_pools),
             ("status", "up" if is_healthy else "down"),
             ("healthy", is_healthy),
             ("tls_443_ok", tls_ok),
@@ -516,6 +550,9 @@ async def run_cycle(args, state: dict) -> dict:
             http_port=args.http_port,
             no_service_reload=args.no_service_reload,
             allow_dnsmasq_restart=allow_dns_restart,
+            pools=pools,
+            service_map=service_map,
+            dns_extra_ips=[primary_ip] if (include_primary_in_dns and healthy_workers) else None,
         )
         state["active_worker_ips"] = active_worker_ips
         if allow_dns_restart:
@@ -531,6 +568,11 @@ async def run_cycle(args, state: dict) -> dict:
         ("fail_open_active", fail_open_active),
         ("active_dns_ips", active_dns_ips),
         ("active_worker_ips", active_worker_ips),
+        ("pools", OrderedDict(
+            (pname, poolrouting.candidates_for(pname, pools,
+                                               poolrouting.workers_by_pool(healthy_workers, pools)) or active_dns_ips)
+            for pname in pools
+        )),
         ("workers", status_workers),
     ])
     atomic_write_text(args.status_out, json.dumps(health_payload, ensure_ascii=False, indent=2) + "\n")
@@ -583,6 +625,9 @@ def parse_args(argv=None):
     p.add_argument("--nginx-http-out", type=Path,
                    default=Path("/etc/nginx/geoblock/nginx-workers-http.conf"),
                    help="путь к nginx-workers-http.conf")
+    p.add_argument("--service-map", type=Path,
+                   default=Path("/etc/nginx/geoblock/service-map.json"),
+                   help="путь к service-map.json (домен -> сервис/пул)")
     p.add_argument("--status-out", type=Path,
                    default=Path("/var/www/geoblock/cluster-health.json"),
                    help="путь к JSON-файлу состояния кластера")
