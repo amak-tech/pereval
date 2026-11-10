@@ -118,7 +118,9 @@ usage() {
   ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519 ubuntu --port 2222 --dry-run
 
 Секреты нод (см. web: pnpm admin node add): FREE_PRIMARY_SECRET (Free primary: забирает единый TLS-сертификат
-с control plane), PRO_DNS_SECRET, PRO_WORKER_SECRET — в переменных окружения, попадут в /etc/pereval/node.env.
+с control plane), PRO_DNS_SECRET, и по одному на Pro-воркер — в переменных окружения, попадут в /etc/pereval/node.env.
+Секрет Pro-воркера берётся из переменной secret_env воркера в services.yaml (по умолчанию <NAME>_SECRET,
+например PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET.
 CP_ORIGIN по умолчанию = site_origin из services.yaml.
 TLS: один wildcard-сертификат (cert_domains в cluster-nodes.json) выпускается на control plane
 (web/deploy/issue-cert.sh) и раздаётся нодам скриптом cert_sync.py по systemd-таймеру; certbot на нодах не нужен.
@@ -313,6 +315,7 @@ def worker_lines(prefix, workers):
             w.get("ssh_key_env") or "",
             str(w.get("ssh_port") or ""),
             ",".join(w.get("pools") or ["default"]),
+            w.get("secret_env") or "",
         ]
         print(prefix + "|".join(fields))
 worker_lines("WORKER=", data.get("workers"))
@@ -432,6 +435,43 @@ resolve_worker_port() {
 	fi
 }
 
+# Какая env-переменная хранит секрет Pro-воркера: secret_env из services.yaml, иначе общий PRO_WORKER_SECRET.
+# Печатает имя переменной (пусто, если секрета нет ни в одной).
+resolve_pro_worker_secret_var() {
+	local secret_env="$1"
+	if [[ -n $secret_env && -n ${!secret_env:-} ]]; then
+		printf '%s' "$secret_env"
+	elif [[ -n ${PRO_WORKER_SECRET:-} ]]; then
+		printf '%s' "PRO_WORKER_SECRET"
+	fi
+}
+
+# Готовит $LOCAL_STAGE/node.pro-worker.env для конкретного воркера (вызывается перед каждым deploy_node pro-worker).
+# Без секрета файл удаляется: на ноде останется прежний /etc/pereval/node.env.
+stage_pro_worker_env() {
+	local w_name="$1" secret_env="$2"
+	local var
+	var=$(resolve_pro_worker_secret_var "$secret_env")
+	rm -f "$LOCAL_STAGE/node.pro-worker.env"
+	if [[ -z $var ]]; then
+		[[ -n $w_name ]] && warn "pro-worker $w_name: нет секрета ни в ${secret_env:-secret_env}, ни в PRO_WORKER_SECRET — node.env на ноде не обновляется"
+		return 0
+	fi
+	cat >"$LOCAL_STAGE/node.pro-worker.env" <<EOF
+CP_ORIGIN=$CP_ORIGIN
+NODE_SECRET=${!var}
+TRUSTED_IPS=$PRO_DNS_IP,$PRO_CP_IP,$CLUSTER_PRIMARY
+EOF
+	chmod 600 "$LOCAL_STAGE/node.pro-worker.env"
+	if [[ -n $w_name ]]; then
+		if [[ $var == PRO_WORKER_SECRET && -n $secret_env ]]; then
+			warn "pro-worker $w_name: переменная $secret_env не задана — используется общий PRO_WORKER_SECRET (в CP нода будет видна как общая)"
+		else
+			info "pro-worker $w_name: node.env из $var"
+		fi
+	fi
+}
+
 # ----------------------------------------- формирование apply.sh в stage
 
 prepare_local_stage() {
@@ -464,15 +504,7 @@ EOF
 		chmod 600 "$LOCAL_STAGE/node.pro-dns.env"
 		info "подготовлен node.env для pro-dns"
 	fi
-	if [[ -n ${PRO_WORKER_SECRET:-} ]]; then
-		cat >"$LOCAL_STAGE/node.pro-worker.env" <<EOF
-CP_ORIGIN=$CP_ORIGIN
-NODE_SECRET=$PRO_WORKER_SECRET
-TRUSTED_IPS=$PRO_DNS_IP,$PRO_CP_IP,$CLUSTER_PRIMARY
-EOF
-		chmod 600 "$LOCAL_STAGE/node.pro-worker.env"
-		info "подготовлен node.env для pro-worker"
-	fi
+	stage_pro_worker_env "" ""
 
 	cat >"$LOCAL_STAGE/apply.sh" <<'REMOTE'
 #!/usr/bin/env bash
@@ -1317,6 +1349,7 @@ deploy_node() {
 	local node_port="$4"
 	local node_role="$5"
 	local node_name="$6"
+	local node_secret_env="${7:-}"   # pro-worker: имя env-переменной с секретом ноды
 
 	local target="$node_user@$node_ip"
 	local ctl="/tmp/.geoblock-cm-$$-${#ACTIVE_CTLS[@]}"
@@ -1339,6 +1372,11 @@ deploy_node() {
 	if ((DRY_RUN)); then
 		step "Пробный запуск [$node_role: $node_name ($target:$node_port)], изменений не будет"
 		info "SSH-пользователь: $node_user | SSH-ключ: $node_key | порт: $node_port | роль: $node_role"
+		if [[ $node_role == "pro-worker" ]]; then
+			local dry_secret_var
+			dry_secret_var=$(resolve_pro_worker_secret_var "$node_secret_env")
+			info "секрет ноды: ${dry_secret_var:-не задан (${node_secret_env:-secret_env} / PRO_WORKER_SECRET пусты — node.env не обновится)}"
+		fi
 		if ssh "${ssh_opts[@]}" -o ConnectTimeout=5 "$target" true 2>/dev/null; then
 			ACTIVE_CTLS+=("$ctl")
 			ACTIVE_TARGETS+=("$target")
@@ -1512,6 +1550,7 @@ PRE
 		|| die "на сервере $node_ip отсутствует tar после автоустановки"
 
 	prepare_local_stage
+	[[ $node_role == "pro-worker" ]] && stage_pro_worker_env "$node_name" "$node_secret_env"
 
 	local stamp
 	stamp=$(date +%Y%m%d-%H%M%S)
@@ -1558,14 +1597,23 @@ if ((DEPLOY_PRO)); then
 	deploy_node "$PRO_DNS_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "pro-dns" "pro-dns"
 	for wline in "${PRO_WORKER_LINES[@]}"; do
 		[[ -z $wline ]] && continue
-		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools <<<"$wline"
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$wline"
 		validate_ipv4 "$w_ip"
 		eff_user=$(resolve_worker_user "$w_user" "$w_user_env")
 		eff_key=$(resolve_worker_key "$w_key" "$w_key_env" "pro-worker $w_name ($w_ip)")
 		eff_port=$(resolve_worker_port "$w_port")
-		deploy_node "$w_ip" "$eff_user" "$eff_key" "$eff_port" "pro-worker" "$w_name"
+		deploy_node "$w_ip" "$eff_user" "$eff_key" "$eff_port" "pro-worker" "$w_name" "$w_secret_env"
 	done
-elif [[ $ROLE == "pro-dns" || $ROLE == "pro-worker" ]]; then
+elif [[ $ROLE == "pro-worker" ]]; then
+	# одиночный воркер: имя и secret_env берём из services.yaml по IP, если он там описан
+	pw_name="$ROLE-$SERVER_IP"; pw_secret_env=""
+	for wline in "${PRO_WORKER_LINES[@]}"; do
+		[[ -z $wline ]] && continue
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$wline"
+		if [[ $w_ip == "$SERVER_IP" ]]; then pw_name="$w_name"; pw_secret_env="$w_secret_env"; break; fi
+	done
+	deploy_node "$SERVER_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "pro-worker" "$pw_name" "$pw_secret_env"
+elif [[ $ROLE == "pro-dns" ]]; then
 	deploy_node "$SERVER_IP" "$SSH_USER" "$SSH_KEY" "$SSH_PORT" "$ROLE" "$ROLE-$SERVER_IP"
 else
 
@@ -1583,7 +1631,7 @@ fi
 
 if [[ $ROLE == "worker" ]] || { [[ $ROLE == "auto" ]] && (( ! DEPLOY_ALL )) && [[ -n $matched_worker_line ]]; }; then
 	if [[ -n $matched_worker_line ]]; then
-		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools <<<"$matched_worker_line"
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$matched_worker_line"
 		eff_user=$(resolve_worker_user "$w_user" "$w_user_env")
 		eff_key=$(resolve_worker_key "$w_key" "$w_key_env" "worker $w_name ($w_ip)")
 		eff_port=$(resolve_worker_port "$w_port")
@@ -1597,7 +1645,7 @@ else
 	step "Кластерное развёртывание: воркеров=${#WORKER_LINES[@]}, основной узел=$SERVER_IP"
 	for wline in "${WORKER_LINES[@]}"; do
 		[[ -z $wline ]] && continue
-		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools <<<"$wline"
+		IFS='|' read -r w_ip w_name _w_weight w_user w_user_env w_key w_key_env w_port _w_pools w_secret_env <<<"$wline"
 		validate_ipv4 "$w_ip"
 		eff_user=$(resolve_worker_user "$w_user" "$w_user_env")
 		eff_key=$(resolve_worker_key "$w_key" "$w_key_env" "worker $w_name ($w_ip)")

@@ -71,13 +71,20 @@
     },
     "workers": [
       {
-        "ip": "151.247.25.209",
+        "ip": "141.11.197.214",
         "name": "pro-worker-1",
         "weight": 1,
         "pools": [
           "default",
-          "ai",
           "media"
+        ]
+      },
+      {
+        "ip": "151.247.25.133",
+        "name": "pro-worker-ai-1",
+        "weight": 1,
+        "pools": [
+          "ai"
         ]
       }
     ]

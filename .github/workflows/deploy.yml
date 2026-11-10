@@ -3,7 +3,7 @@ name: Deploy (DNS/proxy nodes)
 # Раскатывает конфиги и демоны на Python/nginx-ноды:
 #   * Free-кластер (primary 153.80.200.170 + воркеры из cluster-nodes.json) — всегда;
 #   * Pro-ноды (pro.dns_ip + pro.workers из services.yaml) — при deploy_pro=true
-#     (нужны секреты PRO_DNS_SECRET / PRO_WORKER_SECRET, выданные `pnpm admin node add`).
+#     (нужны секреты PRO_DNS_SECRET и по одному на Pro-воркер — <NAME>_SECRET, выданные `pnpm admin node add`).
 #   Единый TLS-сертификат раздаёт control plane: Free primary забирает его по FREE_PRIMARY_SECRET.
 # Сайт/кабинет/API (pereval.top) деплоит отдельный workflow web.yml.
 
@@ -74,6 +74,11 @@ jobs:
           SUTTON_SSH_KEY: ${{ secrets.PRO_SSH_KEY || secrets.SUTTON_SSH_KEY }}
           SUTTON_SSH_USER: ${{ secrets.PRO_SSH_USER || secrets.SUTTON_SSH_USER }}
           PRO_DNS_SECRET: ${{ secrets.PRO_DNS_SECRET }}
+          # Секрет на каждый Pro-воркер: <NAME>_SECRET по имени воркера в services.yaml (или его secret_env).
+          # Выдаётся `pnpm admin node add <name> pro_worker <ip>`; при добавлении воркера — добавить строку сюда.
+          PRO_WORKER_1_SECRET: ${{ secrets.PRO_WORKER_1_SECRET }}
+          PRO_WORKER_AI_1_SECRET: ${{ secrets.PRO_WORKER_AI_1_SECRET }}
+          # Общий запасной секрет: используется, если переменная воркера не задана (нода в CP видна как одна).
           PRO_WORKER_SECRET: ${{ secrets.PRO_WORKER_SECRET }}
           CP_ORIGIN: ${{ secrets.CP_ORIGIN }}
         run: |

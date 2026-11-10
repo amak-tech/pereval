@@ -108,7 +108,7 @@ class Pool:
 
 class WorkerNode:
     def __init__(self, ip, name="", weight=1, pools=None, ssh_user=None, ssh_user_env=None,
-                 ssh_key=None, ssh_key_env=None, ssh_port=None):
+                 ssh_key=None, ssh_key_env=None, ssh_port=None, secret_env=None):
         self.ip = ip
         self.name = name
         self.weight = weight
@@ -118,6 +118,17 @@ class WorkerNode:
         self.ssh_key = ssh_key
         self.ssh_key_env = ssh_key_env
         self.ssh_port = ssh_port
+        # Имя env-переменной с Bearer-секретом ноды для control plane (только Pro-воркеры).
+        # По умолчанию deploy.sh берёт <NAME>_SECRET (имя в верхнем регистре, «-» → «_»),
+        # а если её нет — общий PRO_WORKER_SECRET.
+        self.secret_env = secret_env
+
+    def default_secret_env(self, idx=1):
+        """Имя env-переменной секрета по умолчанию: pro-worker-ai-1 -> PRO_WORKER_AI_1_SECRET."""
+        base = re.sub(r'[^A-Za-z0-9]+', '_', self.name or "worker-%d" % idx).strip('_').upper()
+        if not base or base[0].isdigit():
+            base = "WORKER_" + base
+        return base + "_SECRET"
 
     def as_dict(self, idx=1, with_ssh=True):
         d = OrderedDict([
@@ -132,6 +143,7 @@ class WorkerNode:
             d["ssh_key"] = self.ssh_key
             d["ssh_key_env"] = self.ssh_key_env
             d["ssh_port"] = self.ssh_port
+            d["secret_env"] = self.secret_env or self.default_secret_env(idx)
         return d
 
 
@@ -387,6 +399,7 @@ def _parse_workers(raw, where, cluster):
                 ssh_key=_opt_str(wraw, "ssh_key", wwhere),
                 ssh_key_env=_opt_str(wraw, "ssh_key_env", wwhere),
                 ssh_port=_opt_int(wraw, "ssh_port", wwhere, default=None),
+                secret_env=_opt_str(wraw, "secret_env", wwhere),
             ))
         else:
             raise ParseError("%s: ожидался словарь или строка с IP" % wwhere)
@@ -534,7 +547,8 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
                 errors.append("%s: воркер «%s» ссылается на неизвестный пул «%s»" % (label, w.name, pname))
         if w.ssh_port is not None and not (1 <= w.ssh_port <= 65535):
             errors.append("%s: некорректный ssh_port у воркера «%s»: %s" % (label, w.name, w.ssh_port))
-        for fname, fval in (("ssh_user_env", w.ssh_user_env), ("ssh_key_env", w.ssh_key_env)):
+        for fname, fval in (("ssh_user_env", w.ssh_user_env), ("ssh_key_env", w.ssh_key_env),
+                            ("secret_env", w.secret_env)):
             if fval is not None and not ENV_VAR_RE.match(fval):
                 errors.append("%s: некорректное имя переменной окружения %s=«%s» у воркера «%s»"
                               % (label, fname, fval, w.name))
