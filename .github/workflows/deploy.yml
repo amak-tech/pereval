@@ -76,7 +76,7 @@ jobs:
           PRO_DNS_SECRET: ${{ secrets.PRO_DNS_SECRET }}
           # Секрет на каждый Pro-воркер: <NAME>_SECRET по имени воркера в services.yaml (или его secret_env).
           # Выдаётся `pnpm admin node add <name> pro_worker <ip>`; при добавлении воркера — добавить строку сюда.
-          PRO_WORKER_1_SECRET: ${{ secrets.PRO_WORKER_1_SECRET }}
+          PRO_WORKER_DEFAULT_1_SECRET: ${{ secrets.PRO_WORKER_DEFAULT_1_SECRET }}
           PRO_WORKER_AI_1_SECRET: ${{ secrets.PRO_WORKER_AI_1_SECRET }}
           # Общий запасной секрет: используется, если переменная воркера не задана (нода в CP видна как одна).
           PRO_WORKER_SECRET: ${{ secrets.PRO_WORKER_SECRET }}

@@ -641,7 +641,7 @@ pro:
     # Каждый Pro-воркер — отдельная нода в CP со своим Bearer-секретом (pnpm admin node add <name> pro_worker <ip>).
     # deploy.sh берёт секрет из env-переменной secret_env (по умолчанию <NAME>_SECRET: pro-worker-ai-1 →
     # PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET. Переменные пробрасывает deploy.yml.
-    - ip: 141.11.197.214                   # VPS pro-worker-1 — общий пул (+ media через тот же воркер)
+    - ip: 141.11.197.214                   # VPS pro-worker-default-1 — общий пул (+ media через тот же воркер)
       name: pro-worker-default-1
       pools: [default, media]
     - ip: 151.247.25.133                   # VPS pro-worker-ai-1 — ИИ-платформы

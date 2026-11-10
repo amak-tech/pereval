@@ -33,10 +33,18 @@ class WorkerSecretEnvTests(unittest.TestCase):
 
     def test_real_services_yaml_pro_workers_have_secret_env(self):
         doc = generate.parse(str(ROOT / "services.yaml"))
-        names = {w["name"]: w["secret_env"] for w in json.loads(generate.pro_nodes_json(doc))["workers"]}
-        self.assertEqual(names["pro-worker-1"], "PRO_WORKER_1_SECRET")
-        self.assertEqual(names["pro-worker-ai-1"], "PRO_WORKER_AI_1_SECRET")
+        workers = json.loads(generate.pro_nodes_json(doc))["workers"]
+        self.assertTrue(workers)
+        names = {}
+        for w in workers:
+            self.assertRegex(w["secret_env"], r"^[A-Z][A-Z0-9_]*_SECRET$", w)
+            names[w["name"]] = w["secret_env"]
         self.assertEqual(len(set(names.values())), len(names), "secret_env должны быть уникальны")
+        # deploy.yml должен пробрасывать переменную каждого воркера, иначе нода откатится на общий PRO_WORKER_SECRET
+        workflow = (ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+        for name, var in names.items():
+            self.assertIn("%s: ${{ secrets.%s }}" % (var, var), workflow,
+                          "deploy.yml не пробрасывает %s для воркера %s" % (var, name))
 
 
 if __name__ == "__main__":
