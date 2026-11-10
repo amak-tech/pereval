@@ -18,10 +18,6 @@ export const SITE = {
   abuseEmail: "abuse@portbuddy.dev",
   /** Профиль Apple (DNS-over-TLS) для бесплатной версии — маршрут src/app/dns.mobileconfig. */
   appleProfilePath: "/dns.mobileconfig",
-  donate: {
-    lava: "https://app.lava.top/antonliashenka?tabId=donate",
-    kofi: "https://ko-fi.com/S0D829QQHC",
-  },
   /** Дата редакции правовых документов (ISO). */
   legalUpdated: "2026-11-09",
 } as const;

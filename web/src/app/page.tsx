@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowDown, ExternalLink, Heart, Send } from "lucide-react";
+import { ArrowDown, ExternalLink, Send } from "lucide-react";
 import { Faq } from "@/components/Faq";
 import { JsonLd } from "@/components/JsonLd";
 import { Badge, Section } from "@/components/Section";
@@ -179,8 +179,8 @@ export default function HomePage() {
         <NotIncluded disabled={catalog.disabled} passthrough={catalog.passthrough} />
       </Section>
 
-      <Section id="support" eyebrow="Поддержка" title="Помощь и поддержка проекта" lead={`Базовый DNS «${name}» бесплатен, без рекламы и регистрации. Вопросы — в Telegram-чате и по почте; если сервис помогает в работе, можно поддержать оплату серверов.`}>
-        <div className="grid gap-4 md:grid-cols-3">
+      <Section id="support" eyebrow="Поддержка" title="Помощь и поддержка" lead={`Базовый DNS «${name}» бесплатен, без рекламы и регистрации. Вопросы — в Telegram-чате и по почте.`}>
+        <div className="grid gap-4">
           <div className="card">
             <p className="eyebrow m-0">Поддержка</p>
             <h3 className="m-0 mt-2 text-[17px] font-semibold">Вопросы и помощь</h3>
@@ -199,22 +199,6 @@ export default function HomePage() {
                 </a>
               </li>
             </ul>
-          </div>
-          <div className="card">
-            <p className="eyebrow m-0">Карты РФ, СБП и зарубежные карты</p>
-            <h3 className="m-0 mt-2 text-[17px] font-semibold">Lava.top</h3>
-            <p className="m-0 mt-2 text-[15px] text-mute">Поддержка в рублях (картами российских банков и через СБП) или с зарубежных карт.</p>
-            <a href={SITE.donate.lava} target="_blank" rel="noopener" className="btn-secondary mt-4">
-              <Heart className="h-4 w-4" aria-hidden /> Поддержать на Lava.top
-            </a>
-          </div>
-          <div className="card">
-            <p className="eyebrow m-0">Зарубежные карты и PayPal</p>
-            <h3 className="m-0 mt-2 text-[17px] font-semibold">Ko-fi</h3>
-            <p className="m-0 mt-2 text-[15px] text-mute">Разовый донат или подписка через международную платформу Ko-fi.</p>
-            <a href={SITE.donate.kofi} target="_blank" rel="noopener" className="btn-secondary mt-4">
-              <Heart className="h-4 w-4" aria-hidden /> Поддержать на Ko-fi
-            </a>
           </div>
         </div>
         <aside className="card mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between" aria-label="Port Buddy — проект создателей сервиса">
