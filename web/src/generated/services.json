@@ -41,8 +41,15 @@
         "weight": 1,
         "pools": [
           "default",
-          "ai",
           "media"
+        ]
+      },
+      {
+        "ip": "144.31.159.147",
+        "name": "free-worker-ai-1",
+        "weight": 1,
+        "pools": [
+          "ai"
         ]
       }
     ]
