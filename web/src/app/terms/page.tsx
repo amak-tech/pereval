@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { LegalDocument } from "@/components/legal/LegalDocument";
 import { termsIntro, termsSections } from "@/content/legal";
 import { SITE, formatRuDate } from "@/content/site";
@@ -25,6 +26,13 @@ export default function TermsPage() {
       }
       intro={termsIntro()}
       sections={sections}
+      after={
+        <>
+          {/* Виджет Paydex (платёжный агент) — по требованию провайдера размещается в конце оферты. */}
+          <div data-paydex-agent />
+          <Script src="https://paydex.pro/api/public/agent?p=3bd5400e-e098-46d5-bab4-81f735c37eff" strategy="afterInteractive" />
+        </>
+      }
     />
   );
 }

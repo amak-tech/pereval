@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { LegalSection } from "@/content/legal";
 
 /** Правовой документ: заголовок, предупреждение, оглавление (липкое на десктопе) и разделы. */
-export function LegalDocument({ title, lead, intro, sections }: { title: string; lead: ReactNode; intro?: ReactNode; sections: LegalSection[] }) {
+export function LegalDocument({ title, lead, intro, sections, after }: { title: string; lead: ReactNode; intro?: ReactNode; sections: LegalSection[]; after?: ReactNode }) {
   return (
     <div className="wrap py-10 sm:py-14">
       <p className="eyebrow m-0 mb-2">Правовая информация</p>
@@ -31,6 +31,7 @@ export function LegalDocument({ title, lead, intro, sections }: { title: string;
               {s.body}
             </section>
           ))}
+          {after}
         </article>
       </div>
     </div>
