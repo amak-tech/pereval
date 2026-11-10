@@ -10,7 +10,7 @@ type Status = { kind: "idle" } | { kind: "busy" } | { kind: "error"; message: st
 
 /**
  * Оформление подписки Pro: email + валюта + явное согласие на ежемесячные списания →
- * POST /api/billing/checkout → переход на платёжную страницу lava.top.
+ * POST /api/billing/checkout → переход на страницу платёжного сервиса.
  */
 export function Checkout({ name, supportEmail }: { name: string; supportEmail: string }) {
   const { status: plansStatus, prices } = usePlans();
@@ -133,7 +133,7 @@ export function Checkout({ name, supportEmail }: { name: string; supportEmail: s
           {status.kind === "redirect" ? "Переходим к оплате…" : status.kind === "busy" ? "Создаём счёт…" : "Перейти к оплате"}
         </button>
         <p className="m-0 flex items-center gap-1.5 text-xs text-mute">
-          <Lock className="h-3.5 w-3.5" aria-hidden /> Оплата на защищённой странице lava.top. Данные карты мы не видим и не храним.
+          <Lock className="h-3.5 w-3.5" aria-hidden /> Оплата на защищённой странице платёжного сервиса. Данные карты мы не видим и не храним.
         </p>
       </div>
 

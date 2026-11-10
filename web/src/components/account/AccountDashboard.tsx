@@ -110,7 +110,7 @@ export function AccountDashboard() {
         {st.status === "past_due" ? (
           <p className="note mt-4">
             <AlertTriangle className="mr-1 inline h-4 w-4" aria-hidden /> Не удалось списать оплату. Доступ сохраняется до {fmt(st.accessUntil)}. Проверьте карту —
-            lava.top повторит попытку, либо оформите подписку заново ниже.
+            платёжный сервис повторит попытку, либо оформите подписку заново ниже.
           </p>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-3">

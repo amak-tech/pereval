@@ -133,7 +133,7 @@ export default async function ProPage() {
         <Checkout name={name} supportEmail={SITE.supportEmail} />
         <ol className="m-0 mt-6 grid list-none gap-3 p-0 sm:grid-cols-3">
           {[
-            { icon: Zap, title: "Оплата на lava.top", text: "Карта РФ, СБП или зарубежная карта. Данные карты остаются у платёжного сервиса." },
+            { icon: Zap, title: "Оплата через платёжный сервис", text: "Карта РФ, СБП или зарубежная карта. Данные карты остаются у платёжного сервиса." },
             { icon: Mail, title: "Письмо со ссылкой для входа", text: "Сразу после оплаты на email придёт чек и ссылка в кабинет. Пароль не нужен." },
             { icon: UserRound, title: "Профили и адреса в кабинете", text: "Скачайте профиль для iPhone/macOS, скопируйте DoT/DoH для Android и браузера, привяжите домашний IP." },
           ].map((s, i) => (

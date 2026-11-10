@@ -3,7 +3,7 @@ import { LegalDocument } from "@/components/legal/LegalDocument";
 import { privacyIntro, privacySections } from "@/content/legal";
 import { SITE, formatRuDate } from "@/content/site";
 
-const DESCRIPTION = `Политика конфиденциальности ${SITE.name}: какие технические данные обрабатывает DNS-прокси, что хранится для подписки Pro, платежи через lava.top и cookie сайта.`;
+const DESCRIPTION = `Политика конфиденциальности ${SITE.name}: какие технические данные обрабатывает DNS-прокси, что хранится для подписки Pro, платежи через платёжный сервис и cookie сайта.`;
 
 export const metadata: Metadata = {
   title: "Политика конфиденциальности",
