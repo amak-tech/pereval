@@ -2,7 +2,7 @@ name: Web (pereval.top)
 
 on:
   push:
-    branches: [main, pro]   # pro — ветка текущего продакшена pereval.top до слияния в main
+    branches: [main]
     paths:
       - "web/**"
       - "services.yaml"

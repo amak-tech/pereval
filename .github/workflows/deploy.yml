@@ -15,13 +15,13 @@ on:
     inputs:
       deploy_pro:
         type: boolean
-        default: false
+        default: true
   workflow_dispatch:
     inputs:
       deploy_pro:
         description: "Также развернуть Pro-ноды (pro-dns + pro-worker)"
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: deploy
