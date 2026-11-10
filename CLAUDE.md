@@ -11,8 +11,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Корень (`services.yaml`, `src/*.py`, `templates/`, `deploy.sh`)** — Smart DNS + SNI-прокси для Free/Pro нод. Python только stdlib (3.9+), генератор конфигов `src/generate.py` собирает `build/` (gitignored) из единого источника `services.yaml`.
 - **`web/`** — control plane `pereval.top`: Next.js 16 App Router (лендинг, кабинет `/account`, админка `/admin`, API), Drizzle + Postgres 16, Auth.js v5, биллинг lava.top, фоновый процесс `jobs`. Docker Compose на сервере.
 
-Ветка `pro` — текущий продакшен `pereval.top` до слияния в `main` (`web.yml` деплоит с обеих).
-
 ## Команды
 
 ### Ноды (корень)
