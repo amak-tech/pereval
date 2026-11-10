@@ -131,6 +131,21 @@
   .btn-secondary {
     @apply border border-line bg-code text-ink hover:border-accent hover:text-accent;
   }
+  /* Индикатор ожидания оплаты (PaymentProgress): неопределённый прогресс */
+  .progress-bar {
+    @apply relative h-1.5 w-full overflow-hidden rounded-full bg-accent-soft;
+  }
+  .progress-bar > span {
+    @apply absolute inset-y-0 left-0 w-2/5 rounded-full bg-accent;
+    animation: progress-bar-slide 1.4s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress-bar > span {
+      animation: none;
+      width: 100%;
+      opacity: 0.6;
+    }
+  }
   .chip {
     @apply inline-flex items-center rounded-md bg-code px-2 py-0.5 font-mono text-[12.5px] text-ink;
   }
@@ -152,5 +167,28 @@
   }
   .prose-pereval ol {
     @apply list-decimal pl-5;
+  }
+}
+
+@keyframes progress-bar-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  60% {
+    transform: translateX(250%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes payment-progress-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

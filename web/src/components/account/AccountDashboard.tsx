@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Apple, Globe, Monitor, RefreshCw, Router, Smartphone } from "lucide-react";
 import { CopyField } from "@/components/CopyButton";
 import { Badge } from "@/components/Section";
+import { CHECKOUT_TIMEOUT_MS, PaymentProgress, useResetOnPageRestore, type PaymentPhase } from "@/components/billing/PaymentProgress";
 import type { AccountSummary } from "@/lib/account";
 
 type Summary = AccountSummary;
@@ -34,6 +35,41 @@ export function AccountDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [renewPhase, setRenewPhase] = useState<PaymentPhase | null>(null);
+  const renewAbort = useRef<AbortController | null>(null);
+
+  useResetOnPageRestore(useCallback(() => setRenewPhase(null), []));
+
+  function cancelRenew() {
+    renewAbort.current?.abort("cancelled");
+    renewAbort.current = null;
+    setRenewPhase(null);
+  }
+
+  // Продление: создаём счёт → переходим к оплате. Оверлей с прогрессом вместо «зависшей» кнопки.
+  async function renew(currency: "RUB" | "USD") {
+    if (renewPhase) return;
+    setNotice(null);
+    setRenewPhase("creating");
+    const controller = new AbortController();
+    renewAbort.current = controller;
+    const timeout = setTimeout(() => controller.abort("timeout"), CHECKOUT_TIMEOUT_MS);
+    try {
+      const r = await api<{ paymentUrl: string }>("/api/account/subscription/renew", { method: "POST", body: JSON.stringify({ currency }), signal: controller.signal });
+      setRenewPhase("redirect");
+      window.location.assign(r.paymentUrl);
+    } catch (e) {
+      if (controller.signal.aborted) {
+        if (controller.signal.reason === "timeout") setNotice("Платёжный сервис не ответил вовремя. Попробуйте ещё раз.");
+      } else {
+        setNotice((e as Error).message);
+      }
+      setRenewPhase(null);
+    } finally {
+      clearTimeout(timeout);
+      if (renewAbort.current === controller) renewAbort.current = null;
+    }
+  }
 
   const reload = useCallback(
     () =>
@@ -75,6 +111,7 @@ export function AccountDashboard() {
 
   return (
     <div className="mt-6 grid gap-6">
+      {renewPhase ? <PaymentProgress phase={renewPhase} onCancel={cancelRenew} /> : null}
       {notice ? (
         <div className="rounded-xl border border-warn bg-warn-bg px-4 py-3 text-warn" role="status">
           {notice}
@@ -129,30 +166,10 @@ export function AccountDashboard() {
           ) : null}
           {st.canRenew ? (
             <>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={busy === "renew"}
-                onClick={() =>
-                  run("renew", async () => {
-                    const r = await api<{ paymentUrl: string }>("/api/account/subscription/renew", { method: "POST", body: JSON.stringify({ currency: "RUB" }) });
-                    window.location.assign(r.paymentUrl);
-                  })
-                }
-              >
+              <button type="button" className="btn-primary" disabled={renewPhase !== null} onClick={() => renew("RUB")}>
                 Оплатить в рублях
               </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                disabled={busy === "renew"}
-                onClick={() =>
-                  run("renew", async () => {
-                    const r = await api<{ paymentUrl: string }>("/api/account/subscription/renew", { method: "POST", body: JSON.stringify({ currency: "USD" }) });
-                    window.location.assign(r.paymentUrl);
-                  })
-                }
-              >
+              <button type="button" className="btn-secondary" disabled={renewPhase !== null} onClick={() => renew("USD")}>
                 Оплатить в долларах
               </button>
             </>
