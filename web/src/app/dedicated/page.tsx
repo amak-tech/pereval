@@ -56,7 +56,7 @@ export default function DedicatedPage() {
                 <strong>Все домашние устройства сразу:</strong> ноутбуки, смартфоны, планшеты, Smart TV и игровые приставки (Xbox без ошибки <code>0x80a40401</code>, PlayStation) без установки VPN на каждое устройство.
               </li>
               <li>
-                <strong>Музыка, кино, соцсети и игры без ограничений:</strong> Spotify, Netflix, Twitch (1080p), TikTok, Reddit, Pinterest, Supercell (Brawl Stars, Clash Royale), Canva, Notion, Coursera и ChatGPT работают у всей семьи.
+                <strong>Музыка, видео, учёба и игры без ограничений:</strong> Spotify, Netflix, Twitch (1080p), TikTok, Supercell (Brawl Stars, Clash Royale), Canva, Notion, Coursera и ChatGPT работают у всей семьи.
               </li>
               <li>
                 <strong>Российские сервисы не ломаются:</strong> Кинопоиск, Госуслуги, банковские приложения и умный дом продолжают работать напрямую через вашего провайдера.
@@ -70,7 +70,7 @@ export default function DedicatedPage() {
             <p className="m-0 mt-2 text-[15px] text-mute">Изолированный сервер для компании или продуктовой команды с фиксированным внешним IP-адресом и централизованным управлением:</p>
             <ul className="m-0 mt-3 grid list-disc gap-2 pl-5 text-[15px]">
               <li>
-                <strong>Доступ к рабочему стеку:</strong> командные пространства Notion, Miro, Trello, Canva, ChatGPT Team, Claude, Cursor и JetBrains.
+                <strong>Доступ к рабочему стеку:</strong> командные пространства Notion, Miro, Airtable, Canva, Adobe, ChatGPT Team, Claude, Cursor и JetBrains.
               </li>
               <li>
                 <strong>Собственные домены под задачи команды:</strong> добавление любых нужных зарубежных сайтов, документации и SaaS-сервисов через личный кабинет за пару секунд.

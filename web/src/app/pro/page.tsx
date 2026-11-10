@@ -12,8 +12,8 @@ import { PRO_FAQ } from "@/content/faq";
 import { SITE } from "@/content/site";
 import { proCategories } from "@/lib/catalog";
 
-const TITLE = `${SITE.name} Pro — стриминги, соцсети и игры без VPN`;
-const DESCRIPTION = `Подписка ${SITE.name} Pro: Spotify, Netflix, Twitch, TikTok, Reddit, Canva, Notion, Supercell и Xbox без VPN на быстрых серверах. Отмена в любой момент.`;
+const TITLE = `${SITE.name} Pro — рабочие инструменты, TikTok и игры без VPN`;
+const DESCRIPTION = `Подписка ${SITE.name} Pro: Notion, Miro, Canva, Adobe, Airtable, Spotify, TikTok, Xbox и PlayStation без VPN на быстрых серверах. Отмена в любой момент.`;
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
@@ -71,7 +71,7 @@ export default async function ProPage() {
 
   const benefits = [
     { icon: Gauge, eyebrow: "Стабильная скорость", title: "Никаких вечерних просадок", text: "На бесплатном сервере один канал делится на всех. В Pro работают отдельные незагруженные серверы только для подписчиков — музыка, видео в высоком качестве, голосовые режимы ChatGPT и игры летают в любое время суток." },
-    { icon: Sparkles, eyebrow: "Стриминги, соцсети и игры", title: "Музыка, кино, лента и творчество", text: "Видеосервисы, стриминги и игры нельзя добавить в бесплатную версию без перегрузки общего канала. В Pro открыты самые востребованные сервисы на каждый день, которые не работают из РФ и РБ без VPN." },
+    { icon: Sparkles, eyebrow: "Рабочие инструменты", title: "Notion, Miro, Canva и Adobe снова работают", text: "В 2026 году сервисы один за другим закрывают доступ по IP из РФ и РБ: Miro, Airtable, Cursor, раньше Notion и Canva. В Pro только проверенные сервисы, которые действительно закрыты по региону, а не по решению регулятора: рабочие инструменты, Spotify, TikTok с актуальной лентой и консольные сервисы." },
     { icon: KeyRound, eyebrow: "Личный кабинет", title: "Настройка устройств за 1 клик", text: "В кабинете вы скачиваете готовый профиль для iPhone / macOS, получаете персональные адреса DoH и DoT для Android, Windows и браузера, привязываете домашний IP и включаете нужные категории сайтов." },
   ];
 
@@ -87,7 +87,7 @@ export default async function ProPage() {
             {name} Pro — полный каталог и быстрые серверы без вечерних тормозов
           </h1>
           <p className="mt-5 max-w-[66ch] text-[17px] text-mute">
-            Бесплатный сервер хорош для текстовых нейросетей, но им пользуются тысячи людей одновременно. В {name} Pro вы подключаетесь к свободным серверам и получаете все {counts.free_services} сервисов Free плюс {counts.pro_services} популярных сервисов, которые сами закрыли доступ для России и Беларуси: <strong>Spotify, Netflix, Twitch (1080p), TikTok, Reddit, Pinterest, Canva, Notion, Miro, Supercell, Xbox и PlayStation</strong>.
+            Бесплатный сервер хорош для текстовых нейросетей, но им пользуются тысячи людей одновременно. В {name} Pro вы подключаетесь к свободным серверам и получаете все {counts.free_services} сервисов Free плюс {counts.pro_services} сервисов, которые не работают из России и Беларуси: <strong>Notion, Miro, Canva, Adobe, Airtable, Grammarly, Coursera, Spotify, TikTok, Twitch (1080p), Supercell, Xbox и PlayStation</strong>.
           </p>
           <p className="mt-4 text-[17px]">
             <ProPrice size="lg" /> <span className="text-mute">· отмена в любой момент, доступ до конца оплаченного месяца</span>

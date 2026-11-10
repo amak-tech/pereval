@@ -56,8 +56,8 @@
 
 **[pereval.top/pro](https://pereval.top/pro)** — платная подписка (месяц, оплата в рублях или долларах через платёжный сервис lava.top):
 
-- **Отдельные быстрые серверы** без вечерних перегрузок, маршрутизация по пулам: ИИ-сервисы — с постоянного IP, «тяжёлые» стриминги и соцсети — через отдельные ноды.
-- **Расширенный каталог:** все сервисы Free + Spotify, Netflix, Twitch, Deezer, Tidal, TikTok, Reddit, Pinterest, Canva, Notion, Miro, Trello, Coursera, Duolingo, Supercell, Xbox, PlayStation, GeForce NOW и др.
+- **Отдельные быстрые серверы** без вечерних перегрузок, маршрутизация по пулам: ИИ-сервисы — с постоянного IP, «тяжёлые» стриминги и TikTok — через отдельные ноды.
+- **Расширенный каталог:** все сервисы Free + Notion, Miro, Canva, Adobe, Airtable, Grammarly, Coursera, Spotify, Netflix, Twitch, TikTok, Supercell, Xbox, PlayStation, GeForce NOW. Только сервисы с подтверждённым геоблоком для РФ или РБ.
 - **Личный кабинет** ([pereval.top/account](https://pereval.top/account)): персональные адреса DoH (`https://pro.pereval.top/dns/<token>`) и DoT (`<token>.pro.pereval.top`), профиль для Apple в один клик, привязка IP для роутера, DDNS для динамических адресов (опрос имени или DynDNS2-push с роутера), включение и отключение категорий, вход по ссылке на email или через Google.
 - **Перевал Dedicated** ([pereval.top/dedicated](https://pereval.top/dedicated)) — выделенный сервер со своим IP и собственными доменами для семьи или команды; сейчас принимаются заявки.
 

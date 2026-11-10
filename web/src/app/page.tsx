@@ -103,7 +103,7 @@ export default function HomePage() {
         <ConnectivityCheck />
       </Section>
 
-      <Section id="services" eyebrow="Каталог" title="Какие сервисы охвачены" lead={`${counts.free_services} сервисов в ${counts.free_categories} категориях — ${counts.free_domains} базовых доменов и все их поддомены. Нужны стриминги, соцсети и игры — они в каталоге Pro.`}>
+      <Section id="services" eyebrow="Каталог" title="Какие сервисы охвачены" lead={`${counts.free_services} сервисов в ${counts.free_categories} категориях — ${counts.free_domains} базовых доменов и все их поддомены. Нужны Notion, Miro, Canva, Spotify, TikTok или игровые сервисы — они в каталоге Pro.`}>
         <ServiceCatalog categories={freeCategories()} telegram={SITE.telegram} />
       </Section>
 
@@ -123,7 +123,7 @@ export default function HomePage() {
         </div>
       </Section>
 
-      <Section id="plans" eyebrow="Тарифы" title="Free, Pro и выделенный сервер" lead={`Базовый сервер «${name}» бесплатен и рассчитан на текстовые нейросети и инструменты разработки. Нужна стабильная скорость вечером, стриминги, соцсети и игры — это Pro. Свой сервер на роутер для семьи или команды — Dedicated.`}>
+      <Section id="plans" eyebrow="Тарифы" title="Free, Pro и выделенный сервер" lead={`Базовый сервер «${name}» бесплатен и рассчитан на текстовые нейросети и инструменты разработки. Нужна стабильная скорость вечером, рабочие инструменты вроде Notion и Miro, музыка, TikTok и игры — это Pro. Свой сервер на роутер для семьи или команды — Dedicated.`}>
         <PlansSection />
       </Section>
 

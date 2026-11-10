@@ -64,7 +64,7 @@
         "strict_allowlist": false
       },
       "media": {
-        "note": "Стриминги и соцсети Pro — тяжёлый трафик.",
+        "note": "Стриминги и TikTok Pro — тяжёлый трафик.",
         "fallback": "default",
         "strict_allowlist": false
       }
@@ -807,7 +807,7 @@
     },
     {
       "id": "media",
-      "name": "Музыка, кино и стриминги",
+      "name": "Музыка, видео и TikTok",
       "tier": "pro",
       "pool": "media",
       "services": [
@@ -844,39 +844,6 @@
           ]
         },
         {
-          "name": "Deezer",
-          "pool": "media",
-          "domains": [
-            "deezer.com",
-            "dzcdn.net"
-          ]
-        },
-        {
-          "name": "Tidal",
-          "pool": "media",
-          "domains": [
-            "tidal.com",
-            "tidalhifi.com"
-          ]
-        },
-        {
-          "name": "ElevenLabs / Suno",
-          "pool": "ai",
-          "domains": [
-            "elevenlabs.io",
-            "suno.com",
-            "suno.ai"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "social",
-      "name": "Соцсети и сообщества",
-      "tier": "pro",
-      "pool": "media",
-      "services": [
-        {
           "name": "TikTok",
           "pool": "media",
           "domains": [
@@ -896,48 +863,22 @@
           ]
         },
         {
-          "name": "Reddit",
-          "pool": "media",
+          "name": "ElevenLabs / Suno",
+          "pool": "ai",
           "domains": [
-            "reddit.com",
-            "redd.it",
-            "redditmedia.com",
-            "redditstatic.com"
-          ]
-        },
-        {
-          "name": "Pinterest",
-          "pool": "media",
-          "domains": [
-            "pinterest.com",
-            "pinimg.com"
-          ]
-        },
-        {
-          "name": "9GAG / Imgur",
-          "pool": "media",
-          "domains": [
-            "9gag.com",
-            "9cache.com",
-            "imgur.com"
+            "elevenlabs.io",
+            "suno.com",
+            "suno.ai"
           ]
         }
       ]
     },
     {
-      "id": "apps",
-      "name": "Популярные приложения и учёба",
+      "id": "work",
+      "name": "Рабочие инструменты и учёба",
       "tier": "pro",
       "pool": "default",
       "services": [
-        {
-          "name": "Canva",
-          "pool": "default",
-          "domains": [
-            "canva.com",
-            "canva.link"
-          ]
-        },
         {
           "name": "Notion",
           "pool": "default",
@@ -960,11 +901,37 @@
           ]
         },
         {
-          "name": "Trello",
+          "name": "Canva",
           "pool": "default",
           "domains": [
-            "trello.com",
-            "trellocdn.com"
+            "canva.com",
+            "canva.link"
+          ]
+        },
+        {
+          "name": "Adobe (Firefly, Creative Cloud)",
+          "pool": "default",
+          "domains": [
+            "adobe.com",
+            "adobelogin.com",
+            "adobe.io"
+          ]
+        },
+        {
+          "name": "Airtable",
+          "pool": "default",
+          "domains": [
+            "airtable.com",
+            "airtableusercontent.com",
+            "airtableblocks.com"
+          ]
+        },
+        {
+          "name": "Grammarly",
+          "pool": "default",
+          "domains": [
+            "grammarly.com",
+            "grammarly.io"
           ]
         },
         {
@@ -972,14 +939,6 @@
           "pool": "default",
           "domains": [
             "coursera.org"
-          ]
-        },
-        {
-          "name": "Quizlet / Duolingo",
-          "pool": "default",
-          "domains": [
-            "quizlet.com",
-            "duolingo.com"
           ]
         }
       ]
@@ -1046,7 +1005,7 @@
     },
     {
       "name": "Сообщается, но не подтверждено",
-      "note": "О региональных ограничениях сообщают, но подтвердить не удалось. Обычно это значит, что ограничение снято или относится к аккаунту, а не к адресу. Проверьте со своего подключения перед включением.",
+      "note": "О региональных ограничениях сообщают, но подтвердить не удалось. Обычно это значит, что ограничение снято или относится к аккаунту, а не к адресу. Пробы 2026-11-10 из РФ и РБ против эталона с нидерландского воркера: Docker Hub (включая auth/registry), Figma и Slack открываются одинаково отовсюду. Проверьте со своего подключения перед включением.",
       "domains": [
         "hub.docker.com",
         "registry-1.docker.io",
@@ -1054,7 +1013,6 @@
         "production.cloudflare.docker.com",
         "figma.com",
         "slack.com",
-        "grammarly.com",
         "stripe.com",
         "console.aws.amazon.com",
         "portal.azure.com",
@@ -1109,8 +1067,8 @@
     "free_categories": 2,
     "free_services": 65,
     "free_domains": 316,
-    "pro_categories": 4,
-    "pro_services": 20,
-    "pro_domains": 73
+    "pro_categories": 3,
+    "pro_services": 16,
+    "pro_domains": 64
   }
 }

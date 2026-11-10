@@ -5,7 +5,7 @@ export const SITE = {
   name: catalog.meta.name,
   origin: catalog.meta.origin,
   description:
-    "Бесплатный Smart DNS без VPN: ChatGPT, Claude, Gemini, Cursor, JetBrains и ещё десятки сервисов открываются напрямую, а российские сайты и банки работают как обычно. Pro — стриминги, соцсети, игры и быстрые серверы.",
+    "Бесплатный Smart DNS без VPN: ChatGPT, Claude, Gemini, Cursor, JetBrains и ещё десятки сервисов открываются напрямую, а российские сайты и банки работают как обычно. Pro — Notion, Miro, Canva, Spotify, TikTok, игры и быстрые серверы.",
   free: catalog.free,
   pro: catalog.pro,
   counts: catalog.counts,

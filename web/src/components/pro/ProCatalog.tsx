@@ -1,10 +1,9 @@
-import { Clapperboard, Gamepad2, Layers, MessageCircle, Sparkles } from "lucide-react";
+import { Briefcase, Clapperboard, Gamepad2, Sparkles } from "lucide-react";
 import { poolLabel, type CatalogCategory } from "@/lib/catalog";
 
 const ICONS: Record<string, typeof Sparkles> = {
   media: Clapperboard,
-  social: MessageCircle,
-  apps: Layers,
+  work: Briefcase,
   games: Gamepad2,
 };
 

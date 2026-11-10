@@ -560,8 +560,9 @@ disabled:
   - name: Сообщается, но не подтверждено
     note: >-
       О региональных ограничениях сообщают, но подтвердить не удалось. Обычно это значит, что
-      ограничение снято или относится к аккаунту, а не к адресу. Проверьте со своего подключения
-      перед включением.
+      ограничение снято или относится к аккаунту, а не к адресу. Пробы 2026-11-10 из РФ и РБ
+      против эталона с нидерландского воркера: Docker Hub (включая auth/registry), Figma и Slack
+      открываются одинаково отовсюду. Проверьте со своего подключения перед включением.
     domains:
       - hub.docker.com
       - registry-1.docker.io
@@ -569,7 +570,6 @@ disabled:
       - production.cloudflare.docker.com
       - figma.com
       - slack.com
-      - grammarly.com
       - stripe.com
       - console.aws.amazon.com
       - portal.azure.com
@@ -635,25 +635,29 @@ pro:
       note: ИИ-платформы Pro — постоянный IP на сервис.
       fallback: default
     media:
-      note: Стриминги и соцсети Pro — тяжёлый трафик.
+      note: Стриминги и TikTok Pro — тяжёлый трафик.
       fallback: default
   workers:
     - ip: 151.247.25.209                   # VPS pro-worker-1
       name: pro-worker-1
       pools: [default, ai, media]
   categories:
+    # Каталог Pro намеренно короткий: только сервисы, геоблок которых подтверждён пробами
+    # из РФ (Yandex Cloud) и РБ (Белтелеком) против эталона с нидерландского воркера 2026-11-10,
+    # и за которые есть реальный спрос. Что не геоблокируется (Reddit, Pinterest, Trello,
+    # Duolingo, Figma, Slack, Docker Hub) — в Pro не держим.
     - id: media
-      name: Музыка, кино и стриминги
+      name: Музыка, видео и TikTok
       pool: media
       services:
-        - name: Spotify
+        - name: Spotify                      # закрыт для РФ (why-not-available), в РБ работает
           domains:
             - spotify.com
             - scdn.co
             - spotifycdn.com
             - spotifycdn.net
             - spoti.fi
-        - name: Netflix
+        - name: Netflix                      # закрыт для РФ; оплата из РФ невозможна, поэтому не в заголовках
           # Видео-CDN nflxvideo.net намеренно не проксируется: регион определяется
           # на netflix.com, а сам поток идёт напрямую с Open Connect — так работают
           # классические Smart DNS и не расходуется канал воркера.
@@ -662,32 +666,14 @@ pro:
             - nflxext.com
             - nflximg.net
             - nflxso.net
-        - name: Twitch
+        - name: Twitch                       # не геоблок, а замедление у провайдеров РФ: через воркер идёт 1080p
           domains:
             - twitch.tv
             - ttvnw.net
             - jtvnw.net
             - twitchcdn.net
             - twitchsvc.net
-        - name: Deezer
-          domains:
-            - deezer.com
-            - dzcdn.net
-        - name: Tidal
-          domains:
-            - tidal.com
-            - tidalhifi.com
-        - name: ElevenLabs / Suno
-          pool: ai
-          domains:
-            - elevenlabs.io
-            - suno.com
-            - suno.ai
-    - id: social
-      name: Соцсети и сообщества
-      pool: media
-      services:
-        - name: TikTok
+        - name: TikTok                       # с 2022 для РФ урезанный режим: старая лента, без загрузки
           domains:
             - tiktok.com
             - tiktokcdn.com
@@ -702,30 +688,17 @@ pro:
             - ibytedtos.com
             - muscdn.com
             - musical.ly
-        - name: Reddit
+        - name: ElevenLabs / Suno            # ElevenLabs: geo-restriction для РФ и РБ
+          pool: ai
           domains:
-            - reddit.com
-            - redd.it
-            - redditmedia.com
-            - redditstatic.com
-        - name: Pinterest
-          domains:
-            - pinterest.com
-            - pinimg.com
-        - name: 9GAG / Imgur
-          domains:
-            - 9gag.com
-            - 9cache.com
-            - imgur.com
-    - id: apps
-      name: Популярные приложения и учёба
+            - elevenlabs.io
+            - suno.com
+            - suno.ai
+    - id: work
+      name: Рабочие инструменты и учёба
       pool: default
       services:
-        - name: Canva
-          domains:
-            - canva.com
-            - canva.link
-        - name: Notion
+        - name: Notion                       # с сентября 2024 закрыт для РФ (403), в РБ работает
           domains:
             - notion.so
             - notion.site
@@ -734,21 +707,31 @@ pro:
             - notionusercontent.com
             - notion-static.com
             - makenotion.com
-        - name: Miro
+        - name: Miro                         # с 15.10.2026 геоблок IP РФ и РБ, включая бесплатные аккаунты
           domains:
             - miro.com
             - realtimeboard.com
-        - name: Trello
+        - name: Canva                        # закрыт для РФ с июня 2022
           domains:
-            - trello.com
-            - trellocdn.com
-        - name: Coursera
+            - canva.com
+            - canva.link
+        - name: Adobe (Firefly, Creative Cloud)  # Firefly: denied для РФ и РБ; adobe.com целиком закрыт для РБ
+          domains:
+            - adobe.com
+            - adobelogin.com
+            - adobe.io
+        - name: Airtable                     # с 19.02.2026 закрыт для РФ (обрыв TLS), в РБ работает
+          domains:
+            - airtable.com
+            - airtableusercontent.com
+            - airtableblocks.com
+        - name: Grammarly                    # 451 для РБ, обрыв TLS для РФ
+          domains:
+            - grammarly.com
+            - grammarly.io
+        - name: Coursera                     # закрыт для РФ (обрыв TLS), в РБ работает
           domains:
             - coursera.org
-        - name: Quizlet / Duolingo
-          domains:
-            - quizlet.com
-            - duolingo.com
     - id: games
       name: Игры и консоли
       pool: default
@@ -763,7 +746,7 @@ pro:
             - brawlstarsgame.com
             - clashroyale.com
             - clashofclans.com
-        - name: Xbox
+        - name: Xbox                         # вход в Xbox Live из РФ: ошибка 0x80a40401
           domains:
             - xbox.com
             - xboxlive.com
@@ -773,7 +756,7 @@ pro:
             - playstation.com
             - playstation.net
             - sonyentertainmentnetwork.com
-        - name: NVIDIA GeForce NOW
+        - name: NVIDIA GeForce NOW           # РФ и РБ вне списка регионов GFN
           domains:
             - geforcenow.com
             - nvidiagrid.net
