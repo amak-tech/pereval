@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
+import { isAdminEmail } from "@/lib/admin";
 import { AccountDashboard } from "@/components/account/AccountDashboard";
 
 export const metadata: Metadata = {
@@ -19,7 +21,15 @@ export default async function AccountPage() {
         <div>
           <p className="eyebrow m-0 mb-1">Личный кабинет</p>
           <h1 className="m-0 text-[clamp(24px,5vw,32px)] font-semibold tracking-tight">Перевал Pro</h1>
-          <p className="m-0 mt-1 text-sm text-mute">{session.user.email}</p>
+          <p className="m-0 mt-1 text-sm text-mute">
+            {session.user.email}
+            {isAdminEmail(session.user.email) ? (
+              <>
+                {" · "}
+                <Link href="/admin">админ-панель</Link>
+              </>
+            ) : null}
+          </p>
         </div>
         <form
           action={async () => {

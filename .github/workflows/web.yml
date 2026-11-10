@@ -122,6 +122,7 @@ jobs:
           SYNC_MAIL_FROM: ${{ secrets.MAIL_FROM }}
           SYNC_MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME }}
           SYNC_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          SYNC_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
           SYNC_LAVA_API_KEY: ${{ secrets.LAVA_API_KEY }}
           SYNC_LAVA_OFFER_ID_PRO: ${{ secrets.LAVA_OFFER_ID_PRO }}
           SYNC_LAVA_PRODUCT_ID_PRO: ${{ secrets.LAVA_PRODUCT_ID_PRO }}

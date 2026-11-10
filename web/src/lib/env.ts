@@ -43,6 +43,8 @@ const schema = z.object({
   MAIL_FROM: z.string().default("no-reply@pereval.top"),
   MAIL_FROM_NAME: z.string().default("Перевал"),
   ADMIN_EMAIL: z.string().default("admin@portbuddy.dev"),
+  /** кто видит /admin: email'ы через запятую; ADMIN_EMAIL добавляется автоматически */
+  ADMIN_EMAILS: z.string().default(""),
 
   SELLER_LEGAL: z.string().default(""),
   TRUSTED_PROXY_IPS: z.string().default("127.0.0.1"),

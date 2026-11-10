@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
       },
       {
         // Кабинет и API не индексируем
-        source: "/(account|api)/:path*",
+        source: "/(account|admin|api)/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
     ];

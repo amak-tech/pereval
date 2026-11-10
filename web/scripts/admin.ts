@@ -1,6 +1,7 @@
 /**
  * Админ-CLI control plane. Запуск: `pnpm admin <команда>` (локально) или
  * `docker compose exec app node dist/admin.mjs <команда>` на сервере.
+ * Те же действия доступны в веб-панели /admin (ADMIN_EMAILS); логика общая — src/lib/admin.ts, всё пишется в audit_log.
  *
  *   users                         список пользователей
  *   subs                          подписки
@@ -15,15 +16,18 @@
  */
 import { desc, eq } from "drizzle-orm";
 import { db, schema, sql } from "@/lib/db/client";
-import { createNode } from "@/lib/nodes";
-import type { NodeKind } from "@/lib/db/schema";
-import { ensureUserByEmail, createLoginLink } from "@/lib/auth-core";
-import { enqueueMail } from "@/lib/mail";
-import { magicLinkMail } from "@/lib/mail-templates";
-import { bumpPolicyVersion, buildPolicySnapshot } from "@/lib/policy";
-import { bumpAclVersion, buildAclSnapshot } from "@/lib/acl";
-import { ensureAccessToken, parseWebhook } from "@/lib/billing";
-import { addPeriod } from "@/lib/subscription";
+import { findUserByEmail } from "@/lib/auth-core";
+import { buildPolicySnapshot } from "@/lib/policy";
+import { buildAclSnapshot } from "@/lib/acl";
+import * as admin from "@/lib/admin";
+
+const CLI: admin.Admin = { id: null, email: `cli:${process.env.USER ?? "root"}` };
+
+async function userIdByEmail(email: string): Promise<string> {
+  const user = await findUserByEmail(email);
+  if (!user) throw new Error("пользователь не найден");
+  return user.id;
+}
 
 async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv;
@@ -47,54 +51,35 @@ async function main(argv: string[]): Promise<number> {
       const [email, daysRaw] = rest;
       const days = Number(daysRaw ?? "30");
       if (!email || !Number.isFinite(days)) throw new Error("grant <email> <days>");
-      const user = await ensureUserByEmail(email);
-      const now = new Date();
-      const [existing] = await db().select().from(schema.subscriptions).where(eq(schema.subscriptions.userId, user.id)).orderBy(desc(schema.subscriptions.updatedAt)).limit(1);
-      const base = existing?.periodEnd && existing.periodEnd > now ? existing.periodEnd : now;
-      const periodEnd = days === 30 ? addPeriod(base, "MONTHLY") : new Date(base.getTime() + days * 86_400_000);
-      if (existing) {
-        await db().update(schema.subscriptions).set({ status: "active", periodEnd, updatedAt: now }).where(eq(schema.subscriptions.id, existing.id));
-      } else {
-        await db().insert(schema.subscriptions).values({ userId: user.id, provider: "manual", status: "active", startedAt: now, periodEnd, updatedAt: now });
-      }
-      const token = await ensureAccessToken(user.id);
-      await bumpPolicyVersion("admin.grant");
-      await bumpAclVersion("admin.grant");
-      console.log(`ok: ${email} active до ${periodEnd.toISOString()}, токен ${token}`);
+      const r = await admin.grantAccessByEmail(CLI, email, days);
+      console.log(`ok: ${r.email} active до ${r.periodEnd.toISOString()}, токен ${r.token}`);
       return 0;
     }
     case "revoke": {
       const [email] = rest;
       if (!email) throw new Error("revoke <email>");
-      const [user] = await db().select().from(schema.users).where(eq(schema.users.email, email.toLowerCase())).limit(1);
-      if (!user) throw new Error("пользователь не найден");
-      await db().update(schema.subscriptions).set({ status: "expired", updatedAt: new Date() }).where(eq(schema.subscriptions.userId, user.id));
-      await bumpPolicyVersion("admin.revoke");
-      await bumpAclVersion("admin.revoke");
+      await admin.revokeAccess(CLI, await userIdByEmail(email));
       console.log("ok");
       return 0;
     }
     case "node": {
       const [sub, name, kind, ip] = rest;
       if (sub === "list") {
-        for (const n of await db().select().from(schema.nodes)) console.log(`${n.name}\t${n.kind}\t${n.ip ?? "-"}\t${n.enabled ? "on" : "off"}\tlast_seen=${n.lastSeenAt?.toISOString() ?? "-"}`);
+        for (const n of await admin.listNodes()) console.log(`${n.name}\t${n.kind}\t${n.ip ?? "-"}\t${n.enabled ? "on" : "off"}\tlast_seen=${n.lastSeenAt?.toISOString() ?? "-"}`);
         return 0;
       }
-      const KINDS: NodeKind[] = ["free_primary", "pro_dns", "pro_worker", "dedicated"];
-      if (sub !== "add" || !name || !kind) throw new Error(`node add <name> <${KINDS.join("|")}> [ip]`);
-      if (!KINDS.includes(kind as NodeKind)) throw new Error(`kind: ${KINDS.join(" | ")}`);
-      const { secret } = await createNode(name, kind as NodeKind, ip ?? null);
+      if (sub !== "add" || !name || !kind) throw new Error(`node add <name> <${admin.NODE_KINDS.join("|")}> [ip]`);
+      const { secret } = await admin.addNode(CLI, name, kind, ip ?? null);
       console.log(`Нода ${name} создана. Секрет (показывается один раз):\n${secret}\n\nЗапишите его в /etc/pereval/node.env как NODE_SECRET.`);
       return 0;
     }
     case "resend-link": {
       const [email] = rest;
       if (!email) throw new Error("resend-link <email>");
-      await ensureUserByEmail(email);
-      const url = await createLoginLink(email, 24 * 3600);
-      const tpl = magicLinkMail(url);
-      await enqueueMail({ to: email.toLowerCase(), subject: tpl.subject, text: tpl.text, html: tpl.html });
-      console.log(`ссылка поставлена в очередь; для ручной выдачи: ${url}`);
+      const { ensureUserByEmail } = await import("@/lib/auth-core");
+      const user = await ensureUserByEmail(email);
+      const r = await admin.issueLoginLink(CLI, user.id);
+      console.log(`ссылка поставлена в очередь; для ручной выдачи: ${r.url}`);
       return 0;
     }
     case "cert": {
@@ -114,19 +99,8 @@ async function main(argv: string[]): Promise<number> {
     case "webhook": {
       const [sub, id] = rest;
       if (sub !== "replay" || !id) throw new Error("webhook replay <id>");
-      const [ev] = await db().select().from(schema.webhookEvents).where(eq(schema.webhookEvents.id, id)).limit(1);
-      if (!ev) throw new Error("событие не найдено");
-      const parsed = parseWebhook(ev.payload);
-      if (!parsed) throw new Error("не удалось разобрать payload");
-      const billing = await import("@/lib/billing");
-      if (parsed.kind === "envelope") await billing.handleRefundOrChargeback(parsed.data);
-      else if (parsed.type === "payment.success") await (parsed.data.parentContractId ? billing.handleRenewalSuccess(parsed.data) : billing.handleFirstPayment(parsed.data));
-      else if (parsed.type === "subscription.recurring.payment.success") await billing.handleRenewalSuccess(parsed.data);
-      else if (parsed.type === "subscription.recurring.payment.failed") await billing.handleRenewalFailed(parsed.data);
-      else if (parsed.type === "subscription.cancelled") await billing.handleCancelled(parsed.data);
-      else if (parsed.type === "payment.failed") await billing.handlePaymentFailed(parsed.data);
-      await db().update(schema.webhookEvents).set({ processedAt: new Date(), error: null }).where(eq(schema.webhookEvents.id, id));
-      console.log("ok");
+      const r = await admin.replayWebhookEvent(CLI, id);
+      console.log(`ok: ${r.type}`);
       return 0;
     }
     case "policy":
@@ -136,7 +110,7 @@ async function main(argv: string[]): Promise<number> {
       console.log(JSON.stringify(await buildAclSnapshot(), null, 2));
       return 0;
     default:
-      console.log("команды: users | subs | grant <email> <days> | revoke <email> | node add <name> <kind> [ip] | node list | resend-link <email> | webhook replay <id> | policy | acl");
+      console.log("команды: users | subs | grant <email> <days> | revoke <email> | node add <name> <kind> [ip] | node list | resend-link <email> | webhook replay <id> | cert names|status | policy | acl");
       return cmd ? 1 : 0;
   }
 }
