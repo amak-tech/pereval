@@ -4,7 +4,10 @@
   "private": true,
   "description": "Перевал — лендинг, личный кабинет и API (pereval.top)",
   "scripts": {
+    "og-image": "node scripts/og-image.mjs",
+    "predev": "pnpm og-image",
     "dev": "next dev",
+    "prebuild": "pnpm og-image",
     "build": "next build && pnpm build:jobs",
     "build:jobs": "esbuild src/jobs/index.ts scripts/admin.ts scripts/migrate.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outdir=dist --out-extension:.js=.mjs --entry-names=[name]",
     "start": "next start",
@@ -32,6 +35,9 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^22",
     "@types/nodemailer": "^7",
