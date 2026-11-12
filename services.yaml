@@ -80,7 +80,7 @@ nodes:
       pools: [ ai ]
 
     - ip: 144.31.159.185
-      name: free-worker-ai-1
+      name: free-worker-ai-2
       pools: [ ai ]
 
 dnsmasq_options:
