@@ -73,11 +73,11 @@ nodes:
 
     - ip: 151.247.25.123
       name: nl-worker-1
-      pools: [default, media]
+      pools: [ default, media ]
 
     - ip: 144.31.159.147
       name: free-worker-ai-1
-      pools: [ai]
+      pools: [ ai ]
 
     - ip: 144.31.159.185
       name: free-worker-ai-1
@@ -657,10 +657,10 @@ pro:
     # PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET. Переменные пробрасывает deploy.yml.
     - ip: 141.11.197.214                   # VPS pro-worker-default-1 — общий пул (+ media и временно ai через тот же воркер)
       name: pro-worker-default-1
-      pools: [default, media, ai]
+      pools: [ default, media, ai ]
     - ip: 141.11.197.239                   # VPS pro-worker-ai-1 — в карантине: 151.247.25.133 и 141.11.197.239 Google считает RU, Gemini отдаёт «регион недоступен»
       name: pro-worker-ai-1
-      pools: [reserve]
+      pools: [ reserve ]
   categories:
     # Каталог Pro намеренно короткий: только сервисы, геоблок которых подтверждён пробами
     # из РФ (Yandex Cloud) и РБ (Белтелеком) против эталона с нидерландского воркера 2026-11-10,
