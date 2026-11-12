@@ -730,9 +730,15 @@ install -m 0644 "$STAGE/dnsmasq-geoblock.conf"           "$DNSMASQ_BASE_DST"
 install -m 0644 "$STAGE/nginx.conf"                      "$NGINX_DST"
 
 # --- отключение системного dnsmasq (заменён единым pro_dns.py) -------------
+# Сначала останавливаем старый pereval-healthcheck, чтобы он до своего обновления
+# не перезапустил dnsmasq по таймеру при изменении cluster-nodes.json.
+if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1; then
+	systemctl stop pereval-healthcheck.service >/dev/null 2>&1 || true
+fi
 if systemctl list-unit-files dnsmasq.service >/dev/null 2>&1; then
 	systemctl disable --now dnsmasq.service >/dev/null 2>&1 || true
 fi
+pkill -9 -x dnsmasq >/dev/null 2>&1 || true
 if ! grep -qE '^nameserver\s+[0-9]+' /etc/resolv.conf 2>/dev/null || grep -qE '^nameserver\s+127\.' /etc/resolv.conf 2>/dev/null; then
 	rm -f /etc/resolv.conf
 	printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' >/etc/resolv.conf
@@ -852,12 +858,20 @@ fi
 
 # --- перезапуск -----------------------------------------------------------
 if systemctl is-active --quiet nginx; then
-	if ! systemctl reload nginx; then
+	if [[ $NODE_ROLE == "primary" ]] && ss -tlnp "sport = :853" 2>/dev/null | grep -q nginx; then
+		if ! systemctl restart nginx; then
+			journalctl -u nginx -n 20 --no-pager >&2 || true
+			restore
+			fail "nginx не перезапустился для освобождения порта :853"
+		fi
+		say "nginx перезапущен (освобождён порт :853 для pro_dns)"
+	elif ! systemctl reload nginx; then
 		journalctl -u nginx -n 20 --no-pager >&2 || true
 		restore
 		fail "nginx не перезагрузился"
+	else
+		say "nginx перезагружен"
 	fi
-	say "nginx перезагружен"
 else
 	if ! systemctl restart nginx; then
 		journalctl -u nginx -n 20 --no-pager >&2 || true
@@ -869,6 +883,8 @@ fi
 
 systemctl daemon-reload
 if [[ $NODE_ROLE == "primary" ]]; then
+	systemctl disable --now dnsmasq.service >/dev/null 2>&1 || true
+	pkill -9 -x dnsmasq >/dev/null 2>&1 || true
 	systemctl enable pereval-doh.service >/dev/null 2>&1 || true
 	if ! systemctl restart pereval-doh.service; then
 		journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
@@ -1158,6 +1174,7 @@ UNIT
 	if systemctl list-unit-files dnsmasq.service >/dev/null 2>&1; then
 		systemctl disable --now dnsmasq.service >/dev/null 2>&1 || true
 	fi
+	pkill -9 -x dnsmasq >/dev/null 2>&1 || true
 	rm -f /etc/dnsmasq.d/dnsmasq-geoblock.conf
 	if ! grep -qE '^nameserver\s+[0-9]+' /etc/resolv.conf 2>/dev/null || grep -qE '^nameserver\s+127\.' /etc/resolv.conf 2>/dev/null; then
 		rm -f /etc/resolv.conf

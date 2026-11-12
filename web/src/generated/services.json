@@ -17,7 +17,7 @@
     "dns_ip": "153.80.200.170",
     "doh_url": "https://free.pereval.top/dns-query",
     "dot_host": "free.pereval.top",
-    "max_clients": 150,
+    "max_clients": 300,
     "pools": {
       "default": {
         "note": "Общий пул — всё, у чего пул не задан явно.",
@@ -28,7 +28,7 @@
         "note": "ИИ-платформы — важно, чтобы все запросы сервиса шли с одного IP/локации.",
         "fallback": "default",
         "strict_allowlist": false,
-        "max_clients": 60
+        "max_clients": 200
       },
       "media": {
         "note": "Тяжёлый трафик (видео, стриминги, соцсети) — отдельные ноды, чтобы не мешать ИИ.",
@@ -61,7 +61,7 @@
     "dns_ip": "85.209.148.147",
     "doh_url_template": "https://pro.pereval.top/dns/{token}",
     "dot_host_template": "{token}.pro.pereval.top",
-    "max_clients": 150,
+    "max_clients": 200,
     "pools": {
       "default": {
         "note": "Общий пул Pro.",
@@ -72,7 +72,7 @@
         "note": "ИИ-платформы Pro — постоянный IP на сервис.",
         "fallback": "default",
         "strict_allowlist": false,
-        "max_clients": 40
+        "max_clients": 100
       },
       "media": {
         "note": "Стриминги и TikTok Pro — тяжёлый трафик.",
