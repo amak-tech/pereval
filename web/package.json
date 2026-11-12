@@ -4,7 +4,7 @@
   "private": true,
   "description": "Перевал — лендинг, личный кабинет и API (pereval.top)",
   "scripts": {
-    "catalog": "python3 ../src/generate.py ../services.yaml -q",
+    "catalog": "if [ -f ../src/generate.py ]; then python3 ../src/generate.py ../services.yaml -q; elif [ ! -f src/generated/services.json ]; then echo 'missing src/generated/services.json (run python3 src/generate.py services.yaml first)' >&2; exit 1; fi",
     "og-image": "pnpm catalog && node scripts/og-image.mjs",
     "predev": "pnpm og-image",
     "dev": "next dev",
@@ -16,6 +16,7 @@
     "admin": "tsx scripts/admin.ts",
     "lava:mock": "tsx scripts/lava-mock-webhook.ts",
     "lint": "eslint",
+    "pretypecheck": "pnpm catalog",
     "typecheck": "tsc --noEmit",
     "pretest": "pnpm catalog",
     "test": "vitest run",
