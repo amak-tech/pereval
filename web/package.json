@@ -4,7 +4,8 @@
   "private": true,
   "description": "Перевал — лендинг, личный кабинет и API (pereval.top)",
   "scripts": {
-    "og-image": "node scripts/og-image.mjs",
+    "catalog": "python3 ../src/generate.py ../services.yaml -q",
+    "og-image": "pnpm catalog && node scripts/og-image.mjs",
     "predev": "pnpm og-image",
     "dev": "next dev",
     "prebuild": "pnpm og-image",
@@ -16,6 +17,7 @@
     "lava:mock": "tsx scripts/lava-mock-webhook.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "pretest": "pnpm catalog",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

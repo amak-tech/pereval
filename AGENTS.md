@@ -83,7 +83,7 @@ web/                   control plane (Next.js 16, React 19, TypeScript, Tailwind
   src/app/             страницы (/, /pro, /dedicated, /stats, /terms, /privacy, /account/*), API (/api/*), /nic/update, /dns.mobileconfig
   src/lib/             env, db (schema, client), auth, billing, lava, lava-webhook, policy, acl, account, ddns, leads, mail, ...
   src/jobs/            фоновый процесс (outbox, acl-expire, ddns, reconcile, certwatch, digest, retention)
-  src/generated/services.json   каталог из services.yaml (коммитится; свежесть проверяет generate.py --check)
+  src/generated/services.json   каталог из services.yaml (gitignored, генерируется generate.py)
   scripts/             admin.ts (CLI), migrate.ts, lava-mock-webhook.ts
   deploy/              nginx (entrypoint публикует копию сертификата), issue-cert.sh (DNS-01 вручную), backup, docker-entrypoint, .env.example ; compose.yaml ; Dockerfile
 build/                 выход generate.py (gitignored)
@@ -112,7 +112,7 @@ build/                 выход generate.py (gitignored)
 `build/`: `dnsmasq-geoblock.conf`, `nginx.conf`, `nginx-sni-allow.map`, `nginx-host-allow.map`, `nginx-workers-stream.conf`, `nginx-workers-http.conf`, `service-map.json` (домен → service/category/category_id/tier/pool), `cluster-nodes.json` (+ `free_domains`, `site_origin`, `cert_domains`, `pools`), `pro-dns-nginx.conf`, `pro-worker-nginx.conf`, `pro-nginx-sni-allow.map`, `pro-nginx-host-allow.map`, `cache-dnsmasq.conf`, `pro-policy-map.json`, `pro-nodes.json`, `pro-service-map.json`, опционально `nginx-*-allow.<pool>.map` для пулов со `strict_allowlist`. Плюс `web/src/generated/services.json`.
 
 ```bash
-python3 src/generate.py services.yaml 153.80.200.170 --check   # данные, шаблоны, свежесть services.json
+python3 src/generate.py services.yaml 153.80.200.170 --check   # данные и шаблоны
 python3 src/generate.py services.yaml 153.80.200.170           # полная сборка
 python3 -m unittest discover -s tests
 ```
@@ -177,7 +177,7 @@ python3 -m unittest discover -s tests
 
 ## 8. Правила для агентов и контрибьюторов
 
-1. **Не править `build/`** — только `services.yaml`, `templates/`, `src/`, затем `generate.py`. `web/src/generated/services.json` тоже генерируется (но коммитится).
+1. **Не править `build/` и `web/src/generated/`** — только `services.yaml`, `templates/`, `src/`, затем `generate.py` (оба каталога gitignored и генерируются автоматически в CI и при сборке).
 2. **Домены**: проверять покрытие родительским доменом; не добавлять широкие общие домены (`google.com`, `googleapis.com`, `cloudflare.com`); числовые домены — в кавычках; после правок — `--check` и полная сборка; Pro-домены — в `pro.categories`, с пулом.
 3. **Пулы**: новый воркер — в `nodes.workers`/`pro.workers` с `pools`; новая категория/сервис — с `pool` при необходимости; каждый объявленный пул должен иметь воркера (иначе ошибка сборки).
 4. **Шаблоны**: `{{placeholder}}`; новый плейсхолдер → `build_values()`; шаблоны самодостаточны.

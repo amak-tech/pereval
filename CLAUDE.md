@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Ноды (корень)
 
 ```bash
-python3 src/generate.py services.yaml 153.80.200.170 --check   # валидация данных, шаблонов и свежести web/src/generated/services.json
+python3 src/generate.py services.yaml 153.80.200.170 --check   # валидация данных и шаблонов
 python3 src/generate.py services.yaml 153.80.200.170           # полная сборка build/ + web/src/generated/services.json
 python3 -m unittest discover -s tests                          # все тесты
 python3 -m unittest tests.test_pro_dns                         # один модуль
@@ -24,7 +24,7 @@ python3 -m unittest tests.test_poolrouting.RendezvousTests.test_minimal_reshuffl
 ./deploy.sh 153.80.200.170 ~/.ssh/id_ed25519 root [--pro | --role pro-worker | --dry-run]
 ```
 
-После любой правки `services.yaml` или `templates/` — `--check`, затем полная сборка и коммит обновлённого `web/src/generated/services.json` (CI `web.yml` упадёт, если он устарел).
+После любой правки `services.yaml` или `templates/` — `--check` (в CI `web.yml` каталог `web/src/generated/services.json` генерируется автоматически).
 
 ### Control plane (`web/`, pnpm 12, Node 22)
 
@@ -49,7 +49,7 @@ pnpm lava:mock payment.success <invoiceId> <email>   # эмуляция вебх
 
 ## Неочевидное, что легко сломать
 
-- **`build/` не править**; `web/src/generated/services.json` генерируется, но коммитится.
+- **`build/` и `web/src/generated/services.json` не править** — оба gitignored и собираются `src/generate.py`.
 - **Бандлы для чистого Node** (`src/jobs/index.ts`, `scripts/admin.ts`, `scripts/migrate.ts`) собираются esbuild'ом: всё, что они импортируют из `src/lib/*`, не должно тянуть `next/*` или `next-auth`. Поэтому пары `auth.ts` / `auth-core.ts`, `admin-auth.ts` / `admin.ts`, `http.ts` без `next/server`. Проверка — `pnpm build:jobs` плюс `node dist/admin.mjs`.
 - **Клиентские компоненты** (`"use client"`) не импортируют модули с БД (`@/lib/db/client`, `@/lib/admin`, `@/lib/billing`) — Turbopack затащит postgres в браузерный бандл. Константы для клиента — в отдельных модулях (`admin-constants.ts`); типы — через `import type`.
 - **Мутации API**: `assertSameOrigin(req)` + `requireUser()` / `requireAdmin()`, IP клиента только через `clientIp()`; письма только через `enqueueMail` (outbox). Админ-действия — одна точка `POST /api/admin/action` с записью в `audit_log`.

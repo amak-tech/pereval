@@ -912,8 +912,7 @@ def pro_policy_map_json(doc):
 
 
 def services_json(doc, primary_ip):
-    """Каталог для веб-приложения (web/src/generated/services.json). Без даты —
-    файл коммитится, и его свежесть проверяется в CI."""
+    """Каталог для веб-приложения (web/src/generated/services.json)."""
     free_domain = extract_domain(doc)
 
     def cat_dict(c):
@@ -1185,7 +1184,7 @@ def main(argv=None):
     p.add_argument("--services-json", default=None,
                    help="куда писать каталог для веб-приложения (по умолчанию web/src/generated/services.json)")
     p.add_argument("--no-services-json", action="store_true",
-                   help="не записывать и не проверять services.json")
+                   help="не записывать services.json")
     p.add_argument("--name", help="название сервиса (переопределяет meta.name)")
     p.add_argument("--origin", help="адрес сайта (переопределяет meta.origin)")
     p.add_argument("--domain", help="домен Free DNS (переопределяет free.domain)")
@@ -1195,7 +1194,7 @@ def main(argv=None):
     p.add_argument("--include-primary-in-dns", action="store_true",
                    help="включать основной IP в ответы dnsmasq наравне с воркерами")
     p.add_argument("--check", action="store_true",
-                   help="только проверить данные, шаблоны и свежесть services.json, ничего не записывать")
+                   help="только проверить данные и шаблоны, ничего не записывать")
     p.add_argument("-q", "--quiet", action="store_true", help="не печатать предупреждения")
     a = p.parse_args(argv)
 
@@ -1279,13 +1278,6 @@ def main(argv=None):
         services_path = Path(a.services_json) if a.services_json else project_root / SERVICES_JSON_DEFAULT
 
     if a.check:
-        if services_path is not None:
-            current = services_path.read_text(encoding="utf-8") if services_path.is_file() else None
-            if current != catalog:
-                print("ошибка: %s устарел — запустите python3 src/generate.py %s %s"
-                      % (services_path, src, ip), file=sys.stderr)
-                return 1
-            print("каталог %s актуален" % services_path)
         print("проверка пройдена")
         return 0
 

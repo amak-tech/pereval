@@ -9,3 +9,4 @@ dist
 .env
 /web/next-env.d.ts
 /web/tsconfig.tsbuildinfo
+/web/src/generated/
