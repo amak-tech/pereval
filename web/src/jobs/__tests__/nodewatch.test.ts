@@ -5,7 +5,7 @@ import {
   extractOnlineUsers5m,
   resolveNodeMaxClients,
 } from "@/jobs/nodewatch";
-import type { PoolInfo } from "@/lib/catalog";
+import { catalog, type PoolInfo } from "@/lib/catalog";
 
 describe("resolveNodeMaxClients", () => {
   const pools: Record<string, PoolInfo> = {
@@ -105,9 +105,20 @@ describe("evaluateNodeAlertState", () => {
 
 describe("collectMonitoredTargets", () => {
   it("собирает активные воркеры Free и Pro из каталога с их порогами max_clients", () => {
-    const targets = collectMonitoredTargets(150);
+    const defaultMax = 150;
+    const targets = collectMonitoredTargets(defaultMax);
     expect(targets.length).toBeGreaterThan(0);
     const freeAi = targets.find((t) => t.tier === "free" && t.pools.includes("ai"));
-    expect(freeAi?.maxClients).toBe(60);
+    const catalogWorker = catalog.free.workers.find((w) => w.pools.includes("ai"));
+    expect(freeAi).toBeDefined();
+    expect(catalogWorker).toBeDefined();
+    expect(freeAi?.maxClients).toBe(
+      resolveNodeMaxClients(
+        catalogWorker!,
+        catalog.free.pools,
+        catalog.free.max_clients,
+        defaultMax,
+      ),
+    );
   });
 });
