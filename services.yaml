@@ -71,13 +71,17 @@ nodes:
     #   ssh_key_env: WORKER1_SSH_KEY     # опционально: имя env-переменной с приватным ключом или путём (или ssh_key: ~/.ssh/id_ed25519)
     #   ssh_port: 22                     # опционально: по умолчанию наследует порт основного узла (22)
 
-    - ip: 144.31.159.147
+    - ip: 151.247.25.123
       name: nl-worker-1
       pools: [default, media]
 
-    - ip: 151.247.25.123
+    - ip: 144.31.159.147
       name: free-worker-ai-1
       pools: [ai]
+
+    - ip: 144.31.159.185
+      name: free-worker-ai-1
+      pools: [ ai ]
 
 dnsmasq_options:
   - listen-address=0.0.0.0
