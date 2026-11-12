@@ -22,6 +22,7 @@ export const adminActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("node.enabled"), id, enabled: z.boolean() }),
   z.object({ action: z.literal("node.delete"), id }),
   z.object({ action: z.literal("nodes.push"), what: z.enum(["policy", "acl"]) }),
+  z.object({ action: z.literal("settings.node_max_clients"), maxClients: z.coerce.number().int().min(1).max(100_000) }),
   z.object({ action: z.literal("mail.retry"), id }),
   z.object({ action: z.literal("mail.delete"), id }),
   z.object({ action: z.literal("mail.test") }),
@@ -84,6 +85,10 @@ export async function runAdminAction(who: admin.Admin, input: AdminAction): Prom
     case "nodes.push": {
       const v = await admin.pushToNodes(who, input.what);
       return { message: `Версия ${input.what} поднята до ${v}; ноды получат снапшот в течение секунды.` };
+    }
+    case "settings.node_max_clients": {
+      const r = await admin.setNodeMaxClients(who, input.maxClients);
+      return { message: `Порог клиентов по умолчанию установлен: ${r.maxClients}.` };
     }
     case "mail.retry":
       await admin.retryMail(who, input.id);

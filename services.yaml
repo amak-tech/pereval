@@ -45,12 +45,14 @@ nodes:
   primary: 153.80.200.170
   include_primary_in_dns: false   # false = отдавать в DNS только здоровые воркеры; true = включать primary наравне с воркерами
   probe_sni: claude.ai
+  max_clients: 150                # порог активных клиентов за 5 минут по умолчанию для нод Free
   pools:
     default:
       note: Общий пул — всё, у чего пул не задан явно.
     ai:
       note: ИИ-платформы — важно, чтобы все запросы сервиса шли с одного IP/локации.
       fallback: default
+      max_clients: 60             # защита IP ИИ-нод от бана Google Gemini (unusual traffic)
     media:
       note: Тяжёлый трафик (видео, стриминги, соцсети) — отдельные ноды, чтобы не мешать ИИ.
       fallback: default
@@ -174,11 +176,6 @@ categories:
           - waa-pa.clients6.google.com
           - waa-pa.googleapis.com
           - cloudconsole-pa.clients6.google.com
-          - people-pa.clients6.google.com
-          - notifications-pa.clients6.google.com
-          - notifications-pa.googleapis.com
-          - searchnotifications-pa.clients6.google.com
-          - searchnotifications-pa.googleapis.com
           - signaller-pa.clients6.google.com
           - signaler-pa.clients6.google.com
           - signaler-pa.googleapis.com
@@ -560,6 +557,11 @@ disabled:
       - gvt1.com
       - lookerstudio.google.com
       - news.google.com
+      - notifications-pa.clients6.google.com
+      - notifications-pa.googleapis.com
+      - people-pa.clients6.google.com
+      - searchnotifications-pa.clients6.google.com
+      - searchnotifications-pa.googleapis.com
       - suggestqueries.google.com
   - name: Сообщается, но не подтверждено
     note: >-
@@ -632,12 +634,14 @@ pro:
   domain: pro.pereval.top                  # DoH https://pro.pereval.top/dns/<token>, DoT <token>.pro.pereval.top
   dns_ip: 85.209.148.147                   # VPS pro-dns
   cp_ip: 91.149.179.184                    # VPS pereval.top (control plane) — для nftables на воркерах
+  max_clients: 150                         # порог активных клиентов за 5 минут по умолчанию для нод Pro
   pools:
     default:
       note: Общий пул Pro.
     ai:
       note: ИИ-платформы Pro — постоянный IP на сервис.
       fallback: default
+      max_clients: 40                      # консервативный лимит для пула ai в Pro (защита от бана Google Gemini)
     media:
       note: Стриминги и TikTok Pro — тяжёлый трафик.
       fallback: default

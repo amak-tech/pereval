@@ -113,13 +113,29 @@ def token_from_sni(server_name, pro_domain: str):
 
 
 class PolicyMap:
-    """Каталог: домены -> {service, category_id, tier, pool}, категории, пулы, воркеры."""
+    """Каталог: домены -> {service, category_id, tier, pool}, категории, пулы, воркеры, passthrough."""
 
     def __init__(self, data: dict = None):
         data = data if isinstance(data, dict) else {}
+        self.tier = str(data.get("tier") or "pro").strip().lower()
         self.domain = str(data.get("domain") or "").strip().rstrip(".").lower()
+        self.free_domains = [
+            str(d).strip().rstrip(".").lower()
+            for d in (data.get("free_domains") or [])
+            if str(d).strip()
+        ]
         self.dns_ip = str(data.get("dns_ip") or "").strip()
+        self.primary = str(data.get("primary") or self.dns_ip or "").strip()
+        self.include_primary_in_dns = bool(data.get("include_primary_in_dns", False))
         self.probe_sni = str(data.get("probe_sni") or self.domain or "").strip()
+        mc = data.get("max_clients")
+        self.max_clients = None
+        if mc is not None and not isinstance(mc, bool):
+            try:
+                if int(mc) >= 1:
+                    self.max_clients = int(mc)
+            except (TypeError, ValueError):
+                self.max_clients = None
         self.pools = poolrouting.normalize_pools(data.get("pools") or {})
         self.workers = [
             dict(w) for w in (data.get("workers") or [])
@@ -129,6 +145,11 @@ class PolicyMap:
         for cat in data.get("categories") or []:
             if isinstance(cat, dict) and cat.get("id"):
                 self.categories[str(cat["id"])] = cat
+        self.passthrough = frozenset(
+            str(d).strip().rstrip(".").lower()
+            for d in (data.get("passthrough") or [])
+            if str(d).strip()
+        )
         self.domains = {}
         for dom, info in (data.get("domains") or {}).items():
             if not isinstance(info, dict):
@@ -146,6 +167,17 @@ class PolicyMap:
     @classmethod
     def load(cls, path) -> "PolicyMap":
         return cls(json.loads(Path(path).read_text(encoding="utf-8")))
+
+    def is_passthrough(self, qname: str) -> bool:
+        """Суффиксная проверка по списку passthrough (домены, которые нельзя проксировать)."""
+        name = (qname or "").strip().rstrip(".").lower()
+        if not name or not self.passthrough:
+            return False
+        labels = name.split(".")
+        for i in range(len(labels) - 1):
+            if ".".join(labels[i:]) in self.passthrough:
+                return True
+        return False
 
     def match(self, qname: str):
         """Суффиксное совпадение: отбрасываем метки слева до первого попадания.
@@ -578,13 +610,31 @@ class ProDnsServer:
         self.args = args
         self.policy_map = policy_map
         self.policy = policy
+        self.tier = (getattr(args, "tier", None) or policy_map.tier or "pro").strip().lower()
+        if self.tier == "free":
+            args.no_cp = True
         self.pro_domain = (args.pro_domain or policy_map.domain or "").strip().rstrip(".").lower()
         self.probe_sni = policy_map.probe_sni or self.pro_domain
         self.started_at = now_ts()
         self.stop_event = None
 
-        up_host, up_port = _split_hostport(args.upstream, 53)
-        self.upstream = dnscommon.UdpDnsPool(up_host, up_port, pool_size=args.udp_pool, timeout=args.upstream_timeout)
+        cache_size = getattr(args, "cache_size", 50000)
+        self.cache = dnscommon.DnsCache(max_entries=cache_size) if cache_size and cache_size > 0 else None
+        self.upstream = dnscommon.UdpDnsPool(
+            args.upstream,
+            pool_size=args.udp_pool,
+            timeout=args.upstream_timeout,
+            cache=self.cache,
+        )
+        self.quota_tracker = poolrouting.ClientQuotaTracker(ttl_sec=getattr(args, "quota_ttl", 300.0))
+        self.default_max_clients = int(
+            getattr(args, "max_clients", None)
+            or policy_map.max_clients
+            or poolrouting.DEFAULT_MAX_CLIENTS
+        )
+        self.weights = {}
+        self.node_limits = {}
+        self.last_resort_ips = []
 
         self.limiter = TokenBucketLimiter()
         self.qps = QpsMeter()
@@ -593,7 +643,7 @@ class ProDnsServer:
             D_SYNTH_A, D_NODATA, D_FORWARD, D_REFUSED, D_RATELIMIT, D_FORMERR, D_DROP,
             "unknown_identity", "deny_mode", "plain_mode", "proxy_mode",
             "upstream_errors", "dot_no_token", "doh_forbidden", "truncated_udp",
-            "policy_updates", "policy_errors", "activity_posts", "activity_post_errors",
+            "over_quota", "policy_updates", "policy_errors", "activity_posts", "activity_post_errors",
         ))
         self.recent_idents = {}  # key -> last_seen (для метрики активных токенов)
 
@@ -628,19 +678,59 @@ class ProDnsServer:
         return self.policy_map.workers
 
     def recompute_routing(self):
-        """Пересчитывает healthy_by_pool и список всех IP воркеров."""
+        """Пересчитывает healthy_by_pool, веса, лимиты max_clients и список всех IP воркеров."""
         workers = self.workers()
         self.all_worker_ips = []
+        self.weights = {}
+        self.node_limits = {}
         for w in workers:
             ip = str(w.get("ip"))
             if ip not in self.all_worker_ips:
                 self.all_worker_ips.append(ip)
+            self.weights[ip] = max(1, int(w.get("weight") or 1))
+            for pname in self.policy_map.pools:
+                self.node_limits[(pname, ip)] = poolrouting.resolve_node_max_clients(
+                    ip, pname, self.policy_map.pools, workers,
+                    cluster_max_clients=self.policy_map.max_clients,
+                    default_max_clients=self.default_max_clients,
+                )
+            self.node_limits[ip] = poolrouting.resolve_node_max_clients(
+                ip, "", self.policy_map.pools, workers,
+                cluster_max_clients=self.policy_map.max_clients,
+                default_max_clients=self.default_max_clients,
+            )
+        if self.policy_map.primary:
+            pip = self.policy_map.primary
+            for pname in self.policy_map.pools:
+                self.node_limits.setdefault((pname, pip), poolrouting.resolve_node_max_clients(
+                    pip, pname, self.policy_map.pools, workers,
+                    cluster_max_clients=self.policy_map.max_clients,
+                    default_max_clients=self.default_max_clients,
+                ))
+            self.node_limits.setdefault(pip, poolrouting.resolve_node_max_clients(
+                pip, "", self.policy_map.pools, workers,
+                cluster_max_clients=self.policy_map.max_clients,
+                default_max_clients=self.default_max_clients,
+            ))
+
         self.health.forget_missing(set(self.all_worker_ips))
         healthy = [w for w in workers if self.health.is_healthy(str(w.get("ip")))]
         self.fail_open = bool(workers) and not healthy
-        if self.fail_open:
+        if self.fail_open and not (self.tier == "free" and self.policy_map.primary):
             healthy = list(workers)
-        self.healthy_by_pool = poolrouting.workers_by_pool(healthy, self.policy_map.pools)
+        extra_ips = (
+            [self.policy_map.primary]
+            if (self.tier == "free" and self.policy_map.include_primary_in_dns and self.policy_map.primary)
+            else None
+        )
+        if self.tier == "free" and (not workers or self.fail_open) and self.policy_map.primary:
+            self.healthy_by_pool = OrderedDict((p, [self.policy_map.primary]) for p in self.policy_map.pools)
+        else:
+            self.healthy_by_pool = poolrouting.workers_by_pool(healthy, self.policy_map.pools, extra_ips=extra_ips)
+        if self.tier == "free":
+            self.last_resort_ips = [self.policy_map.primary] if self.policy_map.primary else list(self.all_worker_ips)
+        else:
+            self.last_resort_ips = list(self.all_worker_ips)
 
     def apply_policy(self, policy: Policy, persist: bool = True):
         prev_version = self.policy.version
@@ -669,6 +759,18 @@ class ProDnsServer:
 
     # ------------------------------------------------------------- личности
 
+    def identify_free(self, client_ip) -> Identity:
+        ip = dnscommon.normalize_ip(client_ip) if client_ip else None
+        eff_ip = ip or "127.0.0.1"
+        subnet = poolrouting.client_subnet_key(eff_ip)
+        user = {
+            "user_id": subnet,
+            "mode": "proxy",
+            "disabled_categories": frozenset(),
+            "qps_limit": max(1, int(self.args.default_qps)),
+        }
+        return Identity("subnet", subnet, user, eff_ip)
+
     def identify_token(self, token, client_ip) -> Identity:
         tok = (token or "").strip().lower()
         if not TOKEN_RE.match(tok):
@@ -676,17 +778,31 @@ class ProDnsServer:
         return Identity("token", tok, self.policy.tokens.get(tok), client_ip)
 
     def identify_ip(self, client_ip) -> Identity:
+        if self.tier == "free":
+            return self.identify_free(client_ip)
         ip = dnscommon.normalize_ip(client_ip) if client_ip else None
         if ip is None:
             return Identity("none", None, None, None)
         return Identity("ip", ip, self.policy.ips.get(ip), ip)
+
+    def _sticky_client_key(self, ident: Identity, service_name: str = "") -> str:
+        if self.tier == "free":
+            return str(ident.key or poolrouting.client_subnet_key(ident.client_ip or "127.0.0.1"))
+        uid = (ident.user.get("user_id") if ident.user else "") or ""
+        if uid:
+            return str(uid)
+        if ident.key:
+            return str(ident.key)
+        if ident.client_ip:
+            return poolrouting.client_subnet_key(ident.client_ip)
+        return service_name or poolrouting.DEFAULT_POOL
 
     # ------------------------------------------------------------- решения
 
     def decide(self, q: dnscommon.Question, ident: Identity, now: float = None):
         """Чистая функция решения: (действие, детали). Действия: refused | ratelimited |
         forward | synth_a | nodata. Для synth_a детали = IP воркера (или None, если
-        воркеров нет — тогда форвард)."""
+        воркеров нет либо квота max_clients исчерпана — тогда форвард в plain DNS)."""
         if not ident.known:
             return D_REFUSED, "unknown"
         mode = ident.mode
@@ -699,16 +815,31 @@ class ProDnsServer:
         # proxy
         if q.qclass != dnscommon.QCLASS_IN:
             return D_FORWARD, "class"
+        if self.policy_map.is_passthrough(q.qname):
+            return D_FORWARD, "passthrough"
         dom, info = self.policy_map.match(q.qname)
         if info is None or info["category_id"] in ident.user["disabled_categories"]:
             return D_FORWARD, "nomatch" if info is None else "disabled"
-        if q.qtype == dnscommon.QTYPE_A:
-            ip = poolrouting.pick(info["service"], info["pool"], self.policy_map.pools,
-                                  self.healthy_by_pool, last_resort=self.all_worker_ips)
+        if q.qtype == dnscommon.QTYPE_A or q.qtype in NODATA_QTYPES:
+            sticky_key = self._sticky_client_key(ident, info["service"])
+            ip = poolrouting.pick_for_client(
+                sticky_key,
+                info["pool"],
+                self.policy_map.pools,
+                self.healthy_by_pool,
+                last_resort=self.last_resort_ips,
+                weights=self.weights,
+                node_limits=self.node_limits,
+                quota_tracker=self.quota_tracker,
+                now=now,
+            )
             if ip is None:
+                if self.all_worker_ips or self.last_resort_ips:
+                    self.counters["over_quota"] += 1
+                    return D_FORWARD, "over_quota"
                 return D_FORWARD, "noworker"
-            return D_SYNTH_A, ip
-        if q.qtype in NODATA_QTYPES:
+            if q.qtype == dnscommon.QTYPE_A:
+                return D_SYNTH_A, ip
             return D_NODATA, dom
         return D_FORWARD, "qtype"
 
@@ -746,8 +877,9 @@ class ProDnsServer:
         self.counters[action] += 1
         if action in (D_REFUSED, D_RATELIMIT):
             return dnscommon.build_refused(wire)
-        # дальше запрос легитимен — учитываем активность
-        self.tracker.record(ident, now)
+        # дальше запрос легитимен — учитываем активность (в Pro)
+        if self.tier == "pro":
+            self.tracker.record(ident, now)
         if action == D_SYNTH_A:
             return dnscommon.build_response(
                 wire, [dnscommon.a_record(q.qname, detail, self.args.answer_ttl)]
@@ -854,15 +986,18 @@ class ProDnsServer:
         if not await self._acquire_conn(writer):
             return
         try:
-            sslobj = writer.get_extra_info("ssl_object")
-            sni = getattr(sslobj, "pereval_sni", None) if sslobj is not None else None
-            token = token_from_sni(sni, self.pro_domain)
             client_ip = self._peer_ip(writer)
-            if token is None:
-                self.counters["dot_no_token"] += 1
-                ident = Identity("none", None, None, client_ip)
+            if self.tier == "free":
+                ident = self.identify_free(client_ip)
             else:
-                ident = self.identify_token(token, client_ip)
+                sslobj = writer.get_extra_info("ssl_object")
+                sni = getattr(sslobj, "pereval_sni", None) if sslobj is not None else None
+                token = token_from_sni(sni, self.pro_domain)
+                if token is None:
+                    self.counters["dot_no_token"] += 1
+                    ident = Identity("none", None, None, client_ip)
+                else:
+                    ident = self.identify_token(token, client_ip)
             await self._serve_stream(reader, writer, ident, "dot")
         finally:
             self.tcp_conn_sem.release()
@@ -961,6 +1096,7 @@ class ProDnsServer:
         now = now_ts()
         active = sum(1 for ts in self.recent_idents.values() if now - ts <= RECENT_WINDOW)
         return OrderedDict([
+            ("tier", self.tier),
             ("uptime_s", int(now - self.started_at)),
             ("qps_1m", self.qps.qps(now)),
             ("queries_total", self.counters["queries"]),
@@ -972,8 +1108,11 @@ class ProDnsServer:
             ("dot_no_token", self.counters["dot_no_token"]),
             ("doh_forbidden", self.counters["doh_forbidden"]),
             ("truncated_udp", self.counters["truncated_udp"]),
+            ("over_quota", self.counters["over_quota"]),
             ("upstream_errors", self.counters["upstream_errors"]),
             ("active_tokens_5m", active),
+            ("cache", self.cache.stats() if self.cache is not None else None),
+            ("quota_active_by_node", self.quota_tracker.active_by_node()),
             ("policy", OrderedDict([
                 ("version", self.policy.version),
                 ("source", self.policy.source),
@@ -1272,7 +1411,7 @@ class _UdpListener(asyncio.DatagramProtocol):
 
 
 class ProDohServer(dnscommon.DohHttpServer):
-    """DoH за nginx: токен из X-Pereval-Token, IP клиента из X-Real-IP, /metrics.json."""
+    """DoH за nginx: токен из X-Pereval-Token (Pro) или открытый доступ (Free), IP клиента из X-Real-IP, /metrics.json."""
 
     def __init__(self, server: ProDnsServer):
         super().__init__(dns_pool=None, endpoint_path="/dns-query", max_inflight=server.args.udp_max_inflight)
@@ -1282,6 +1421,8 @@ class ProDohServer(dnscommon.DohHttpServer):
         return (req.headers.get("x-pereval-token") or "").strip().lower()
 
     async def authorize(self, req):
+        if self.server.tier == "free":
+            return None
         tok = self._token(req)
         if not TOKEN_RE.match(tok) or tok not in self.server.policy.tokens:
             self.server.counters["doh_forbidden"] += 1
@@ -1292,7 +1433,10 @@ class ProDohServer(dnscommon.DohHttpServer):
         client_ip = dnscommon.normalize_ip(req.headers.get("x-real-ip") or "")
         if client_ip is None and req.peer:
             client_ip = dnscommon.normalize_ip(req.peer[0])
-        ident = self.server.identify_token(self._token(req), client_ip)
+        if self.server.tier == "free":
+            ident = self.server.identify_free(client_ip)
+        else:
+            ident = self.server.identify_token(self._token(req), client_ip)
         resp = await self.server.resolve(wire_query, ident, "doh", tcp_fallback=True)
         if resp is None:
             raise ValueError("malformed DNS query")
@@ -1329,10 +1473,12 @@ def _env(name: str, default=None):
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
-        description="Персональный DNS-сервер «Перевал Pro»: UDP/TCP 53, DoT 853 и DoH за nginx "
-                    "с подменой A-записей каталога на IP воркеров по политике control plane.",
+        description="Единый DNS-сервер «Перевал» (Pro и Free): UDP/TCP 53, DoT 853 и DoH за nginx "
+                    "с привязкой пользователей к воркерам пула, квотированием и встроенным TTL-кешем.",
     )
-    g = p.add_argument_group("слушатели")
+    g = p.add_argument_group("режим и слушатели")
+    g.add_argument("--tier", choices=("pro", "free"), default=_env("PEREVAL_TIER", "pro"),
+                   help="режим работы: pro (по токену/IP из CP) или free (открытый по подсети /24)")
     g.add_argument("--listen-ip", default=_env("PRO_DNS_IP"),
                    help="публичный IP для UDP/TCP 53 и DoT (env PRO_DNS_IP; пусто — не слушать 53/853)")
     g.add_argument("--port", type=int, default=53, help="порт классического DNS (по умолчанию 53)")
@@ -1344,11 +1490,11 @@ def parse_args(argv=None):
     g.add_argument("--doh-listen", default="127.0.0.1:8057",
                    help="адрес:порт DoH по обычному HTTP за nginx (по умолчанию 127.0.0.1:8057; пусто — выключить)")
     g.add_argument("--pro-domain", default=_env("PRO_DOMAIN"),
-                   help="домен Pro для токена в SNI <token>.<domain> (env PRO_DOMAIN; иначе из policy map)")
+                   help="домен для токена в SNI <token>.<domain> и проб /healthz (env PRO_DOMAIN; иначе из policy map)")
 
     g = p.add_argument_group("политика и control plane")
     g.add_argument("--policy-map", default="/etc/pereval/pro-policy-map.json",
-                   help="pro-policy-map.json из generate.py (перечитывается по SIGHUP)")
+                   help="pro-policy-map.json или free-policy-map.json из generate.py (перечитывается по SIGHUP)")
     g.add_argument("--policy-cache", default="/var/lib/pereval-pro-dns/policy-cache.json",
                    help="кеш последней политики от control plane (пусто — не кешировать)")
     g.add_argument("--cp-origin", default=_env("CP_ORIGIN"), help="origin control plane (env CP_ORIGIN)")
@@ -1358,17 +1504,23 @@ def parse_args(argv=None):
     g.add_argument("--cp-ca-file", default=_env("CP_CA_FILE"), help="свой CA для HTTPS к control plane (необязательно)")
     g.add_argument("--node-name", default=_env("NODE_NAME", "pro-dns"), help="имя узла в отчётах (по умолчанию pro-dns)")
     g.add_argument("--no-cp", action="store_true",
-                   help="dev-режим: без control plane, политика из --policy-file или кеша")
+                   help="без control plane: политика из --policy-file или кеша (всегда включено для --tier free)")
     g.add_argument("--policy-file", default=None,
                    help="локальный JSON политики в формате ответа /api/internal/v1/policy (с --no-cp)")
 
-    g = p.add_argument_group("разрешение имён")
-    g.add_argument("--upstream", default="127.0.0.1:53", help="upstream DNS (локальный dnsmasq, по умолчанию 127.0.0.1:53)")
+    g = p.add_argument_group("разрешение имён и квоты")
+    g.add_argument("--upstream", default="1.1.1.1:53,8.8.8.8:53",
+                   help="внешние upstream DNS через запятую (по умолчанию 1.1.1.1:53,8.8.8.8:53)")
     g.add_argument("--upstream-timeout", type=float, default=2.5, help="таймаут ответа upstream в секундах (по умолчанию 2.5)")
     g.add_argument("--udp-pool", type=int, default=16, help="размер пула UDP-сокетов к upstream (по умолчанию 16)")
+    g.add_argument("--cache-size", type=int, default=50000, help="размер in-memory TTL-кеша DNS-ответов (по умолчанию 50000)")
     g.add_argument("--answer-ttl", type=int, default=60, help="TTL синтезированных A-записей (по умолчанию 60)")
     g.add_argument("--default-qps", type=int, default=DEFAULT_QPS_LIMIT,
-                   help="лимит запросов в секунду на токен/IP, если политика не задала (по умолчанию 50)")
+                   help="лимит запросов в секунду на токен/подсеть (по умолчанию 50)")
+    g.add_argument("--max-clients", type=int, default=None,
+                   help="дефолтный порог активных клиентов на ноду (переопределяется из policy-map)")
+    g.add_argument("--quota-ttl", type=float, default=300.0,
+                   help="окно жизни привязки клиента к слоту ноды в секундах (по умолчанию 300)")
     g.add_argument("--max-ips-per-day", type=int, default=20,
                    help="порог разных IP у токена за сутки UTC для алерта too_many_ips (по умолчанию 20)")
 
@@ -1387,12 +1539,14 @@ def parse_args(argv=None):
     g.add_argument("--worker-tls-port", type=int, default=443, help="порт TLS-прокси воркеров (по умолчанию 443)")
     g.add_argument("--worker-http-port", type=int, default=80, help="порт HTTP-прокси воркеров (по умолчанию 80)")
     g.add_argument("--health-out", default="/var/www/pereval-pro/pro-health.json",
-                   help="куда писать pro-health.json (пусто — не писать)")
+                   help="куда писать JSON состояния здоровья воркеров (пусто — не писать)")
     return p.parse_args(argv)
 
 
 def load_initial_policy(args) -> Policy:
-    """Политика на старте: --policy-file (dev) -> кеш -> пустая."""
+    """Политика на старте: --tier free -> открытая; иначе --policy-file (dev) -> кеш -> пустая."""
+    if getattr(args, "tier", "pro") == "free":
+        return Policy(source="free")
     if args.policy_file:
         try:
             data = json.loads(Path(args.policy_file).read_text(encoding="utf-8"))

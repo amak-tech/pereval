@@ -13,8 +13,14 @@ export default async function AdminOverviewPage() {
   const now = new Date();
   const o = await adminOverview(now);
   const staleNodes = o.nodes.filter((n) => n.stale);
+  const overloadedNodes = (o.nodewatch?.nodes ?? []).filter((n) => n.overloaded);
   const problems: { text: string; href: string }[] = [];
   if (staleNodes.length) problems.push({ text: `Ноды без связи >10 мин: ${staleNodes.map((n) => n.name).join(", ")}`, href: "/admin/infra" });
+  if (overloadedNodes.length)
+    problems.push({
+      text: `Перегрузка нод (клиентов ≥ порога): ${overloadedNodes.map((n) => `${n.name} (${n.onlineUsers5m}/${n.maxClients})`).join(", ")}`,
+      href: "/admin/infra",
+    });
   if (o.cert && o.cert.daysLeft !== null && o.cert.daysLeft <= 14) problems.push({ text: `Единый сертификат истекает через ${o.cert.daysLeft} дн.`, href: "/admin/infra" });
   if (!o.cert) problems.push({ text: "На control plane нет боевого сертификата (CERT_DIR пуст или самоподписанный)", href: "/admin/infra" });
   if (o.mail.failed) problems.push({ text: `Недоставленных писем: ${o.mail.failed}`, href: "/admin/mail?state=failed" });

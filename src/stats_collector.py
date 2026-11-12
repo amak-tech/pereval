@@ -1036,6 +1036,7 @@ class StatsCollector:
             "generated_at": now,
             "salt_day": self.salt_day,
             "active_connections": self.active_connections,
+            "online_users_5m": len(self.recent_5m_users),
             "recent_5m_users": {str(k): v for k, v in self.recent_5m_users.items()},
             "minute_buckets": [b.to_dict() for b in sorted(self.minute_buckets.values(), key=lambda x: x.ts)],
             "hour_buckets": [b.to_dict() for b in sorted(self.hour_buckets.values(), key=lambda x: x.ts)],

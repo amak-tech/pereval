@@ -203,6 +203,82 @@ class UdpPoolTests(unittest.TestCase):
                 await up.stop()
         asyncio.run(run())
 
+    def test_multi_upstream_failover_and_integrated_cache(self):
+        self.assertEqual(
+            dnscommon.parse_upstreams("1.1.1.1:53, 8.8.8.8:5353, [2606:4700:4700::1111]:53"),
+            [("1.1.1.1", 53), ("8.8.8.8", 5353), ("2606:4700:4700::1111", 53)],
+        )
+
+        async def run():
+            up1 = await tu.FakeUpstream().start()
+            up2 = await tu.FakeUpstream().start()
+            up2.answer_ip = "198.51.100.77"
+            dead_port = tu.free_port()
+            cache = dnscommon.DnsCache(max_entries=100)
+            spec = "127.0.0.1:%d,127.0.0.1:%d" % (dead_port, up2.port)
+            pool = dnscommon.UdpDnsPool(spec, pool_size=2, timeout=0.25, cache=cache)
+            await pool.start()
+            try:
+                q1 = tu.make_query("cached.example.com", qid=0x1111)
+                r1 = await pool.query(q1)
+                self.assertEqual(tu.parse_header(r1)["id"], 0x1111)
+                self.assertEqual(tu.a_answers(r1), ["198.51.100.77"])
+                self.assertEqual(up2.udp_queries, 1)
+
+                # Повторный запрос с другим qid должен прийти из кеша без обращения к апстриму
+                q2 = tu.make_query("cached.example.com", qid=0x2222)
+                r2 = await pool.query(q2)
+                self.assertEqual(tu.parse_header(r2)["id"], 0x2222)
+                self.assertEqual(tu.a_answers(r2), ["198.51.100.77"])
+                self.assertEqual(up2.udp_queries, 1)
+                self.assertEqual(cache.hits, 1)
+            finally:
+                pool.close()
+                await up1.stop()
+                await up2.stop()
+        asyncio.run(run())
+
+
+class DnsCacheTests(unittest.TestCase):
+    def test_ttl_lru_and_txid_rewrite(self):
+        cache = dnscommon.DnsCache(max_entries=2, min_ttl=5, max_ttl=300, negative_ttl=20)
+        q1 = tu.make_query("one.example", qid=0x0001)
+        r1 = dnscommon.build_response(q1, [dnscommon.a_record("one.example", "1.1.1.1", 60)])
+        self.assertTrue(cache.put(q1, r1, now=100.0))
+
+        # Попадание в кеш с подменой transaction ID
+        q1_again = tu.make_query("one.example", qid=0xABCD)
+        hit = cache.get(q1_again, now=130.0)
+        self.assertIsNotNone(hit)
+        self.assertEqual(tu.parse_header(hit)["id"], 0xABCD)
+        self.assertEqual(tu.a_answers(hit), ["1.1.1.1"])
+
+        # Истечение TTL
+        self.assertIsNone(cache.get(q1_again, now=161.0))
+
+        # Кеширование NXDOMAIN и вытеснение по LRU
+        cache.put(q1, r1, now=200.0)
+        q2 = tu.make_query("nx.example", qid=0x0002)
+        r2 = dnscommon.build_response(q2, [], rcode=dnscommon.RCODE_NXDOMAIN)
+        self.assertTrue(cache.put(q2, r2, now=200.0))
+        # Обратимся к q1, чтобы сделать q2 самым старым (LRU)
+        self.assertIsNotNone(cache.get(q1, now=201.0))
+
+        q3 = tu.make_query("three.example", qid=0x0003)
+        r3 = dnscommon.build_response(q3, [dnscommon.a_record("three.example", "3.3.3.3", 60)])
+        self.assertTrue(cache.put(q3, r3, now=202.0))
+        self.assertEqual(len(cache), 2)
+        self.assertIsNotNone(cache.get(q1, now=203.0))
+        self.assertIsNone(cache.get(q2, now=203.0))
+        self.assertIsNotNone(cache.get(q3, now=203.0))
+
+        # Не кешируем TC=1 и REFUSED/SERVFAIL
+        self.assertFalse(cache.put(q1, dnscommon.build_truncated(q1), now=200.0))
+        self.assertFalse(cache.put(q1, dnscommon.build_refused(q1), now=200.0))
+        self.assertFalse(cache.put(q1, dnscommon.build_servfail(q1), now=200.0))
+        self.assertEqual(cache.prune(now=500.0), 2)
+        self.assertEqual(len(cache), 0)
+
 
 class HttpTests(unittest.TestCase):
     def test_doh_server_and_http_client(self):

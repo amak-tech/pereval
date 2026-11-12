@@ -17,6 +17,7 @@
     "dns_ip": "153.80.200.170",
     "doh_url": "https://free.pereval.top/dns-query",
     "dot_host": "free.pereval.top",
+    "max_clients": 150,
     "pools": {
       "default": {
         "note": "Общий пул — всё, у чего пул не задан явно.",
@@ -26,7 +27,8 @@
       "ai": {
         "note": "ИИ-платформы — важно, чтобы все запросы сервиса шли с одного IP/локации.",
         "fallback": "default",
-        "strict_allowlist": false
+        "strict_allowlist": false,
+        "max_clients": 60
       },
       "media": {
         "note": "Тяжёлый трафик (видео, стриминги, соцсети) — отдельные ноды, чтобы не мешать ИИ.",
@@ -59,6 +61,7 @@
     "dns_ip": "85.209.148.147",
     "doh_url_template": "https://pro.pereval.top/dns/{token}",
     "dot_host_template": "{token}.pro.pereval.top",
+    "max_clients": 150,
     "pools": {
       "default": {
         "note": "Общий пул Pro.",
@@ -68,7 +71,8 @@
       "ai": {
         "note": "ИИ-платформы Pro — постоянный IP на сервис.",
         "fallback": "default",
-        "strict_allowlist": false
+        "strict_allowlist": false,
+        "max_clients": 40
       },
       "media": {
         "note": "Стриминги и TikTok Pro — тяжёлый трафик.",
@@ -195,11 +199,6 @@
             "waa-pa.clients6.google.com",
             "waa-pa.googleapis.com",
             "cloudconsole-pa.clients6.google.com",
-            "people-pa.clients6.google.com",
-            "notifications-pa.clients6.google.com",
-            "notifications-pa.googleapis.com",
-            "searchnotifications-pa.clients6.google.com",
-            "searchnotifications-pa.googleapis.com",
             "signaller-pa.clients6.google.com",
             "signaler-pa.clients6.google.com",
             "signaler-pa.googleapis.com",
@@ -1020,6 +1019,11 @@
         "gvt1.com",
         "lookerstudio.google.com",
         "news.google.com",
+        "notifications-pa.clients6.google.com",
+        "notifications-pa.googleapis.com",
+        "people-pa.clients6.google.com",
+        "searchnotifications-pa.clients6.google.com",
+        "searchnotifications-pa.googleapis.com",
         "suggestqueries.google.com"
       ]
     },
@@ -1086,7 +1090,7 @@
   "counts": {
     "free_categories": 2,
     "free_services": 65,
-    "free_domains": 316,
+    "free_domains": 311,
     "pro_categories": 3,
     "pro_services": 16,
     "pro_domains": 64

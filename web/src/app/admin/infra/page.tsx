@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { requireAdminPage } from "@/lib/admin-auth";
-import { listNodes, NODE_STALE_MS } from "@/lib/admin";
+import { getDefaultNodeMaxClients, getNodeWatchStatus, listNodes, NODE_STALE_MS } from "@/lib/admin";
+import { collectMonitoredTargets } from "@/jobs/nodewatch";
 import { policyVersion } from "@/lib/policy";
 import { aclVersion, buildAclSnapshot } from "@/lib/acl";
 import { certStatus, renewCommand, acmeTxtRecords } from "@/jobs/certwatch";
 import { env } from "@/lib/env";
 import { catalog, totalDomains, totalServices } from "@/lib/catalog";
 import { Card, Stat, Table, Mono, JsonDetails, fmtD, fmtDt, fmtN, ago } from "@/components/admin/ui";
-import { ActionButton, AddNodeForm } from "@/components/admin/actions";
+import { ActionButton, AddNodeForm, NodeMaxClientsForm } from "@/components/admin/actions";
 import { Badge } from "@/components/Section";
 
 export const metadata: Metadata = { title: "Инфраструктура" };
@@ -16,10 +17,29 @@ export const dynamic = "force-dynamic";
 export default async function AdminInfraPage() {
   await requireAdminPage();
   const now = new Date();
-  const [nodes, policyV, aclV, acl, cert] = await Promise.all([listNodes(), policyVersion(), aclVersion(), buildAclSnapshot(now), certStatus(now)]);
+  const [nodes, policyV, aclV, acl, cert, defaultMaxClients, nodewatch] = await Promise.all([
+    listNodes(),
+    policyVersion(),
+    aclVersion(),
+    buildAclSnapshot(now),
+    certStatus(now),
+    getDefaultNodeMaxClients(),
+    getNodeWatchStatus(),
+  ]);
   const e = env();
   const stale = (n: (typeof nodes)[number]) => n.enabled && (!n.lastSeenAt || now.getTime() - n.lastSeenAt.getTime() > NODE_STALE_MS);
   const certTone = cert.daysLeft === null ? "err" : cert.daysLeft <= 7 ? "err" : cert.daysLeft <= 25 ? "warn" : "ok";
+  const loadRows =
+    nodewatch?.nodes ??
+    collectMonitoredTargets(defaultMaxClients).map((t) => ({
+      ...t,
+      onlineUsers5m: null,
+      activeConnections: null,
+      overloaded: false,
+      reachable: false,
+      checkedAt: "",
+      alertedAt: null,
+    }));
 
   return (
     <>
@@ -74,6 +94,45 @@ export default async function AdminInfraPage() {
         </Table>
         <h3 className="mb-2 mt-5 text-sm font-semibold">Зарегистрировать ноду</h3>
         <AddNodeForm />
+      </Card>
+
+      <Card title="Нагрузка прокси-воркеров (nodewatch)">
+        <p className="m-0 mb-3 text-xs text-mute">
+          Задача <code>nodewatch</code> раз в минуту опрашивает <code>/node-stats.json</code> у всех воркеров Free и Pro и отправляет email-алерт при <code>online_users_5m ≥ max_clients</code> (кулдаун {e.NODE_ALERT_COOLDOWN_MINUTES} мин, сброс при ≤ 80% порога).
+          {nodewatch?.checkedAt ? ` Последняя проверка: ${fmtDt(new Date(nodewatch.checkedAt))}.` : " Опрос ещё не выполнялся."}
+        </p>
+        <Table head={["Нода", "Кластер / Пулы", "IP", "Клиенты (5 мин) / Порог", "TCP-соединения", "Статус"]} empty="Воркеры не найдены в каталоге.">
+          {loadRows.map((row) => (
+            <tr key={`${row.tier}:${row.ip}`}>
+              <td className="font-semibold">{row.name}</td>
+              <td>
+                <Badge tone={row.tier === "pro" ? "accent" : "mute"}>{row.tier === "pro" ? "Pro" : "Free"}</Badge>{" "}
+                <span className="text-xs text-mute">{row.pools.join(", ")}</span>
+              </td>
+              <td>
+                <Mono>{row.ip}</Mono>
+              </td>
+              <td className={row.overloaded ? "font-semibold text-err" : ""}>
+                {row.onlineUsers5m !== null ? fmtN(row.onlineUsers5m) : "—"} / {fmtN(row.maxClients)}
+              </td>
+              <td>{row.activeConnections !== null ? fmtN(row.activeConnections) : "—"}</td>
+              <td>
+                {!row.checkedAt ? (
+                  <span className="text-mute">ожидание опроса</span>
+                ) : !row.reachable ? (
+                  <Badge tone="warn">недоступна</Badge>
+                ) : row.overloaded ? (
+                  <Badge tone="warn">перегрузка</Badge>
+                ) : (
+                  <Badge tone="ok">норма</Badge>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
+        <div className="mt-4">
+          <NodeMaxClientsForm defaultMaxClients={defaultMaxClients} />
+        </div>
       </Card>
 
       <Card title="Единый сертификат">

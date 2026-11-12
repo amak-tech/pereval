@@ -152,3 +152,39 @@ export function AddNodeForm() {
     </form>
   );
 }
+
+export function NodeMaxClientsForm({ defaultMaxClients }: { defaultMaxClients: number }) {
+  const a = useAdminAction();
+  const [maxClients, setMaxClients] = useState(String(defaultMaxClients));
+  return (
+    <form
+      className="grid gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void a.run({ action: "settings.node_max_clients", maxClients: Number(maxClients) });
+      }}
+    >
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-xs text-mute">
+          Глобальный порог клиентов на ноду (5 мин)
+          <input
+            type="number"
+            min={1}
+            max={100000}
+            value={maxClients}
+            onChange={(e) => setMaxClients(e.target.value)}
+            required
+            className={`${input} w-44`}
+          />
+        </label>
+        <button type="submit" className="btn-primary !px-3 !py-1.5 !text-xs" disabled={a.busy}>
+          Сохранить порог
+        </button>
+        <span className="text-xs text-mute">
+          Используется, если в services.yaml не задан max_clients у воркера, пула или кластера.
+        </span>
+      </div>
+      <Outcome result={a.result} error={a.error} />
+    </form>
+  );
+}

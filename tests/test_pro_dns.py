@@ -765,6 +765,159 @@ class LiveServerTests(unittest.TestCase):
         self.assertEqual(status, 404)
 
 
+class FreeTierAndQuotaTests(unittest.TestCase):
+    """Тесты режима --tier free (Do53/DoT/DoH без токенов, привязка по /24, passthrough, DnsCache)
+    и квотирования max_clients с переливом и откатом в plain DNS."""
+
+    def setUp(self):
+        _quiet()
+        self.tmp = tu.tmpdir()
+
+    def test_pro_sticky_users_and_quota_shedding(self):
+        pm = dict(
+            POLICY_MAP,
+            max_clients=2,
+            pools={"default": {"max_clients": 1}, "ai": {"fallback": "default", "max_clients": 1}},
+            workers=[
+                {"ip": W1, "name": "w1", "pools": ["ai"]},
+                {"ip": W2, "name": "w2", "pools": ["ai"]},
+                {"ip": W3, "name": "w3", "pools": ["default"]},
+            ],
+            passthrough=["gosuslugi.ru"],
+        )
+        ips = {
+            "198.51.100.%d" % i: {"user_id": "user-%d" % i, "mode": "proxy", "disabled_categories": []}
+            for i in range(1, 10)
+        }
+        pol = dict(POLICY, ips=ips)
+        srv = make_server(self.tmp, policy=pol, policy_map=pm)
+        q_claude = dnscommon.parse_question(tu.make_query("claude.ai", 1))
+        q_chatgpt = dnscommon.parse_question(tu.make_query("chatgpt.com", 1))
+        q_pass = dnscommon.parse_question(tu.make_query("lk.gosuslugi.ru", 1))
+
+        u1 = srv.identify_ip("198.51.100.1")
+        u2 = srv.identify_ip("198.51.100.2")
+        u3 = srv.identify_ip("198.51.100.3")
+        u4 = srv.identify_ip("198.51.100.4")
+
+        # Passthrough всегда уходит в D_FORWARD
+        self.assertEqual(srv.decide(q_pass, u1, now=100.0), (pro_dns.D_FORWARD, "passthrough"))
+
+        # u1 и u2 занимают оба слота пула ai (W1 и W2, по 1 слоту на ноду)
+        act1, ip1 = srv.decide(q_claude, u1, now=100.0)
+        act2, ip2 = srv.decide(q_claude, u2, now=100.0)
+        self.assertEqual((act1, act2), (pro_dns.D_SYNTH_A, pro_dns.D_SYNTH_A))
+        self.assertEqual({ip1, ip2}, {W1, W2})
+        # Все сервисы одного пула для u1 идут через тот же воркер
+        self.assertEqual(srv.decide(q_chatgpt, u1, now=101.0), (pro_dns.D_SYNTH_A, ip1))
+
+        # u3 переливается в fallback-пул default (W3, лимит 1)
+        self.assertEqual(srv.decide(q_claude, u3, now=102.0), (pro_dns.D_SYNTH_A, W3))
+
+        # u4: все слоты в ai и default заняты -> откат в plain DNS (D_FORWARD, over_quota)
+        self.assertEqual(srv.decide(q_claude, u4, now=103.0), (pro_dns.D_FORWARD, "over_quota"))
+        # При этом u1 и u2 продолжают обслуживаться своими нодами
+        self.assertEqual(srv.decide(q_claude, u1, now=104.0), (pro_dns.D_SYNTH_A, ip1))
+        self.assertEqual(srv.decide(q_claude, u2, now=104.0), (pro_dns.D_SYNTH_A, ip2))
+
+    def test_free_tier_do53_dot_doh_and_cache(self):
+        async def run():
+            up = await tu.FakeUpstream().start()
+            pm = {
+                "tier": "free",
+                "domain": "free.pereval.top",
+                "free_domains": ["free.pereval.top", "pereval.portbuddy.tech"],
+                "dns_ip": "127.0.0.1",
+                "primary": "127.0.0.1",
+                "probe_sni": "claude.ai",
+                "max_clients": 60,
+                "pools": {"default": {}, "ai": {"fallback": "default", "max_clients": 60}},
+                "workers": [
+                    {"ip": W1, "name": "free-ai-1", "pools": ["ai", "default"]},
+                    {"ip": W2, "name": "free-ai-2", "pools": ["ai", "default"]},
+                ],
+                "categories": [{"id": "ai", "name": "AI", "tier": "free", "pool": "ai"}],
+                "passthrough": ["gosuslugi.ru"],
+                "domains": {
+                    "claude.ai": {"service": "Anthropic / Claude", "category_id": "ai", "tier": "free", "pool": "ai"},
+                    "chatgpt.com": {"service": "OpenAI", "category_id": "ai", "tier": "free", "pool": "ai"},
+                },
+            }
+            pm_path = _write_json(Path(self.tmp) / "free-policy-map.json", pm)
+            doh_port = tu.free_port()
+            argv = [
+                "--tier", "free",
+                "--policy-map", pm_path,
+                "--policy-cache", "",
+                "--health-out", "",
+                "--health-interval", "3600",
+                "--listen-ip", "",
+                "--doh-listen", "127.0.0.1:%d" % doh_port,
+                "--upstream", "127.0.0.1:%d" % up.port,
+            ]
+            args = pro_dns.parse_args(argv)
+            srv = pro_dns.build_server(args)
+            await srv.start()
+            try:
+                # 1. Распределение разных подсетей /24 в режиме Free
+                subnets_picked = set()
+                for sub_i in range(1, 30):
+                    ident = srv.identify_ip("198.51.%d.42" % sub_i)
+                    self.assertTrue(ident.known)
+                    self.assertEqual(ident.key, "198.51.%d.0/24" % sub_i)
+                    r = await srv.resolve(tu.make_query("claude.ai", 1), ident, "udp")
+                    ans = tu.a_answers(r)[0]
+                    subnets_picked.add(ans)
+                    # Другой сервис того же пула для того же клиента даёт тот же IP ноды
+                    r_gpt = await srv.resolve(tu.make_query("chatgpt.com", 1), ident, "udp")
+                    self.assertEqual(tu.a_answers(r_gpt)[0], ans)
+                self.assertEqual(subnets_picked, {W1, W2})
+
+                # 2. DoH без токена с X-Real-IP + NODATA на AAAA + passthrough + DnsCache
+                q_a = tu.make_query("claude.ai", 1, qid=0x301)
+                r = await dnscommon.http_request(
+                    "http://127.0.0.1:%d/dns-query?dns=%s" % (doh_port, dnscommon.encode_base64url_dns(q_a)),
+                    headers={"X-Real-IP": "203.0.113.15"},
+                )
+                self.assertEqual(r.status, 200)
+                self.assertIn(tu.a_answers(r.body)[0], (W1, W2))
+
+                q_aaaa = tu.make_query("claude.ai", 28, qid=0x302)
+                r_aaaa = await dnscommon.http_request(
+                    "http://127.0.0.1:%d/dns-query?dns=%s" % (doh_port, dnscommon.encode_base64url_dns(q_aaaa)),
+                    headers={"X-Real-IP": "203.0.113.15"},
+                )
+                self.assertEqual((tu.parse_header(r_aaaa.body)["rcode"], tu.parse_header(r_aaaa.body)["an"]), (0, 0))
+
+                # Passthrough и внешние домены кешируются во встроенном DnsCache
+                self.assertEqual(up.udp_queries, 0)
+                q_ext = tu.make_query("ya.ru", 1, qid=0x303)
+                r_ext1 = await srv.resolve(q_ext, srv.identify_ip("203.0.113.15"), "udp")
+                self.assertEqual(tu.a_answers(r_ext1), [tu.UPSTREAM_A])
+                self.assertEqual(up.udp_queries, 1)
+
+                q_ext2 = tu.make_query("ya.ru", 1, qid=0x304)
+                r_ext2 = await srv.resolve(q_ext2, srv.identify_ip("203.0.113.99"), "udp")
+                self.assertEqual(tu.parse_header(r_ext2)["id"], 0x304)
+                self.assertEqual(tu.a_answers(r_ext2), [tu.UPSTREAM_A])
+                # Второй запрос отдан из DnsCache без обращения к апстриму
+                self.assertEqual(up.udp_queries, 1)
+                self.assertEqual(srv.cache.hits, 1)
+
+                # 3. При падении всех воркеров (fail_open) во Free выдаётся IP primary
+                for w_ip in (W1, W2):
+                    srv.health.update(w_ip, w_ip, False, 0.0, "down", 1.0)
+                    srv.health.update(w_ip, w_ip, False, 0.0, "down", 2.0)
+                srv.recompute_routing()
+                self.assertTrue(srv.fail_open)
+                r_fo = await srv.resolve(tu.make_query("claude.ai", 1), srv.identify_ip("198.51.99.1"), "udp")
+                self.assertEqual(tu.a_answers(r_fo), ["127.0.0.1"])
+            finally:
+                await srv.shutdown()
+                await up.stop()
+        asyncio.run(run())
+
+
 async def _call(fn, *a):
     return fn(*a)
 

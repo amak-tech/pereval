@@ -323,28 +323,29 @@ def save_state(state_file: Path, state: dict) -> None:
 
 
 def apply_configs_and_reload(
-    dnsmasq_template: Path,
-    dnsmasq_out: Path,
-    nginx_stream_out: Path,
-    nginx_http_out: Path,
-    active_dns_ips: list,
-    healthy_workers: list,
-    tls_port: int,
-    http_port: int,
-    no_service_reload: bool,
-    allow_dnsmasq_restart: bool,
+    dnsmasq_template: Path = None,
+    dnsmasq_out: Path = None,
+    nginx_stream_out: Path = None,
+    nginx_http_out: Path = None,
+    active_dns_ips: list = None,
+    healthy_workers: list = None,
+    tls_port: int = 443,
+    http_port: int = 80,
+    no_service_reload: bool = False,
+    allow_dnsmasq_restart: bool = False,
     pools: dict = None,
     service_map: dict = None,
     dns_extra_ips: list = None,
 ) -> tuple:
-    """Атомарно обновляет конфиги dnsmasq и nginx, проверяет их и перезагружает сервисы."""
+    """Атомарно обновляет конфиги nginx worker upstreams, проверяет их и перезагружает nginx."""
     dns_updated = False
     nginx_updated = False
+    healthy_workers = healthy_workers or []
     pools = poolrouting.normalize_pools(pools or {})
     service_map = service_map or {}
     domain_pools = domain_pools_from_map(service_map)
 
-    # 1. Обновление nginx worker upstreams (по пулам)
+    # Обновление nginx worker upstreams (по пулам)
     stream_content = render_nginx_stream_workers(healthy_workers, tls_port=tls_port,
                                                  pools=pools, domain_pools=domain_pools)
     http_content = render_nginx_http_workers(healthy_workers, http_port=http_port,
@@ -369,38 +370,6 @@ def apply_configs_and_reload(
                 nginx_updated = False
             elif shutil.which("systemctl"):
                 subprocess.run(["systemctl", "reload", "nginx"], capture_output=True, text=True)
-
-    # 2. Обновление dnsmasq.conf
-    if dnsmasq_template.is_file() and allow_dnsmasq_restart:
-        tpl_text = dnsmasq_template.read_text(encoding="utf-8")
-        if healthy_workers:
-            healthy_by_pool = poolrouting.workers_by_pool(healthy_workers, pools, extra_ips=dns_extra_ips)
-            # last_resort = active_dns_ips: Primary (fail-open) либо все живые ноды
-            new_dns_conf = render_dnsmasq_conf_pooled(tpl_text, pools, healthy_by_pool,
-                                                      service_map, list(active_dns_ips))
-        else:
-            new_dns_conf = render_dnsmasq_conf(tpl_text, active_dns_ips)
-        prev_dns = dnsmasq_out.read_text(encoding="utf-8") if dnsmasq_out.is_file() else None
-        if prev_dns != new_dns_conf:
-            dnsmasq_out.parent.mkdir(parents=True, exist_ok=True)
-            tmp_dns = dnsmasq_out.parent / f".{dnsmasq_out.name}.tmp.{os.getpid()}"
-            tmp_dns.write_text(new_dns_conf, encoding="utf-8")
-            dns_valid = True
-            if not no_service_reload and shutil.which("dnsmasq"):
-                test_res = subprocess.run(
-                    ["dnsmasq", "--test", "-C", str(tmp_dns)],
-                    capture_output=True,
-                    text=True,
-                )
-                if test_res.returncode != 0:
-                    print(f"[healthcheck] dnsmasq --test failed: {test_res.stderr}", file=sys.stderr)
-                    tmp_dns.unlink(missing_ok=True)
-                    dns_valid = False
-            if dns_valid:
-                tmp_dns.replace(dnsmasq_out)
-                dns_updated = True
-                if not no_service_reload and shutil.which("systemctl"):
-                    subprocess.run(["systemctl", "restart", "dnsmasq"], capture_output=True, text=True)
 
     return dns_updated, nginx_updated
 
@@ -524,24 +493,10 @@ async def run_cycle(args, state: dict) -> dict:
         or prev_dns_ips != active_dns_ips
         or not args.nginx_stream_out.is_file()
         or not args.nginx_http_out.is_file()
-        or (args.dnsmasq_template.is_file() and not args.dnsmasq_out.is_file())
     )
 
     if need_sync:
-        last_dns_reload = float(state.get("last_dnsmasq_reload_ts") or 0.0)
-        elapsed_since_dns = time.time() - last_dns_reload
-        recovering_from_fail_open = (prev_worker_ips == [] and bool(active_worker_ips))
-        # При полном отказе воркеров (fail_open_active) или выходе из него обновляем DNS немедленно
-        allow_dns_restart = (
-            fail_open_active
-            or recovering_from_fail_open
-            or last_dns_reload == 0.0
-            or elapsed_since_dns >= args.min_reload_interval
-            or not args.dnsmasq_out.is_file()
-        )
-        dns_updated, _nginx_updated = apply_configs_and_reload(
-            dnsmasq_template=args.dnsmasq_template,
-            dnsmasq_out=args.dnsmasq_out,
+        apply_configs_and_reload(
             nginx_stream_out=args.nginx_stream_out,
             nginx_http_out=args.nginx_http_out,
             active_dns_ips=active_dns_ips,
@@ -549,16 +504,12 @@ async def run_cycle(args, state: dict) -> dict:
             tls_port=args.tls_port,
             http_port=args.http_port,
             no_service_reload=args.no_service_reload,
-            allow_dnsmasq_restart=allow_dns_restart,
             pools=pools,
             service_map=service_map,
             dns_extra_ips=[primary_ip] if (include_primary_in_dns and healthy_workers) else None,
         )
         state["active_worker_ips"] = active_worker_ips
-        if allow_dns_restart:
-            state["active_dns_ips"] = active_dns_ips
-            if dns_updated and not args.no_service_reload:
-                state["last_dnsmasq_reload_ts"] = time.time()
+        state["active_dns_ips"] = active_dns_ips
 
     health_payload = OrderedDict([
         ("updated_at", now_ts),

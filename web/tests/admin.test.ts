@@ -40,6 +40,8 @@ describe("adminActionSchema", () => {
   it("принимает известные действия и приводит days к числу", () => {
     const r = adminActionSchema.parse({ action: "user.grant", userId: "u1", days: "30" });
     expect(r).toEqual({ action: "user.grant", userId: "u1", days: 30 });
+    const m = adminActionSchema.parse({ action: "settings.node_max_clients", maxClients: "120" });
+    expect(m).toEqual({ action: "settings.node_max_clients", maxClients: 120 });
   });
   it("отклоняет неизвестные действия и выход за границы", () => {
     expect(() => adminActionSchema.parse({ action: "user.delete", userId: "u1" })).toThrow();

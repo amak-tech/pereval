@@ -10,8 +10,8 @@ export type CatalogCategory = {
   pool: string;
   services: CatalogService[];
 };
-export type PoolInfo = { note: string; fallback: string | null; strict_allowlist: boolean };
-export type WorkerInfo = { ip: string; name: string; weight: number; pools: string[] };
+export type PoolInfo = { note: string; fallback: string | null; strict_allowlist: boolean; max_clients?: number | null };
+export type WorkerInfo = { ip: string; name: string; weight: number; pools: string[]; max_clients?: number | null };
 
 export type Catalog = {
   /** cert_domains — имена единого wildcard-сертификата инфраструктуры */
@@ -22,6 +22,7 @@ export type Catalog = {
     dns_ip: string;
     doh_url: string;
     dot_host: string;
+    max_clients?: number | null;
     pools: Record<string, PoolInfo>;
     workers: WorkerInfo[];
   };
@@ -30,6 +31,7 @@ export type Catalog = {
     dns_ip: string;
     doh_url_template: string;
     dot_host_template: string;
+    max_clients?: number | null;
     pools: Record<string, PoolInfo>;
     workers: WorkerInfo[];
   } | null;

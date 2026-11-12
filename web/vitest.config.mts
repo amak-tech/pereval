@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "src/**/__tests__/*.test.ts"],
     env: {
       NODE_ENV: "test",
       AUTH_SECRET: "test-secret-test-secret-test-secret-0000",

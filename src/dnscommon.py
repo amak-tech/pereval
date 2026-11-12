@@ -25,7 +25,7 @@ import ipaddress
 import ssl
 import struct
 import time
-from collections import namedtuple
+from collections import OrderedDict, namedtuple
 from urllib.parse import parse_qs, urlsplit
 
 DNS_MEDIA_TYPE = "application/dns-message"
@@ -450,14 +450,216 @@ def normalize_ip(raw: str):
 
 
 # =============================================================================
-# UDP-пул к upstream с TCP-fallback
+# In-memory TTL-кеш DNS-ответов и UDP-пул к upstream с TCP-fallback
 # =============================================================================
+
+
+def _extract_rr_min_ttl(packet: bytes):
+    """Возвращает минимальный TTL среди RR в секциях answer и authority (или None)."""
+    if len(packet) < MIN_DNS_PACKET_LEN:
+        return None
+    try:
+        _qid, _flags, qdcount, ancount, nscount, _arcount = struct.unpack("!HHHHHH", packet[:12])
+        rr_total = ancount + nscount
+        if rr_total == 0:
+            return None
+        offset = 12
+        length = len(packet)
+        for _ in range(qdcount):
+            _labels, offset = read_name(packet, offset)
+            if offset + 4 > length:
+                return None
+            offset += 4
+        min_ttl = None
+        for _ in range(rr_total):
+            offset, rtype, _rclass, ttl, _ro, _rl = skip_rr(packet, offset)
+            if rtype != QTYPE_OPT:
+                if min_ttl is None or ttl < min_ttl:
+                    min_ttl = ttl
+        return int(min_ttl) if min_ttl is not None else None
+    except Exception:
+        return None
+
+
+def _packet_question_key(wire: bytes):
+    """Извлекает ключ кеша (qname, qtype, qclass, do_bit) из DNS-запроса или ответа."""
+    if len(wire) < MIN_DNS_PACKET_LEN:
+        return None
+    try:
+        _qid, _flags, qdcount, ancount, nscount, arcount = struct.unpack("!HHHHHH", wire[:12])
+        if qdcount < 1:
+            return None
+        labels, pos = read_name(wire, 12)
+        if pos + 4 > len(wire):
+            return None
+        qtype, qclass = struct.unpack("!HH", wire[pos:pos + 4])
+        pos += 4
+        qname = labels_to_name(labels)
+        do_bit = False
+        if arcount > 0:
+            try:
+                for _ in range(qdcount - 1):
+                    _l, pos = read_name(wire, pos)
+                    pos += 4
+                for _ in range(ancount + nscount):
+                    pos, _t, _c, _ttl, _ro, _rl = skip_rr(wire, pos)
+                for _ in range(arcount):
+                    pos, rtype, _rclass, ttl, _ro, _rl = skip_rr(wire, pos)
+                    if rtype == QTYPE_OPT:
+                        do_bit = bool(ttl & 0x8000)
+                        break
+            except ValueError:
+                pass
+        return (qname, int(qtype), int(qclass), bool(do_bit))
+    except Exception:
+        return None
+
+
+class DnsCache:
+    """In-memory LRU/TTL-кеш DNS-ответов (NOERROR и NXDOMAIN) с подменой transaction ID."""
+
+    def __init__(self, max_entries: int = 50000, min_ttl: int = 5, max_ttl: int = 3600, negative_ttl: int = 30):
+        self.max_entries = max(1, int(max_entries))
+        self.min_ttl = max(1, int(min_ttl))
+        self.max_ttl = max(self.min_ttl, int(max_ttl))
+        self.negative_ttl = max(1, int(negative_ttl))
+        self._store = OrderedDict()  # key -> (expires_at, wire_response)
+        self.hits = 0
+        self.misses = 0
+
+    @staticmethod
+    def _now(now: float = None) -> float:
+        return time.monotonic() if now is None else float(now)
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+    def clear(self) -> None:
+        self._store.clear()
+
+    def prune(self, now: float = None) -> int:
+        ts = self._now(now)
+        expired = [k for k, (exp, _w) in self._store.items() if exp <= ts]
+        for k in expired:
+            self._store.pop(k, None)
+        return len(expired)
+
+    def get(self, query_wire: bytes, now: float = None):
+        if not isinstance(query_wire, (bytes, bytearray)) or len(query_wire) < MIN_DNS_PACKET_LEN:
+            self.misses += 1
+            return None
+        key = _packet_question_key(query_wire)
+        if key is None:
+            self.misses += 1
+            return None
+        ts = self._now(now)
+        entry = self._store.get(key)
+        if entry is None:
+            self.misses += 1
+            return None
+        expires_at, wire_resp = entry
+        if expires_at <= ts:
+            self._store.pop(key, None)
+            self.misses += 1
+            return None
+        self._store.move_to_end(key)
+        self.hits += 1
+        return bytes(query_wire[:2]) + wire_resp[2:]
+
+    def put(self, query_or_resp: bytes, response: bytes = None, ttl: int = None, now: float = None) -> bool:
+        if response is None:
+            wire_resp = bytes(query_or_resp or b"")
+            key = _packet_question_key(wire_resp)
+        else:
+            wire_resp = bytes(response or b"")
+            key = _packet_question_key(query_or_resp) if isinstance(query_or_resp, (bytes, bytearray)) else None
+            if key is None:
+                key = _packet_question_key(wire_resp)
+        if key is None or len(wire_resp) < MIN_DNS_PACKET_LEN:
+            return False
+        # Не кешируем усечённые ответы (TC=1) и ошибки кроме NOERROR/NXDOMAIN
+        if wire_resp[2] & 0x02:
+            return False
+        rcode = response_rcode(wire_resp)
+        if rcode not in (RCODE_NOERROR, RCODE_NXDOMAIN):
+            return False
+
+        if ttl is None:
+            rr_ttl = _extract_rr_min_ttl(wire_resp)
+            if rcode == RCODE_NXDOMAIN:
+                eff_ttl = rr_ttl if rr_ttl is not None else self.negative_ttl
+                eff_ttl = max(1, min(eff_ttl, self.max_ttl))
+            else:
+                if rr_ttl is None:
+                    eff_ttl = self.negative_ttl
+                elif rr_ttl <= 0:
+                    return False
+                else:
+                    eff_ttl = max(self.min_ttl, min(rr_ttl, self.max_ttl))
+        else:
+            eff_ttl = int(ttl)
+            if eff_ttl <= 0:
+                return False
+            eff_ttl = min(eff_ttl, self.max_ttl)
+
+        ts = self._now(now)
+        self._store[key] = (ts + eff_ttl, wire_resp)
+        self._store.move_to_end(key)
+        while len(self._store) > self.max_entries:
+            self._store.popitem(last=False)
+        return True
+
+    def stats(self) -> dict:
+        return {
+            "size": len(self._store),
+            "hits": self.hits,
+            "misses": self.misses,
+            "max_entries": self.max_entries,
+        }
+
+
+def parse_upstreams(spec, default_port: int = 53) -> list:
+    """Разбирает строку вида '1.1.1.1:53,8.8.8.8:53' или список в [(host, port), ...]."""
+    out = []
+    if isinstance(spec, (list, tuple)):
+        items = list(spec)
+    elif isinstance(spec, str):
+        items = [part.strip() for part in spec.split(",") if part.strip()]
+    else:
+        items = []
+
+    for item in items:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            host = str(item[0]).strip()
+            port = int(item[1])
+            if host:
+                out.append((host, port))
+            continue
+        raw = str(item or "").strip()
+        if not raw:
+            continue
+        host = raw
+        port = int(default_port)
+        if raw.startswith("[") and "]" in raw:
+            end = raw.index("]")
+            host = raw[1:end].strip()
+            rest = raw[end + 1:].strip()
+            if rest.startswith(":"):
+                port = int(rest[1:])
+        elif raw.count(":") == 1:
+            h_part, p_part = raw.rsplit(":", 1)
+            host = h_part.strip()
+            port = int(p_part.strip())
+        if host:
+            out.append((host, port))
+    return out
 
 
 class _UdpDnsSocketProtocol(asyncio.DatagramProtocol):
     """Мультиплексирует до 65536 одновременных запросов через один connected UDP-сокет."""
 
-    def __init__(self):
+    def __init__(self, upstream=None):
+        self.upstream = upstream
         self.transport = None
         self.pending = {}  # txid -> asyncio.Future
         self._next_id = 0
@@ -492,22 +694,43 @@ class _UdpDnsSocketProtocol(asyncio.DatagramProtocol):
 
 
 class UdpDnsPool:
-    """Пул постоянных connected UDP-сокетов к upstream DNS (обычно локальный dnsmasq)."""
+    """Пул постоянных connected UDP-сокетов к одному или нескольким внешним upstream DNS."""
 
-    def __init__(self, upstream_host: str, upstream_port: int, pool_size: int = 8, timeout: float = 2.5):
-        self.upstream_host = upstream_host
-        self.upstream_port = upstream_port
-        self.pool_size = max(1, pool_size)
+    def __init__(
+        self,
+        upstream_host="1.1.1.1",
+        upstream_port: int = 53,
+        pool_size: int = 8,
+        timeout: float = 2.5,
+        upstreams=None,
+        cache: DnsCache = None,
+    ):
+        if upstreams is not None:
+            parsed = parse_upstreams(upstreams, default_port=upstream_port)
+        elif isinstance(upstream_host, (list, tuple)):
+            parsed = parse_upstreams(upstream_host, default_port=upstream_port)
+        elif isinstance(upstream_host, str) and ("," in upstream_host or ":" in upstream_host):
+            parsed = parse_upstreams(upstream_host, default_port=upstream_port)
+        else:
+            parsed = [(str(upstream_host), int(upstream_port))]
+        if not parsed:
+            parsed = [("1.1.1.1", 53)]
+        self.upstreams = parsed
+        self.upstream_host, self.upstream_port = self.upstreams[0]
+        self.pool_size = max(1, int(pool_size))
         self.timeout = timeout
+        self.cache = cache
         self.protocols = []
         self._rr = 0
 
     async def start(self):
         loop = asyncio.get_running_loop()
-        for _ in range(self.pool_size):
+        total_sockets = max(self.pool_size, len(self.upstreams))
+        for i in range(total_sockets):
+            target = self.upstreams[i % len(self.upstreams)]
             _, proto = await loop.create_datagram_endpoint(
-                _UdpDnsSocketProtocol,
-                remote_addr=(self.upstream_host, self.upstream_port),
+                lambda t=target: _UdpDnsSocketProtocol(upstream=t),
+                remote_addr=target,
             )
             self.protocols.append(proto)
 
@@ -517,21 +740,11 @@ class UdpDnsPool:
                 proto.transport.close()
         self.protocols.clear()
 
-    async def query(self, wire_query: bytes, tcp_fallback: bool = True) -> bytes:
-        """Отправляет запрос по UDP; при TC=1 и tcp_fallback повторяет его по TCP.
-        Для ответов UDP-клиентам tcp_fallback=False: пусть клиент сам повторит по TCP."""
-        if len(wire_query) < MIN_DNS_PACKET_LEN or len(wire_query) > MAX_DNS_PACKET_LEN:
-            raise ValueError("invalid DNS query size")
-        if not self.protocols:
-            return await self.query_tcp(wire_query)
-
+    async def _query_proto(self, proto: _UdpDnsSocketProtocol, wire_query: bytes, tcp_fallback: bool):
         orig_id = wire_query[:2]
-        proto = self.protocols[self._rr % len(self.protocols)]
-        self._rr += 1
-
         txid = proto.allocate_txid()
         if txid < 0 or proto.transport is None:
-            return await self.query_tcp(wire_query)
+            return await self.query_tcp(wire_query, upstream=proto.upstream), True
 
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
@@ -543,36 +756,89 @@ class UdpDnsPool:
         finally:
             proto.pending.pop(txid, None)
 
-        # Возвращаем клиенту его исходный transaction ID
         resp = orig_id + resp[2:]
-
-        # TC (TrunCation, байт 2, бит 0x02): полный ответ — только по TCP
-        if tcp_fallback and len(resp) >= 4 and (resp[2] & 0x02):
+        was_tc = bool(len(resp) >= 4 and (resp[2] & 0x02))
+        if tcp_fallback and was_tc:
             try:
-                return await self.query_tcp(wire_query)
+                return await self.query_tcp(wire_query, upstream=proto.upstream), True
             except Exception:
+                return resp, True
+        return resp, was_tc
+
+    async def query(self, wire_query: bytes, tcp_fallback: bool = True, use_cache: bool = True) -> bytes:
+        """Отправляет запрос по UDP (с проверкой DnsCache и перебором апстримов при ошибке/таймауте)."""
+        if len(wire_query) < MIN_DNS_PACKET_LEN or len(wire_query) > MAX_DNS_PACKET_LEN:
+            raise ValueError("invalid DNS query size")
+        if self.cache is not None and use_cache:
+            cached = self.cache.get(wire_query)
+            if cached is not None:
+                return cached
+
+        if not self.protocols:
+            resp = await self.query_tcp(wire_query)
+            if self.cache is not None and use_cache and resp:
+                self.cache.put(wire_query, resp)
+            return resp
+
+        start_idx = self._rr
+        self._rr += 1
+        n_protos = len(self.protocols)
+        # Пробуем выбранный сокет, а при ошибке/таймауте — сокеты других апстримов
+        tried_upstreams = set()
+        last_exc = None
+        last_resp = None
+        for step in range(n_protos):
+            proto = self.protocols[(start_idx + step) % n_protos]
+            if step > 0 and proto.upstream in tried_upstreams:
+                continue
+            tried_upstreams.add(proto.upstream)
+            try:
+                resp, was_tc = await self._query_proto(proto, wire_query, tcp_fallback)
+                last_resp = resp
+                if response_rcode(resp) == RCODE_SERVFAIL and len(tried_upstreams) < len(self.upstreams):
+                    continue
+                if not was_tc and self.cache is not None and use_cache and resp:
+                    self.cache.put(wire_query, resp)
                 return resp
-        return resp
+            except Exception as exc:
+                last_exc = exc
+                continue
 
-    async def query_tcp(self, wire_query: bytes) -> bytes:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(self.upstream_host, self.upstream_port),
-            timeout=self.timeout,
-        )
-        try:
-            writer.write(frame_tcp(wire_query))
-            await asyncio.wait_for(writer.drain(), timeout=self.timeout)
-            hdr = await asyncio.wait_for(reader.readexactly(2), timeout=self.timeout)
-            (resp_len,) = struct.unpack("!H", hdr)
-            if resp_len < MIN_DNS_PACKET_LEN or resp_len > MAX_TCP_DNS_LEN:
-                raise ValueError("invalid TCP DNS response length")
-            return await asyncio.wait_for(reader.readexactly(resp_len), timeout=self.timeout)
-        finally:
-            writer.close()
+        if last_resp is not None:
+            return last_resp
+        if last_exc is not None:
+            raise last_exc
+        return await self.query_tcp(wire_query)
+
+    async def query_tcp(self, wire_query: bytes, upstream=None) -> bytes:
+        targets = [upstream] if upstream else list(self.upstreams)
+        last_exc = None
+        for host, port in targets:
             try:
-                await writer.wait_closed()
-            except Exception:
-                pass
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port),
+                    timeout=self.timeout,
+                )
+                try:
+                    writer.write(frame_tcp(wire_query))
+                    await asyncio.wait_for(writer.drain(), timeout=self.timeout)
+                    hdr = await asyncio.wait_for(reader.readexactly(2), timeout=self.timeout)
+                    (resp_len,) = struct.unpack("!H", hdr)
+                    if resp_len < MIN_DNS_PACKET_LEN or resp_len > MAX_TCP_DNS_LEN:
+                        raise ValueError("invalid TCP DNS response length")
+                    return await asyncio.wait_for(reader.readexactly(resp_len), timeout=self.timeout)
+                finally:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+            except Exception as exc:
+                last_exc = exc
+                continue
+        if last_exc is not None:
+            raise last_exc
+        raise ConnectionError("no upstreams available")
 
 
 # =============================================================================

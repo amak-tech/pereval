@@ -92,23 +92,27 @@ SERVICES_JSON_DEFAULT = Path("web") / "src" / "generated" / "services.json"
 
 
 class Pool:
-    def __init__(self, name, note="", fallback=None, strict_allowlist=False):
+    def __init__(self, name, note="", fallback=None, strict_allowlist=False, max_clients=None):
         self.name = name
         self.note = note
         self.fallback = fallback
         self.strict_allowlist = strict_allowlist
+        self.max_clients = max_clients
 
     def as_dict(self):
-        return OrderedDict([
+        d = OrderedDict([
             ("note", self.note),
             ("fallback", self.fallback),
             ("strict_allowlist", bool(self.strict_allowlist)),
         ])
+        if self.max_clients is not None:
+            d["max_clients"] = self.max_clients
+        return d
 
 
 class WorkerNode:
     def __init__(self, ip, name="", weight=1, pools=None, ssh_user=None, ssh_user_env=None,
-                 ssh_key=None, ssh_key_env=None, ssh_port=None, secret_env=None):
+                 ssh_key=None, ssh_key_env=None, ssh_port=None, secret_env=None, max_clients=None):
         self.ip = ip
         self.name = name
         self.weight = weight
@@ -122,6 +126,7 @@ class WorkerNode:
         # По умолчанию deploy.sh берёт <NAME>_SECRET (имя в верхнем регистре, «-» → «_»),
         # а если её нет — общий PRO_WORKER_SECRET.
         self.secret_env = secret_env
+        self.max_clients = max_clients
 
     def default_secret_env(self, idx=1):
         """Имя env-переменной секрета по умолчанию: pro-worker-ai-1 -> PRO_WORKER_AI_1_SECRET."""
@@ -137,6 +142,8 @@ class WorkerNode:
             ("weight", self.weight),
             ("pools", list(self.pools)),
         ])
+        if self.max_clients is not None:
+            d["max_clients"] = self.max_clients
         if with_ssh:
             d["ssh_user"] = self.ssh_user
             d["ssh_user_env"] = self.ssh_user_env
@@ -153,6 +160,7 @@ class Cluster:
     def __init__(self):
         self.pools = OrderedDict([(poolrouting.DEFAULT_POOL, Pool(poolrouting.DEFAULT_POOL))])
         self.workers = []
+        self.max_clients = None
 
     def pools_dict(self):
         return poolrouting.normalize_pools(OrderedDict((n, p.as_dict()) for n, p in self.pools.items()))
@@ -366,6 +374,7 @@ def _parse_pools(raw, where, cluster):
             note=str(praw.get("note") or "").strip(),
             fallback=_opt_str(praw, "fallback", "%s: pools.%s" % (where, pname)),
             strict_allowlist=_opt_bool(praw, "strict_allowlist", "%s: pools.%s" % (where, pname)),
+            max_clients=_opt_int(praw, "max_clients", "%s: pools.%s" % (where, pname), default=None),
         )
     if poolrouting.DEFAULT_POOL not in cluster.pools:
         cluster.pools[poolrouting.DEFAULT_POOL] = Pool(poolrouting.DEFAULT_POOL)
@@ -400,6 +409,7 @@ def _parse_workers(raw, where, cluster):
                 ssh_key_env=_opt_str(wraw, "ssh_key_env", wwhere),
                 ssh_port=_opt_int(wraw, "ssh_port", wwhere, default=None),
                 secret_env=_opt_str(wraw, "secret_env", wwhere),
+                max_clients=_opt_int(wraw, "max_clients", wwhere, default=None),
             ))
         else:
             raise ParseError("%s: ожидался словарь или строка с IP" % wwhere)
@@ -464,6 +474,7 @@ def parse(path):
         probe_sni = _opt_str(nodes_raw, "probe_sni", where)
         if probe_sni:
             doc.nodes.probe_sni = probe_sni.lower()
+        doc.nodes.max_clients = _opt_int(nodes_raw, "max_clients", where, default=None)
         _parse_pools(nodes_raw.get("pools"), where, doc.nodes)
         _parse_workers(nodes_raw.get("workers"), where, doc.nodes)
 
@@ -497,6 +508,7 @@ def parse(path):
         doc.pro.domain = (_need(pro_raw, "domain", where, str).strip().lower())
         doc.pro.dns_ip = _need(pro_raw, "dns_ip", where, str).strip()
         doc.pro.cp_ip = _opt_str(pro_raw, "cp_ip", where)
+        doc.pro.max_clients = _opt_int(pro_raw, "max_clients", where, default=None)
         _parse_pools(pro_raw.get("pools"), where, doc.pro)
         _parse_workers(_need(pro_raw, "workers", where, list), where, doc.pro)
         doc.pro.categories = _parse_categories(pro_raw.get("categories"), where, "pro")
@@ -523,6 +535,8 @@ def _is_placeholder_ip(ip):
 
 def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
     """Проверяет воркеры и пулы одного кластера (Free или Pro)."""
+    if cluster.max_clients is not None and cluster.max_clients < 1:
+        errors.append("%s: max_clients должен быть >= 1" % label)
     pools = cluster.pools
     seen_worker_ips = set()
     for w in cluster.workers:
@@ -540,6 +554,8 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
                             % (label, w.name, w.ip))
         if w.weight < 1:
             errors.append("%s: вес (weight) воркера «%s» (%s) должен быть >= 1" % (label, w.name, w.ip))
+        if w.max_clients is not None and w.max_clients < 1:
+            errors.append("%s: max_clients воркера «%s» (%s) должен быть >= 1" % (label, w.name, w.ip))
         if not w.pools:
             errors.append("%s: у воркера «%s» пустой список pools" % (label, w.name))
         for pname in w.pools:
@@ -564,6 +580,8 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
     for pname, pool in pools.items():
         if not SLUG_RE.match(pname):
             errors.append("%s: имя пула «%s» должно соответствовать %s" % (label, pname, SLUG_RE.pattern))
+        if pool.max_clients is not None and pool.max_clients < 1:
+            errors.append("%s: max_clients пула «%s» должен быть >= 1" % (label, pname))
         if pool.fallback and pool.fallback not in pools:
             errors.append("%s: пул «%s» ссылается на неизвестный fallback «%s»" % (label, pname, pool.fallback))
         # цикл fallback
@@ -803,6 +821,7 @@ def cluster_nodes_json(doc, primary_ip):
         ("cert_domains", cert_domains(doc)),
         ("include_primary_in_dns", bool(doc.nodes.include_primary_in_dns)),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
+        ("max_clients", doc.nodes.max_clients),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.nodes.pools.items())),
         ("workers", [w.as_dict(idx) for idx, w in enumerate(doc.active_workers(primary_ip), 1)]),
     ])
@@ -817,8 +836,45 @@ def pro_nodes_json(doc):
         ("site_origin", doc.meta.get("origin", "").rstrip("/")),
         ("cert_domains", cert_domains(doc)),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
+        ("max_clients", doc.pro.max_clients),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.pro.pools.items())),
         ("workers", [w.as_dict(idx) for idx, w in enumerate(doc.pro.workers, 1)]),
+    ])
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+def free_policy_map_json(doc, primary_ip):
+    """Карта доменов и пулов для pro_dns.py --tier free (каталог Free + passthrough)."""
+    cats = list(doc.categories)
+    domains = OrderedDict()
+    for d, c, s in doc.active(cats):
+        domains[d] = OrderedDict([
+            ("service", s.name),
+            ("category_id", c.id),
+            ("tier", c.tier),
+            ("pool", effective_pool(c, s)),
+        ])
+    domain = extract_domain(doc)
+    payload = OrderedDict([
+        ("tier", "free"),
+        ("domain", domain),
+        ("free_domains", free_domains(doc)),
+        ("dns_ip", primary_ip),
+        ("primary", primary_ip),
+        ("include_primary_in_dns", bool(doc.nodes.include_primary_in_dns)),
+        ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
+        ("max_clients", doc.nodes.max_clients),
+        ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.nodes.pools.items())),
+        ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.active_workers(primary_ip), 1)]),
+        ("categories", [
+            OrderedDict([
+                ("id", c.id), ("name", c.name), ("tier", c.tier),
+                ("pool", c.pool or poolrouting.DEFAULT_POOL),
+                ("service_count", len(c.services)), ("domain_count", c.count),
+            ]) for c in cats
+        ]),
+        ("passthrough", sorted(set(doc.passthrough.domains))),
+        ("domains", domains),
     ])
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
@@ -835,9 +891,11 @@ def pro_policy_map_json(doc):
             ("pool", effective_pool(c, s)),
         ])
     payload = OrderedDict([
+        ("tier", "pro"),
         ("domain", doc.pro.domain),
         ("dns_ip", doc.pro.dns_ip),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
+        ("max_clients", doc.pro.max_clients),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.pro.pools.items())),
         ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.pro.workers, 1)]),
         ("categories", [
@@ -847,6 +905,7 @@ def pro_policy_map_json(doc):
                 ("service_count", len(c.services)), ("domain_count", c.count),
             ]) for c in cats
         ]),
+        ("passthrough", sorted(set(doc.passthrough.domains))),
         ("domains", domains),
     ])
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -880,6 +939,7 @@ def services_json(doc, primary_ip):
             ("dns_ip", doc.pro.dns_ip),
             ("doh_url_template", "https://%s/dns/{token}" % doc.pro.domain),
             ("dot_host_template", "{token}.%s" % doc.pro.domain),
+            ("max_clients", doc.pro.max_clients),
             ("pools", pools_dict(doc.pro)),
             ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.pro.workers, 1)]),
         ])
@@ -895,6 +955,7 @@ def services_json(doc, primary_ip):
             ("dns_ip", primary_ip),
             ("doh_url", "https://%s/dns-query" % free_domain),
             ("dot_host", free_domain),
+            ("max_clients", doc.nodes.max_clients),
             ("pools", pools_dict(doc.nodes)),
             ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.active_workers(primary_ip), 1)]),
         ])),
@@ -1189,6 +1250,7 @@ def main(argv=None):
         rendered = [(out_name, render(tpl_dir, tpl_name, values)) for tpl_name, out_name, _ in TEMPLATES]
         rendered.append(("service-map.json", values["service_map_json"]))
         rendered.append(("cluster-nodes.json", values["cluster_nodes_json"]))
+        rendered.append(("free-policy-map.json", free_policy_map_json(doc, ip)))
         rendered.extend(strict_pool_maps(doc, doc.nodes, doc.categories, ""))
         if doc.pro.enabled:
             pv = pro_values(doc, values)

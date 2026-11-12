@@ -13,6 +13,13 @@ import { accessUntil, addPeriod, type DnsMode } from "@/lib/subscription";
 import { createNode } from "@/lib/nodes";
 import { removeBoundIp, rotateToken } from "@/lib/account";
 import { daysLeft, loadPublishedCert } from "@/lib/cert";
+import { setSetting } from "@/lib/settings";
+import {
+  getDefaultNodeMaxClients,
+  getNodeWatchStatus,
+  NODE_MAX_CLIENTS_SETTING_KEY,
+  type NodeWatchReport,
+} from "@/jobs/nodewatch";
 import type { NodeKind, SubscriptionStatus } from "@/lib/db/schema";
 import { NODE_KINDS } from "@/lib/admin-constants";
 
@@ -104,6 +111,7 @@ export type AdminOverview = {
   mail: { pending: number; failed: number };
   webhooks: { errors7d: number; total7d: number };
   nodes: { id: string; name: string; kind: string; ip: string | null; enabled: boolean; lastSeenAt: Date | null; stale: boolean }[];
+  nodewatch: NodeWatchReport | null;
   cert: { daysLeft: number | null; notAfter: Date | null; names: string[] } | null;
   versions: { policy: number; acl: number };
   aclDynamic: number;
@@ -118,7 +126,7 @@ export async function adminOverview(now: Date = new Date()): Promise<AdminOvervi
   const monthAgo = new Date(now.getTime() - 30 * 86_400_000);
   const count = dsql<number>`count(*)::int`;
 
-  const [[total], [new24h], [new7d], subsRows, states, [dns], revenue, [leads], mail, [wh], nodes, cert, policyV, aclV, [acl], audit] = await Promise.all([
+  const [[total], [new24h], [new7d], subsRows, states, [dns], revenue, [leads], mail, [wh], nodes, nodewatch, cert, policyV, aclV, [acl], audit] = await Promise.all([
     db().select({ n: count }).from(schema.users),
     db().select({ n: count }).from(schema.usersMeta).where(gt(schema.usersMeta.createdAt, dayAgo)),
     db().select({ n: count }).from(schema.usersMeta).where(gt(schema.usersMeta.createdAt, weekAgo)),
@@ -148,6 +156,7 @@ export async function adminOverview(now: Date = new Date()): Promise<AdminOvervi
       .from(schema.webhookEvents)
       .where(gt(schema.webhookEvents.receivedAt, weekAgo)),
     db().select().from(schema.nodes).orderBy(asc(schema.nodes.kind), asc(schema.nodes.name)),
+    getNodeWatchStatus().catch(() => null),
     loadPublishedCert().catch(() => null),
     policyVersion(),
     aclVersion(),
@@ -176,6 +185,7 @@ export async function adminOverview(now: Date = new Date()): Promise<AdminOvervi
       lastSeenAt: n.lastSeenAt,
       stale: n.enabled && (!n.lastSeenAt || now.getTime() - n.lastSeenAt.getTime() > NODE_STALE_MS),
     })),
+    nodewatch,
     cert: cert ? { daysLeft: daysLeft(cert.notAfter, now), notAfter: cert.notAfter, names: cert.names } : null,
     versions: { policy: policyV, acl: aclV },
     aclDynamic: acl?.n ?? 0,
@@ -527,6 +537,18 @@ export async function pushToNodes(admin: Admin, what: "policy" | "acl"): Promise
   const v = what === "policy" ? await bumpPolicyVersion("admin.push") : await bumpAclVersion("admin.push");
   await audit(admin, `admin.push_${what}`, { version: v });
   return v;
+}
+
+export { getDefaultNodeMaxClients, getNodeWatchStatus };
+
+export async function setNodeMaxClients(admin: Admin, maxClients: number): Promise<{ maxClients: number }> {
+  const n = Math.floor(maxClients);
+  if (!Number.isFinite(n) || n < 1 || n > 100_000) {
+    throw new HttpError(400, "Порог клиентов должен быть от 1 до 100 000.", "bad_max_clients");
+  }
+  await setSetting(NODE_MAX_CLIENTS_SETTING_KEY, n);
+  await audit(admin, "admin.node_max_clients", { maxClients: n });
+  return { maxClients: n };
 }
 
 // ---------------------------------------------------------------- почта
