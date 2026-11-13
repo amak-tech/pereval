@@ -649,8 +649,8 @@ pro:
     media:
       note: Стриминги и TikTok Pro — тяжёлый трафик.
       fallback: default
-    reserve:
-      note: Карантин — воркер выведен из обслуживания (его выходной IP Google относит к RU/недоступному региону; см. YouTube "GL" перед вводом в пул ai).
+#    reserve:
+#      note: Карантин — воркер выведен из обслуживания (его выходной IP Google относит к RU/недоступному региону; см. YouTube "GL" перед вводом в пул ai).
   workers:
     # Каждый Pro-воркер — отдельная нода в CP со своим Bearer-секретом (pnpm admin node add <name> pro_worker <ip>).
     # deploy.sh берёт секрет из env-переменной secret_env (по умолчанию <NAME>_SECRET: pro-worker-ai-1 →
