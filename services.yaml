@@ -655,12 +655,12 @@ pro:
     # Каждый Pro-воркер — отдельная нода в CP со своим Bearer-секретом (pnpm admin node add <name> pro_worker <ip>).
     # deploy.sh берёт секрет из env-переменной secret_env (по умолчанию <NAME>_SECRET: pro-worker-ai-1 →
     # PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET. Переменные пробрасывает deploy.yml.
-    - ip: 141.11.197.214                   # VPS pro-worker-default-1 — общий пул (+ media и временно ai через тот же воркер)
+    - ip: 141.11.197.239                   # VPS pro-worker-default-1 — общий пул (+ media и временно ai через тот же воркер)
       name: pro-worker-default-1
-      pools: [ default, media, ai ]
-    - ip: 141.11.197.239                   # VPS pro-worker-ai-1 — в карантине: 151.247.25.133 и 141.11.197.239 Google считает RU, Gemini отдаёт «регион недоступен»
+      pools: [ default, media ]
+    - ip: 141.11.197.214                   # VPS pro-worker-ai-1 — в карантине: 151.247.25.133 и 141.11.197.239 Google считает RU, Gemini отдаёт «регион недоступен»
       name: pro-worker-ai-1
-      pools: [ reserve ]
+      pools: [ ai ]
   categories:
     # Каталог Pro намеренно короткий: только сервисы, геоблок которых подтверждён пробами
     # из РФ (Yandex Cloud) и РБ (Белтелеком) против эталона с нидерландского воркера 2026-11-10,
