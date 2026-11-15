@@ -56,7 +56,7 @@ export default function DedicatedPage() {
                 <strong>Все домашние устройства сразу:</strong> ноутбуки, смартфоны, планшеты, Smart TV и игровые приставки (Xbox без ошибки <code>0x80a40401</code>, PlayStation) без установки VPN на каждое устройство.
               </li>
               <li>
-                <strong>Музыка, видео, учёба и игры без ограничений:</strong> Spotify, Netflix, Twitch (1080p), TikTok, Supercell (Brawl Stars, Clash Royale), Canva, Notion, Coursera и ChatGPT работают у всей семьи.
+                <strong>Музыка, видео, учёба и игры:</strong> Spotify, Twitch (1080p), TikTok, Supercell (Brawl Stars, Clash Royale), Canva, Notion, Coursera и ChatGPT работают у всей семьи.
               </li>
               <li>
                 <strong>Российские сервисы не ломаются:</strong> Кинопоиск, Госуслуги, банковские приложения и умный дом продолжают работать напрямую через вашего провайдера.
@@ -100,7 +100,7 @@ export default function DedicatedPage() {
         </div>
         <div className="note mt-5 [&_p]:m-0" role="note">
           <p>
-            <strong>Полная приватность на уровне архитектуры.</strong> Даже на выделенном управляемом сервере используется прозрачный TLS SNI-маршрутизатор без расшифровки трафика (без установки корневых CA-сертификатов). Все соединения вашей семьи или сотрудников с OpenAI, Anthropic, Spotify, Netflix, Notion, Miro или банками остаются зашифрованными от устройства до конечного сервиса.
+            <strong>Полная приватность на уровне архитектуры.</strong> Даже на выделенном управляемом сервере используется прозрачный TLS SNI-маршрутизатор без расшифровки трафика (без установки корневых CA-сертификатов). Все соединения вашей семьи или сотрудников с OpenAI, Anthropic, Spotify, Notion, Miro или банками остаются зашифрованными от устройства до конечного сервиса.
           </p>
         </div>
       </Section>

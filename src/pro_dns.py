@@ -410,7 +410,7 @@ class WorkerHealth:
 class ActivityTracker:
     """Копит ACL-события и активность по (token, user_id, ip_hash) для POST в CP."""
 
-    def __init__(self, salt_seed: str, max_ips_per_day: int = 20,
+    def __init__(self, salt_seed: str, max_ips_per_day: int = 60,
                  acl_interval: float = ACL_REPORT_INTERVAL, max_entries: int = 50000):
         self.salt_seed = salt_seed
         self.max_ips_per_day = max(1, int(max_ips_per_day))
@@ -1521,8 +1521,8 @@ def parse_args(argv=None):
                    help="дефолтный порог активных клиентов на ноду (переопределяется из policy-map)")
     g.add_argument("--quota-ttl", type=float, default=300.0,
                    help="окно жизни привязки клиента к слоту ноды в секундах (по умолчанию 300)")
-    g.add_argument("--max-ips-per-day", type=int, default=20,
-                   help="порог разных IP у токена за сутки UTC для алерта too_many_ips (по умолчанию 20)")
+    g.add_argument("--max-ips-per-day", type=int, default=60,
+                   help="порог разных IP у токена за сутки UTC для алерта too_many_ips (по умолчанию 60)")
 
     g = p.add_argument_group("лимиты соединений")
     g.add_argument("--tcp-idle-timeout", type=float, default=20.0, help="таймаут простоя TCP/DoT соединения (по умолчанию 20 с)")

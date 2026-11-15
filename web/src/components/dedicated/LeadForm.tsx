@@ -20,7 +20,7 @@ const SERVICES: { value: string; checked?: boolean }[] = [
   { value: "Canva / Adobe", checked: true },
   { value: "Grammarly / Coursera" },
   { value: "Spotify", checked: true },
-  { value: "Netflix / Twitch 1080p" },
+  { value: "Twitch 1080p" },
   { value: "TikTok (актуальная лента)" },
   { value: "Supercell (Brawl Stars / Clash)" },
   { value: "Xbox / PlayStation / GeForce NOW" },

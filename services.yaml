@@ -567,6 +567,16 @@ disabled:
       - searchnotifications-pa.clients6.google.com
       - searchnotifications-pa.googleapis.com
       - suggestqueries.google.com
+  - name: Netflix
+    note: >-
+      По логам Pro-воркеров после подключений к Netflix у клиентов из РФ наблюдались длительные
+      обрывы соединений, из-за которых переставали открываться и другие сервисы. Netflix временно
+      исключён из маршрутизации; первопричина на сетевом пути требует отдельной проверки.
+    domains:
+      - netflix.com
+      - nflxext.com
+      - nflximg.net
+      - nflxso.net
   - name: Сообщается, но не подтверждено
     note: >-
       О региональных ограничениях сообщают, но подтвердить не удалось. Обычно это значит, что
@@ -677,15 +687,6 @@ pro:
             - spotifycdn.com
             - spotifycdn.net
             - spoti.fi
-        - name: Netflix                      # закрыт для РФ; оплата из РФ невозможна, поэтому не в заголовках
-          # Видео-CDN nflxvideo.net намеренно не проксируется: регион определяется
-          # на netflix.com, а сам поток идёт напрямую с Open Connect — так работают
-          # классические Smart DNS и не расходуется канал воркера.
-          domains:
-            - netflix.com
-            - nflxext.com
-            - nflximg.net
-            - nflxso.net
         - name: Twitch                       # не геоблок, а замедление у провайдеров РФ: через воркер идёт 1080p
           domains:
             - twitch.tv

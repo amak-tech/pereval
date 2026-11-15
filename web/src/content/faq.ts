@@ -60,7 +60,7 @@ export const HOME_FAQ: FaqItem[] = [
   },
   {
     q: `Что даёт подписка ${name} Pro?`,
-    a: `Отдельные быстрые серверы без вечерних перегрузок и расширенный каталог: рабочие инструменты (Notion, Miro, Canva, Adobe, Airtable, Grammarly), музыка и видео (Spotify, Netflix, Twitch, TikTok) и игры (Supercell, Xbox, PlayStation). Персональные адреса DoH / DoT и готовые профили выдаются в личном кабинете. Подробности — на странице <a href="/pro">${name} Pro</a>.`,
+    a: `Отдельные быстрые серверы без вечерних перегрузок и расширенный каталог: рабочие инструменты (Notion, Miro, Canva, Adobe, Airtable, Grammarly), музыка и видео (Spotify, Twitch, TikTok) и игры (Supercell, Xbox, PlayStation). Персональные адреса DoH / DoT и готовые профили выдаются в личном кабинете. Подробности — на странице <a href="/pro">${name} Pro</a>.`,
   },
 ];
 
