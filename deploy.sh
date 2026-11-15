@@ -1249,7 +1249,9 @@ import json, sys
 pro = json.load(open(sys.argv[1], encoding="utf-8"))
 out = {"primary": pro.get("dns_ip"), "domain": pro.get("domain"), "include_primary_in_dns": False,
        "probe_sni": pro.get("probe_sni") or "claude.ai", "pools": pro.get("pools") or {},
-       "workers": [{k: w.get(k) for k in ("ip", "name", "weight", "pools")} for w in pro.get("workers") or []]}
+       "workers": [{k: w.get(k) for k in ("ip", "name", "weight", "pools")} for w in pro.get("workers") or []],
+       # control plane (nodewatch опрашивает /node-stats.json) и DNS-нода — не клиенты
+       "ignore_ips": [ip for ip in (pro.get("dns_ip"), pro.get("cp_ip")) if ip]}
 json.dump(out, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PYC
 	install -m 0644 "$STAGE/pro-worker-nginx.conf" "$NGINX_DST"

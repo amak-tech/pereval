@@ -393,6 +393,11 @@ class StatsCollector:
         ignored = {"127.0.0.1", "::1"}
         if primary_ip:
             ignored.add(primary_ip)
+        # служебные адреса (control plane, DNS-нода): их опрос /node-stats.json и пробы — не клиенты
+        for raw in cfg.get("ignore_ips") or []:
+            clean = extract_ip_only(str(raw or "").strip())
+            if clean:
+                ignored.add(clean)
 
         workers = []
         for item in cfg.get("workers") or []:

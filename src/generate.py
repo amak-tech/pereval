@@ -825,6 +825,10 @@ def cluster_nodes_json(doc, primary_ip):
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.nodes.pools.items())),
         ("workers", [w.as_dict(idx) for idx, w in enumerate(doc.active_workers(primary_ip), 1)]),
     ])
+    # control plane опрашивает /node-stats.json воркеров (nodewatch) — stats_collector не считает его клиентом
+    cp_ip = getattr(getattr(doc, "pro", None), "cp_ip", None)
+    if cp_ip:
+        payload["ignore_ips"] = [cp_ip]
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
