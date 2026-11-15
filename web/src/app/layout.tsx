@@ -45,6 +45,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const ga = process.env.GA_MEASUREMENT_ID ?? "G-3BY15ZZD8D";
   const gtm = process.env.GTM_CONTAINER_ID ?? "GTM-NKC68GDT";
+  const ymRaw = process.env.YM_COUNTER_ID ?? "114262096";
+  const ym = /^\d+$/.test(ymRaw) ? Number(ymRaw) : null;
   return (
     <html lang="ru" className={inter.variable}>
       <body className="min-h-dvh flex flex-col">
@@ -67,6 +69,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Script id="gtag-init" strategy="afterInteractive">
               {`window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());${ga ? `gtag('config', '${ga}');` : ""}`}
             </Script>
+          </>
+        ) : null}
+        {ym ? (
+          <>
+            {/* Yandex.Metrika counter */}
+            <Script id="yandex-metrika" strategy="afterInteractive">
+              {`(function(m,e,t,r,i,k,a){
+    m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+    m[i].l=1*new Date();
+    for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+    k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+})(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=${ym}', 'ym');
+
+window.__YM_COUNTER_ID = ${ym};
+ym(${ym}, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});`}
+            </Script>
+            <noscript>
+              <div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`https://mc.yandex.ru/watch/${ym}`} style={{ position: "absolute", left: "-9999px" }} alt="" />
+              </div>
+            </noscript>
           </>
         ) : null}
       </body>

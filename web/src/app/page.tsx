@@ -15,7 +15,7 @@ import { StickyCta } from "@/components/home/StickyCta";
 import { PlansSection } from "@/components/plans/PlansSection";
 import { HOME_FAQ } from "@/content/faq";
 import { SITE } from "@/content/site";
-import { catalog, freeCategories } from "@/lib/catalog";
+import { catalog, freeCategories, proCategories } from "@/lib/catalog";
 
 const TITLE = `${SITE.name} — ChatGPT, Claude и Gemini без VPN: Smart DNS`;
 const DESCRIPTION = `Бесплатный Smart DNS: ChatGPT, Claude, Gemini, Cursor и JetBrains без VPN, а российские сайты и банки работают напрямую. Настройка за минуту, без программ.`;
@@ -103,8 +103,8 @@ export default function HomePage() {
         <ConnectivityCheck />
       </Section>
 
-      <Section id="services" eyebrow="Каталог" title="Какие сервисы охвачены" lead={`${counts.free_services} сервисов в ${counts.free_categories} категориях — ${counts.free_domains} базовых доменов и все их поддомены. Нужны Notion, Miro, Canva, Spotify, TikTok или игровые сервисы — они в каталоге Pro.`}>
-        <ServiceCatalog categories={freeCategories()} telegram={SITE.telegram} />
+      <Section id="services" eyebrow="Каталог" title="Какие сервисы охвачены" lead={`${counts.free_services} сервисов в ${counts.free_categories} категориях — ${counts.free_domains} базовых доменов и все их поддомены. Нужны Notion, Miro, Canva, Spotify, TikTok или игровые сервисы — они в каталоге Pro (и тоже ищутся ниже).`}>
+        <ServiceCatalog categories={freeCategories()} proCategories={proCategories()} siteName={name} telegram={SITE.telegram} />
       </Section>
 
       <Section id="request" eyebrow="Не нашли сервис?" title="Предложите домен — добавим за пару минут">

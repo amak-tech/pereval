@@ -87,3 +87,55 @@ export function totalServices(): number {
 export function totalDomains(): number {
   return catalog.counts.free_domains + catalog.counts.pro_domains;
 }
+
+/** Извлекает нормализованный хост из поисковой строки (поддерживает вставку полного URL или поддомена). */
+export function normalizeSearchHost(raw: string): string {
+  let s = raw.trim().toLowerCase();
+  if (!s) return "";
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+  const slashIdx = s.indexOf("/");
+  if (slashIdx !== -1) s = s.slice(0, slashIdx);
+  const qIdx = s.indexOf("?");
+  if (qIdx !== -1) s = s.slice(0, qIdx);
+  const hashIdx = s.indexOf("#");
+  if (hashIdx !== -1) s = s.slice(0, hashIdx);
+  const colonIdx = s.indexOf(":");
+  if (colonIdx !== -1) s = s.slice(0, colonIdx);
+  return s.replace(/^\.+|\.+$/g, "");
+}
+
+/** Проверяет совпадение сервиса с поисковым запросом по названию, домену или любому поддомену/URL. */
+export function matchesCatalogService(service: CatalogService, rawQuery: string): boolean {
+  const needle = rawQuery.trim().toLowerCase();
+  if (!needle) return true;
+  if (service.name.toLowerCase().includes(needle)) return true;
+
+  const hostNeedle = normalizeSearchHost(rawQuery);
+  const hasDot = needle.includes(".");
+  return service.domains.some((rawDomain) => {
+    const d = rawDomain.toLowerCase();
+    if (hostNeedle && (hostNeedle === d || hostNeedle.endsWith(`.${d}`))) {
+      return true;
+    }
+    if (hasDot) {
+      return d.includes(needle) || Boolean(hostNeedle && d.includes(hostNeedle));
+    }
+    return d.split(".").some((label) => label.startsWith(needle));
+  });
+}
+
+/** Фильтрует список категорий по поисковому запросу и (опционально) выбранному id категории. */
+export function filterCatalogCategories(
+  categories: CatalogCategory[],
+  rawQuery: string,
+  categoryId = "all",
+): CatalogCategory[] {
+  const hasQuery = rawQuery.trim().length > 0;
+  return categories
+    .filter((c) => categoryId === "all" || c.id === categoryId)
+    .map((c) => ({
+      ...c,
+      services: hasQuery ? c.services.filter((s) => matchesCatalogService(s, rawQuery)) : c.services,
+    }))
+    .filter((c) => c.services.length > 0);
+}

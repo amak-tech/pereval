@@ -51,6 +51,7 @@ const schema = z.object({
   SELLER_LEGAL: z.string().default(""),
   TRUSTED_PROXY_IPS: z.string().default("127.0.0.1"),
   GA_MEASUREMENT_ID: z.string().default("G-3BY15ZZD8D"),
+  YM_COUNTER_ID: z.string().default("114262096"),
 });
 
 export type Env = z.infer<typeof schema>;

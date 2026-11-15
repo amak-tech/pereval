@@ -1,11 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CircleCheck, CircleX, RefreshCw } from "lucide-react";
 import type { ClusterHealth, ProHealth, StatsResponse, TopService, WorkerHealth } from "@/components/stats/types";
 import { fmtAgo, fmtBytes, fmtNum } from "@/components/stats/format";
+import { track } from "@/components/track";
 import { poolLabel } from "@/lib/catalog";
+import { evaluateFreeClusterLoad } from "@/lib/cluster-load";
 
 const POLL_MS = 5000;
 
@@ -71,6 +74,18 @@ export function StatsDashboard({ freeDomain, proDomain, serviceCount }: { freeDo
 
   const genAgo = stats?.generated_at ? Math.max(0, now / 1000 - stats.generated_at) : null;
   const dataStale = genAgo !== null && genAgo > 120;
+  const minuteBucket = Math.floor(now / 60_000);
+  const freeLoad = useMemo(
+    () =>
+      stats && typeof live.online_users_5m === "number"
+        ? evaluateFreeClusterLoad({
+            onlineUsers5m: live.online_users_5m,
+            cluster: data?.cluster ?? null,
+            now: new Date(minuteBucket * 60_000),
+          })
+        : null,
+    [stats, live.online_users_5m, data?.cluster, minuteBucket],
+  );
 
   return (
     <div className="grid gap-6">
@@ -97,8 +112,52 @@ export function StatsDashboard({ freeDomain, proDomain, serviceCount }: { freeDo
         </div>
       ) : null}
 
+      {freeLoad?.isHighLoad ? (
+        <aside
+          className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-warn bg-warn-bg p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
+          aria-label="Рекомендация при высокой нагрузке"
+        >
+          <div>
+            <p className="m-0 flex items-center gap-2 text-sm font-semibold text-warn">
+              <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+                <span className="absolute inline-flex h-full w-full rounded-full bg-warn opacity-60 motion-safe:animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-warn" />
+              </span>
+              {freeLoad.upsellMessage.replace(/\s*→$/, "")} ({freeLoad.loadPercent}%)
+            </p>
+            <p className="m-0 mt-1 text-sm text-mute">
+              Сейчас активны {fmtNum(freeLoad.online)} из {fmtNum(freeLoad.maxClients)} расчётных клиентских мест бесплатного кластера. В подписке Pro работают отдельные незагруженные серверы без вечерних просадок, а также открыты Notion, Miro, Canva, Spotify, TikTok и игры.
+            </p>
+          </div>
+          <Link
+            href="/pro#buy"
+            onClick={() =>
+              track("pro_upsell_click", {
+                source: "stats_high_load",
+                load_pct: freeLoad.loadPercent,
+                evening_msk: freeLoad.isEveningMsk,
+              })
+            }
+            className="btn-primary shrink-0 !px-4 !py-2.5 !text-sm"
+          >
+            Подключить Pro →
+          </Link>
+        </aside>
+      ) : null}
+
       <section aria-label="Ключевые показатели" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Пользователей онлайн" hint="за 5 минут" value={fmtNum(live.online_users_5m)} unit="уник. IP" sub={[`За 1 ч: ${fmtNum(live.unique_users_1h)}`, `За 24 ч: ${fmtNum(live.unique_users_24h)}`]} loading={!stats} />
+        <StatTile
+          label="Пользователей онлайн"
+          hint="за 5 минут"
+          value={fmtNum(live.online_users_5m)}
+          unit="уник. IP"
+          sub={[
+            `За 1 ч: ${fmtNum(live.unique_users_1h)}`,
+            `За 24 ч: ${fmtNum(live.unique_users_24h)}`,
+            ...(freeLoad ? [`Загрузка Free: ${freeLoad.loadPercent}%`] : []),
+          ]}
+          loading={!stats}
+        />
         <StatTile label="Активных соединений" hint="TCP :443 / :80" value={fmtNum(live.active_connections)} sub={[`Запросов сейчас: ${fmtNum(live.requests_current_min)}/мин`, `Пик за час: ${fmtNum(live.peak_requests_1m)}/мин`]} loading={!stats} />
         <StatTile label="Запросов за час" hint="сессий прокси" value={fmtNum(live.requests_1h)} sub={[`За 24 ч: ${fmtNum(live.requests_24h)}`, `Пик в час: ${fmtNum(live.peak_requests_1h)}`]} loading={!stats} />
         <StatTile label="Трафик за 24 часа" hint="через прокси" value={fmtBytes(live.bytes_24h)} sub={[`За 1 ч: ${fmtBytes(live.bytes_1h)}`, `↑ ${fmtBytes(live.bytes_sent_24h)} · ↓ ${fmtBytes(live.bytes_recv_24h)}`]} loading={!stats} />
