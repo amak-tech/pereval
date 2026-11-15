@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Download } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Download } from "lucide-react";
 import { CopyField } from "@/components/CopyButton";
 import type { WizardTab } from "@/components/home/SetupWizard";
 
@@ -7,7 +8,14 @@ import type { WizardTab } from "@/components/home/SetupWizard";
  * Содержимое вкладок мастера настройки (рендерится на сервере, попадает в статический HTML).
  * Каждая вкладка — 2–4 коротких шага; альтернативные способы спрятаны в <details>.
  */
-export type SetupValues = { name: string; ip: string; doh: string; dot: string; profilePath: string };
+export type SetupValues = {
+  name: string;
+  ip: string;
+  doh: string;
+  dot: string;
+  profilePath: string;
+  isProTemplate?: boolean;
+};
 
 function Steps({ children }: { children: ReactNode }) {
   return <ol className="m-0 grid list-none gap-3 p-0 [counter-reset:step]">{children}</ol>;
@@ -47,10 +55,29 @@ function Hint({ children }: { children: ReactNode }) {
 }
 
 function ProfileButton({ v, platform }: { v: SetupValues; platform: string }) {
+  if (v.isProTemplate) {
+    return (
+      <a className="btn-primary" href={v.profilePath}>
+        <ArrowRight className="h-4 w-4" aria-hidden /> Получить персональный профиль {platform} в Pro
+      </a>
+    );
+  }
   return (
     <a className="btn-primary" href={v.profilePath} download={`${v.dot}.mobileconfig`}>
       <Download className="h-4 w-4" aria-hidden /> Скачать профиль для {platform}
     </a>
+  );
+}
+
+function GuideFooter({ links }: { links: { href: string; label: string }[] }) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-line pt-3 text-sm">
+      {links.map((l) => (
+        <Link key={l.href} href={l.href} className="inline-flex items-center gap-1 font-medium text-accent no-underline hover:underline">
+          {l.label} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      ))}
+    </div>
   );
 }
 
@@ -91,6 +118,7 @@ export function buildSetupTabs(v: SetupValues): WizardTab[] {
             <CopyField label="DNS-сервер (IPv4)" value={v.ip} />
           </Alt>
           <Hint>Отключить или удалить: «Настройки» → «Основные» → «VPN и управление устройством» → «{v.name} DNS» → «Удалить профиль».</Hint>
+          <GuideFooter links={[{ href: "/setup/iphone", label: "Подробная инструкция для iPhone и iPad" }]} />
         </>
       ),
     },
@@ -126,6 +154,7 @@ export function buildSetupTabs(v: SetupValues): WizardTab[] {
             <CopyField label="DNS-сервер (IPv4)" value={v.ip} />
           </Alt>
           <Hint>Чтобы отключить, верните «Частный DNS» в положение «Автоматически» или «Выкл.».</Hint>
+          <GuideFooter links={[{ href: "/setup/android", label: "Подробная инструкция для Android (Samsung, Xiaomi, Pixel)" }]} />
         </>
       ),
     },
@@ -171,6 +200,12 @@ networksetup -getdnsservers Wi-Fi
 networksetup -setdnsservers Wi-Fi empty`}</Code>
           </Alt>
           <Hint>Включить/выключить профиль: «Системные настройки» → «Сеть» → «VPN и фильтры» (Sonoma и новее); удалить — там же, где устанавливали, кнопкой −.</Hint>
+          <GuideFooter
+            links={[
+              { href: "/setup/macos", label: "Подробная инструкция для macOS" },
+              { href: "/setup/corporate-vpn", label: "Работа вместе с корпоративным VPN" },
+            ]}
+          />
         </>
       ),
     },
@@ -210,6 +245,12 @@ Remove-DnsClientDohServerAddress -ServerAddress ${v.ip}`}</Code>
               Имя интерфейса покажет <code>Get-NetAdapter</code>.
             </p>
           </Alt>
+          <GuideFooter
+            links={[
+              { href: "/setup/windows-11", label: "Подробная инструкция для Windows 11 и 10" },
+              { href: "/setup/corporate-vpn", label: "Работа вместе с корпоративным VPN" },
+            ]}
+          />
         </>
       ),
     },
@@ -246,6 +287,12 @@ resolvectl flush-caches`}</Code>
             <Code>{`# /etc/resolv.conf — DHCP перезапишет файл, если его не защитить
 nameserver ${v.ip}`}</Code>
           </Alt>
+          <GuideFooter
+            links={[
+              { href: "/setup/linux", label: "Подробная инструкция для Linux" },
+              { href: "/setup/corporate-vpn", label: "Утилита update_hosts.py (/etc/hosts)" },
+            ]}
+          />
         </>
       ),
     },
@@ -275,6 +322,15 @@ nameserver ${v.ip}`}</Code>
           <Hint>
             Если провайдер выдаёт IPv6, отключите на роутере раздачу IPv6-DNS (или IPv6 целиком), иначе часть устройств пойдёт к сервисам напрямую, минуя подмену. Для семьи с разными сетями и своими доменами есть <a href="/dedicated">выделенный сервер</a>.
           </Hint>
+          <GuideFooter
+            links={[
+              { href: "/setup/keenetic", label: "Инструкция для Keenetic" },
+              { href: "/setup/mikrotik", label: "MikroTik (RouterOS)" },
+              { href: "/setup/openwrt", label: "OpenWrt, ASUS, TP-Link" },
+              { href: "/setup/xbox", label: "Xbox" },
+              { href: "/setup/playstation", label: "PlayStation" },
+            ]}
+          />
         </>
       ),
     },
@@ -308,6 +364,7 @@ nameserver ${v.ip}`}</Code>
             </div>
           </div>
           <Hint>Safari отдельной настройки не имеет — он всегда следует системным настройкам DNS (вкладки macOS / iPhone).</Hint>
+          <GuideFooter links={[{ href: "/setup/browsers", label: "Подробная инструкция для браузеров Chrome, Яндекс и Firefox" }]} />
         </>
       ),
     },

@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { Briefcase, Clapperboard, Gamepad2, Sparkles } from "lucide-react";
-import { poolLabel, type CatalogCategory } from "@/lib/catalog";
+import { poolLabel, serviceSlug, type CatalogCategory } from "@/lib/catalog";
 
 const ICONS: Record<string, typeof Sparkles> = {
   media: Clapperboard,
@@ -7,7 +8,7 @@ const ICONS: Record<string, typeof Sparkles> = {
   games: Gamepad2,
 };
 
-/** Карточки Pro-категорий: сервисы как чипы (домены — в title), пул как «локация». */
+/** Карточки Pro-категорий: сервисы как чипы со ссылками на подробные страницы, пул как «локация». */
 export function ProCatalog({ categories }: { categories: CatalogCategory[] }) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -32,14 +33,14 @@ export function ProCatalog({ categories }: { categories: CatalogCategory[] }) {
             <ul className="m-0 mt-3 flex list-none flex-wrap gap-1.5 p-0">
               {c.services.map((s) => (
                 <li key={s.name}>
-                  <span
-                    className="chip cursor-help !font-sans !text-[13px]"
+                  <Link
+                    href={`/services/${serviceSlug(s)}`}
+                    className="chip !font-sans !text-[13px] no-underline transition-colors hover:border-accent hover:text-accent"
                     title={`${s.domains.join(", ")} · ${poolLabel(s.pool)}`}
-                    tabIndex={0}
                     aria-label={`${s.name}: ${s.domains.join(", ")}; ${poolLabel(s.pool)}`}
                   >
                     {s.name}
-                  </span>
+                  </Link>
                 </li>
               ))}
             </ul>

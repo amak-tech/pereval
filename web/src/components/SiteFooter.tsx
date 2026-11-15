@@ -22,6 +22,8 @@ export function SiteFooter() {
           <Link href="/" className="no-underline hover:underline">Бесплатный DNS</Link>
           <Link href="/pro" className="no-underline hover:underline">{SITE.name} Pro</Link>
           <Link href="/dedicated" className="no-underline hover:underline">{SITE.name} Dedicated</Link>
+          <Link href="/services" className="no-underline hover:underline">Каталог сервисов</Link>
+          <Link href="/setup" className="no-underline hover:underline">Настройка устройств</Link>
           <Link href="/stats" className="no-underline hover:underline">Статистика</Link>
           <Link href="/account" className="no-underline hover:underline">Личный кабинет</Link>
           <Link href="/#faq" className="no-underline hover:underline">Вопросы и ответы</Link>

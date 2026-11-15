@@ -96,6 +96,13 @@ export default function HomePage() {
           <p>
             <strong>Сайт открывается, но всё равно пишет о недоступности в регионе?</strong> Скорее всего соединение прошло по IPv6, минуя подмену. Отключите IPv6 на интерфейсе или подключитесь к сети без IPv6.
           </p>
+          <p>
+            <strong>Специальные сценарии:</strong> развёрнутые руководства для{" "}
+            <Link href="/setup/keenetic">роутеров Keenetic</Link>, <Link href="/setup/mikrotik">MikroTik</Link>, приставок{" "}
+            <Link href="/setup/xbox">Xbox</Link> и <Link href="/setup/playstation">PlayStation</Link>, а также{" "}
+            <Link href="/setup/corporate-vpn">совместной работы с корпоративным VPN</Link> — в разделе{" "}
+            <Link href="/setup">всех инструкций по устройствам</Link>.
+          </p>
         </div>
       </Section>
 

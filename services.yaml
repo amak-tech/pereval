@@ -105,6 +105,8 @@ categories:
     pool: ai
     services:
       - name: Anthropic / Claude
+        slug: claude
+        note: "Anthropic закрывает регистрацию, вход и API Claude с IP-адресов РФ и РБ (App unavailable in certain regions / HTTP 403)."
         domains:
           - claude.ai
           - claude.com
@@ -115,6 +117,8 @@ categories:
           - downloads.intercomcdn.com
           - vector.co
       - name: OpenAI / ChatGPT
+        slug: chatgpt
+        note: "OpenAI возвращает «ChatGPT is not available in your country» (HTTP 403) для запросов с российских и белорусских IP-адресов в браузере, приложениях и API."
         domains:
           - openai.com
           - chatgpt.com
@@ -157,6 +161,8 @@ categories:
           - ct.sendgrid.net
           - js.intercomcdn.com
       - name: Google Gemini / AI Studio / NotebookLM / Jules / Antigravity
+        slug: gemini
+        note: "Google перенаправляет запросы с IP РФ и РБ на страницу неподдерживаемых регионов для Gemini, Google AI Studio, NotebookLM и облачных ИИ-инструментов."
         domains:
           - gemini.google
           - gemini.google.com
@@ -262,10 +268,13 @@ categories:
           - geminiweb-pa.clients6.google.com
           - geminiweb-pa.googleapis.com
       - name: xAI / Grok
+        slug: grok
+        note: "Веб-интерфейс grok.com и API xAI отклоняют подключения с российских и белорусских IP-адресов."
         domains:
           - x.ai
           - grok.com
       - name: Microsoft Copilot
+        note: "Microsoft ограничивает доступ к Copilot и Microsoft Designer с IP-адресов РФ и РБ («Sorry, Microsoft Copilot is not available in your region»)."
         domains:
           - copilot.microsoft.com
           - copilot.cloud.microsoft
@@ -290,6 +299,7 @@ categories:
           - assets.msn.com
           - edge.microsoft.com
       - name: GitHub Copilot
+        note: "Серверы автодополнения и чата GitHub Copilot в IDE отклоняют запросы с российских IP-адресов."
         domains:
           - githubcopilot.com
           - api.githubcopilot.com
@@ -327,12 +337,15 @@ categories:
           - ai.azure.com
           - api.catalog.azureml.ms
       - name: Cursor
+        note: "Часть языковых моделей и облачных прокси редактора Cursor недоступна напрямую с российских и белорусских IP-адресов."
         domains:
           - cursor.sh
           - cursor.com
           - cursorapi.com
           - cursor-cdn.com
       - name: Windsurf / Codeium
+        slug: windsurf
+        note: "Облачные ИИ-модели в IDE Windsurf и расширении Codeium ограничивают соединения из неподдерживаемых регионов."
         domains:
           - windsurf.com
           - codeium.com
@@ -377,6 +390,7 @@ categories:
         domains:
           - vizard.ai
       - name: DeepL
+        note: "Веб-переводчик, приложения и API DeepL закрыли доступ с IP-адресов РФ и РБ («DeepL is not available in your region»)."
         domains:
           - deepl.com
   - id: dev
@@ -384,6 +398,7 @@ categories:
     pool: default
     services:
       - name: JetBrains
+        note: "Загрузка IDE, обновления в JetBrains Toolbox, облачный JetBrains AI / Junie и часть разделов jetbrains.com ограничивают доступ с российских IP (HTTP 451 / 403)."
         domains:
           - jetbrains.com
           - myjetbrains.com
@@ -402,14 +417,17 @@ categories:
           - ingrazzio-cloud-prod.labs.jb.gg
           - junie.jetbrains.com
       - name: HashiCorp
+        note: "Реестр провайдеров Terraform (registry.terraform.io) и загрузки HashiCorp возвращают ошибку 403/451 для IP-адресов из РФ и РБ."
         domains:
           - hashicorp.com
           - terraform.io
           - vagrantcloud.com
       - name: Atlassian
+        note: "Облачные пространства Jira, Confluence и порталы Atlassian ограничивают доступ с IP-адресов РФ и РБ."
         domains:
           - atlassian.com
       - name: Sentry
+        note: "Облачная панель и документация Sentry отклоняют прямые подключения с российских IP-адресов."
         domains:
           - sentry.io
           - sentry.dev
@@ -425,6 +443,7 @@ categories:
           - dfv3qgd2ykmrx.cloudfront.net
           - d2a07l6itrasqg.cloudfront.net
       - name: MongoDB
+        note: "Панель MongoDB Atlas, репозитории пакетов и документация закрыты для прямого доступа с российских IP-адресов."
         domains:
           - mongodb.com
       - name: Liquibase
@@ -472,6 +491,8 @@ categories:
           - hc-ping.com
           - hchk.io
       - name: Swagger / SmartBear
+        slug: swagger
+        note: "SwaggerHub, редактор документации Swagger и сервисы SmartBear закрывают доступ по геолокации IP из РФ и РБ (HTTP 403)."
         domains:
           - swagger.io
           - smartbear.com
@@ -481,6 +502,7 @@ categories:
           - assets.heroku.com
           - herokucdn.com
       - name: Netlify
+        note: "Панель управления и часть инфраструктурных доменов Netlify ограничивают подключения по региону IP."
         domains:
           - netlify.com
       - name: Framer
@@ -517,6 +539,7 @@ categories:
         domains:
           - px6.net
       - name: Oracle Cloud
+        note: "Загрузки JDK, документация oracle.com и консоль Oracle Cloud возвращают ошибку доступа для российских IP-адресов (HTTP 403)."
         domains:
           - oracle.com
           - oraclecloud.com
@@ -682,6 +705,7 @@ pro:
       pool: media
       services:
         - name: Spotify                      # закрыт для РФ (why-not-available), в РБ работает
+          note: "Закрыт для российских IP-адресов (редирект на why-not-available и ошибка входа в приложение); из Беларуси работает напрямую."
           domains:
             - spotify.com
             - scdn.co
@@ -689,6 +713,7 @@ pro:
             - spotifycdn.net
             - spoti.fi
         - name: Twitch                       # не геоблок, а замедление у провайдеров РФ: через воркер идёт 1080p
+          note: "На прямом подключении у российских провайдеров поток упирается в 720p и буферизацию; через медиа-пул Перевал Pro стабильно работает 1080p60."
           domains:
             - twitch.tv
             - ttvnw.net
@@ -696,6 +721,7 @@ pro:
             - twitchcdn.net
             - twitchsvc.net
         - name: TikTok                       # с 2022 для РФ урезанный режим: старая лента, без загрузки
+          note: "С 2022 года для российских IP включён урезанный региональный режим со старыми роликами без актуальной мировой ленты и загрузки видео."
           domains:
             - tiktok.com
             - tiktokcdn.com
@@ -711,7 +737,9 @@ pro:
             - muscdn.com
             - musical.ly
         - name: ElevenLabs / Suno            # ElevenLabs: geo-restriction для РФ и РБ
+          slug: elevenlabs
           pool: ai
+          note: "Голосовой синтезатор ElevenLabs и музыкальный генератор Suno блокируют доступ и генерацию по геолокации IP для РФ и РБ."
           domains:
             - elevenlabs.io
             - suno.com
@@ -721,6 +749,7 @@ pro:
       pool: default
       services:
         - name: Notion                       # с сентября 2024 закрыт для РФ (403), в РБ работает
+          note: "С сентября 2024 года серверы Notion отвечают HTTP 403 Forbidden на запросы с российских IP в браузере и приложениях; из РБ сервис открывается."
           domains:
             - notion.so
             - notion.site
@@ -730,28 +759,35 @@ pro:
             - notion-static.com
             - makenotion.com
         - name: Miro                         # с 15.10.2026 геоблок IP РФ и РБ, включая бесплатные аккаунты
+          note: "С 15 октября 2026 года Miro ввёл геоблок для IP-адресов России и Беларуси, закрыв доступ в том числе к бесплатным аккаунтам и публичным доскам."
           domains:
             - miro.com
             - realtimeboard.com
         - name: Canva                        # закрыт для РФ с июня 2022
+          note: "С июня 2022 года Canva блокирует соединения с российских IP-адресов (HTTP 403 / заглушка о недоступности в регионе)."
           domains:
             - canva.com
             - canva.link
         - name: Adobe (Firefly, Creative Cloud)  # Firefly: denied для РФ и РБ; adobe.com целиком закрыт для РБ
+          slug: adobe
+          note: "Генеративный ИИ Adobe Firefly отклоняет запросы из РФ и РБ (Access Denied), а сайт adobe.com и вход в Creative Cloud целиком закрыты для IP РБ."
           domains:
             - adobe.com
             - adobelogin.com
             - adobe.io
         - name: Airtable                     # с 19.02.2026 закрыт для РФ (обрыв TLS), в РБ работает
+          note: "С февраля 2026 года серверы Airtable разрывают TLS-соединение при обращении с российских IP-адресов; из Беларуси сервис доступен."
           domains:
             - airtable.com
             - airtableusercontent.com
             - airtableblocks.com
         - name: Grammarly                    # 451 для РБ, обрыв TLS для РФ
+          note: "Сервис возвращает ошибку HTTP 451 для белорусских IP-адресов и сбрасывает TLS-рукопожатие при подключении с российских IP."
           domains:
             - grammarly.com
             - grammarly.io
         - name: Coursera                     # закрыт для РФ (обрыв TLS), в РБ работает
+          note: "Платформа обрывает TLS-соединение при прямом подключении с российских IP-адресов; из Беларуси курсы открываются напрямую."
           domains:
             - coursera.org
     - id: games
@@ -761,6 +797,8 @@ pro:
         # ВАЖНО: SNI-прокси пропускает только TCP 80/443 — через него проходит
         # логин, магазин и API, но не UDP-трафик игровых серверов и стриминга.
         - name: Supercell (Brawl Stars, Clash Royale, Clash of Clans)
+          slug: supercell
+          note: "Игры Supercell и вход через Supercell ID заблокированы для IP-адресов РФ и РБ («Вход не выполнен: ваше текущее местоположение не позволяет выполнить вход»)."
           domains:
             - supercell.com
             - supercellid.com
@@ -769,16 +807,21 @@ pro:
             - clashroyale.com
             - clashofclans.com
         - name: Xbox                         # вход в Xbox Live из РФ: ошибка 0x80a40401
+          note: "При авторизации профиля Xbox Live с российских IP-адресов консоль блокирует вход с кодом региональной ошибки 0x80a40401."
           domains:
             - xbox.com
             - xboxlive.com
             - xboxservices.com
         - name: PlayStation Network
+          slug: playstation
+          note: "Вход в учётную запись PSN, работа PlayStation Store и сетевых служб консолей PS4/PS5 ограничены для прямых подключений из региона."
           domains:
             - playstation.com
             - playstation.net
             - sonyentertainmentnetwork.com
         - name: NVIDIA GeForce NOW           # РФ и РБ вне списка регионов GFN
+          slug: geforce-now
+          note: "Россия и Беларусь не входят в список поддерживаемых регионов NVIDIA GeForce NOW при проверке IP во время входа в аккаунт и каталога игр."
           domains:
             - geforcenow.com
             - nvidiagrid.net

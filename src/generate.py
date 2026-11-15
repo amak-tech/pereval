@@ -65,6 +65,7 @@ except ImportError:
 DOMAIN_RE = re.compile(r'^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$')
 IPISH_RE = re.compile(r'^\d{1,3}(\.\d{1,3}){3}$')
 ENV_VAR_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+SERVICE_SLUG_RE = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
 SLUG_RE = re.compile(r'^[a-z0-9_]{2,24}$')
 PLACEHOLDER_RE = re.compile(r'\{\{\s*(\w+)\s*\}\}')
 PLACEHOLDER_NET = ipaddress.ip_network("203.0.113.0/24")  # TEST-NET-3: адреса-заглушки
@@ -198,9 +199,11 @@ class FreeConfig:
 
 
 class Service:
-    def __init__(self, name, pool=None):
+    def __init__(self, name, pool=None, slug=None, note=None):
         self.name = name
         self.pool = pool
+        self.slug = slug
+        self.note = note
         self.domains = []
 
 
@@ -334,6 +337,14 @@ def _slugify(text):
     return s[:24] or "cat"
 
 
+def service_slug(name):
+    """Человекочитаемый URL-слаг сервиса по умолчанию (латиница, цифры, дефисы)."""
+    base = name.split("(", 1)[0].strip() or name
+    s = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
+    s = s[:48].rstrip("-")
+    return s or "service"
+
+
 def parse_workers_arg(raw_workers, pools):
     """Разбирает CLI-аргумент --workers ip1,ip2 (или name=ip:weight); воркеры попадают во все пулы."""
     workers = []
@@ -427,7 +438,13 @@ def _parse_categories(raw, where, tier):
         for si, sraw in enumerate(_need(craw, "services", "categories «%s»" % cname, list), 1):
             swhere = "categories «%s» / services[%d]" % (cname, si)
             sname = _need(sraw, "name", swhere, str).strip()
-            svc = Service(sname, pool=_opt_str(sraw, "pool", swhere))
+            sslug = _opt_str(sraw, "slug", swhere)
+            svc = Service(
+                sname,
+                pool=_opt_str(sraw, "pool", swhere),
+                slug=sslug.lower() if sslug else None,
+                note=_opt_str(sraw, "note", swhere),
+            )
             svc.domains = _domains(_need(sraw, "domains", "сервис «%s»" % sname, list),
                                    "сервис «%s»" % sname)
             cat.services.append(svc)
@@ -600,9 +617,11 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
                 errors.append("%s: в пуле «%s» нет ни одного воркера" % (label, pname))
 
 
-def _validate_categories(categories, pools, label, errors, warnings, seen):
-    """Проверяет домены/пулы категорий; seen — общий словарь домен -> «кат / сервис»."""
+def _validate_categories(categories, pools, label, errors, warnings, seen, seen_slugs=None):
+    """Проверяет домены/пулы/слаги категорий; seen — общий словарь домен -> «кат / сервис»."""
     ids = set()
+    if seen_slugs is None:
+        seen_slugs = {}
     for c in categories:
         if not SLUG_RE.match(c.id):
             errors.append("%s: id категории «%s» («%s») должен соответствовать %s"
@@ -618,6 +637,15 @@ def _validate_categories(categories, pools, label, errors, warnings, seen):
         for n in sorted(set(n for n in names if names.count(n) > 1)):
             warnings.append("%s: в категории «%s» два сервиса с именем «%s»" % (label, c.name, n))
         for s in c.services:
+            eff_slug = s.slug or service_slug(s.name)
+            if len(eff_slug) < 2 or len(eff_slug) > 48 or not SERVICE_SLUG_RE.match(eff_slug):
+                errors.append("%s: некорректный slug «%s» у сервиса «%s / %s» (ожидается %s, 2..48 симв.)"
+                              % (label, eff_slug, c.name, s.name, SERVICE_SLUG_RE.pattern))
+            elif eff_slug in seen_slugs:
+                errors.append("slug сервиса «%s» совпадает у «%s» и «%s / %s» — укажите уникальный slug"
+                              % (eff_slug, seen_slugs[eff_slug], c.name, s.name))
+            else:
+                seen_slugs[eff_slug] = "%s / %s" % (c.name, s.name)
             if s.pool and s.pool not in pools:
                 errors.append("%s: сервис «%s / %s» ссылается на неизвестный пул «%s»"
                               % (label, c.name, s.name, s.pool))
@@ -659,7 +687,8 @@ def validate(doc, primary_ip=None):
     _validate_cluster(doc.nodes, "nodes", primary_ips, errors, warnings)
 
     seen = {}
-    free_ids = _validate_categories(doc.categories, doc.nodes.pools, "categories", errors, warnings, seen)
+    seen_slugs = {}
+    free_ids = _validate_categories(doc.categories, doc.nodes.pools, "categories", errors, warnings, seen, seen_slugs)
 
     if doc.pro.enabled:
         if not DOMAIN_RE.match(doc.pro.domain or ""):
@@ -682,7 +711,7 @@ def validate(doc, primary_ip=None):
         if doc.pro.dns_ip:
             forbidden.add(doc.pro.dns_ip)
         _validate_cluster(doc.pro, "pro", forbidden, errors, warnings)
-        pro_ids = _validate_categories(doc.pro.categories, doc.pro.pools, "pro.categories", errors, warnings, seen)
+        pro_ids = _validate_categories(doc.pro.categories, doc.pro.pools, "pro.categories", errors, warnings, seen, seen_slugs)
         for cid in sorted(free_ids & pro_ids):
             errors.append("id категории «%s» используется и в categories, и в pro.categories" % cid)
 
@@ -919,17 +948,22 @@ def services_json(doc, primary_ip):
     """Каталог для веб-приложения (web/src/generated/services.json)."""
     free_domain = extract_domain(doc)
 
+    def svc_dict(c, s):
+        d = OrderedDict([
+            ("name", s.name),
+            ("slug", s.slug or service_slug(s.name)),
+            ("pool", effective_pool(c, s)),
+        ])
+        if s.note:
+            d["note"] = s.note
+        d["domains"] = list(s.domains)
+        return d
+
     def cat_dict(c):
         return OrderedDict([
             ("id", c.id), ("name", c.name), ("tier", c.tier),
             ("pool", c.pool or poolrouting.DEFAULT_POOL),
-            ("services", [
-                OrderedDict([
-                    ("name", s.name),
-                    ("pool", effective_pool(c, s)),
-                    ("domains", list(s.domains)),
-                ]) for s in c.services
-            ]),
+            ("services", [svc_dict(c, s) for s in c.services]),
         ])
 
     def pools_dict(cluster):

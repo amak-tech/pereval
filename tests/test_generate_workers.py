@@ -46,6 +46,36 @@ class WorkerSecretEnvTests(unittest.TestCase):
             self.assertIn("%s: ${{ secrets.%s }}" % (var, var), workflow,
                           "deploy.yml не пробрасывает %s для воркера %s" % (var, name))
 
+    def test_service_slugs_and_notes_in_services_json(self):
+        doc = generate.parse(str(ROOT / "services.yaml"))
+        errors, _ = generate.validate(doc, primary_ip="153.80.200.170")
+        self.assertEqual(errors, [])
+        payload = json.loads(generate.services_json(doc, "153.80.200.170"))
+        slugs = []
+        notes = {}
+        for cat in payload["categories"]:
+            for svc in cat["services"]:
+                self.assertIn("slug", svc)
+                self.assertRegex(svc["slug"], r"^[a-z0-9]+(-[a-z0-9]+)*$")
+                slugs.append(svc["slug"])
+                if "note" in svc:
+                    notes[svc["slug"]] = svc["note"]
+        self.assertEqual(len(slugs), len(set(slugs)), "слаги сервисов должны быть уникальны")
+        for expected in ("chatgpt", "claude", "gemini", "cursor", "notion", "miro", "spotify", "xbox", "canva"):
+            self.assertIn(expected, slugs)
+            self.assertTrue(notes.get(expected))
+
+    def test_validate_rejects_duplicate_service_slug(self):
+        c1 = generate.Category("ai", "AI")
+        s1 = generate.Service("One", slug="same-slug")
+        s1.domains = ["one.example.com"]
+        s2 = generate.Service("Two", slug="same-slug")
+        s2.domains = ["two.example.com"]
+        c1.services = [s1, s2]
+        errors, warnings = [], []
+        generate._validate_categories([c1], {"default": generate.Pool("default")}, "categories", errors, warnings, {})
+        self.assertTrue(any("slug сервиса «same-slug» совпадает" in e for e in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,19 +30,19 @@ export function detectTab(ua: string): WizardTabId {
  * Мастер настройки: вкладки по устройствам. Панели приходят с сервера готовым JSX (контент попадает
  * в статический HTML и индексируется), клиент лишь переключает `hidden` и подбирает вкладку по UA.
  */
-export function SetupWizard({ tabs }: { tabs: WizardTab[] }) {
-  const [active, setActive] = useState<WizardTabId>("ios");
+export function SetupWizard({ tabs, defaultTab }: { tabs: WizardTab[]; defaultTab?: WizardTabId }) {
+  const [active, setActive] = useState<WizardTabId>(defaultTab ?? "ios");
   const userPicked = useRef(false);
   const baseId = useId();
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   useEffect(() => {
-    if (userPicked.current) return;
+    if (userPicked.current || defaultTab) return;
     const detected = detectTab(navigator.userAgent || "");
     // iPadOS в Safari представляется как Mac: уточняем по сенсорному экрану
     const isIpadOnMac = detected === "mac" && navigator.maxTouchPoints > 1;
     setActive(isIpadOnMac ? "ios" : detected);
-  }, []);
+  }, [defaultTab]);
 
   function select(id: WizardTabId) {
     userPicked.current = true;

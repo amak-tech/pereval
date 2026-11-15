@@ -2,7 +2,13 @@ import raw from "@/generated/services.json";
 
 /** Каталог сервисов из services.yaml (генерируется src/generate.py). */
 
-export type CatalogService = { name: string; pool: string; domains: string[] };
+export type CatalogService = {
+  name: string;
+  slug?: string;
+  pool: string;
+  note?: string;
+  domains: string[];
+};
 export type CatalogCategory = {
   id: string;
   name: string;
@@ -86,6 +92,22 @@ export function totalServices(): number {
 
 export function totalDomains(): number {
   return catalog.counts.free_domains + catalog.counts.pro_domains;
+}
+
+/** Человекочитаемый URL-слаг сервиса (совпадает с правилом в src/generate.py). */
+export function slugifyServiceName(name: string): string {
+  const base = name.split("(", 1)[0]?.trim() || name;
+  const s = base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "");
+  return s || "service";
+}
+
+export function serviceSlug(service: Pick<CatalogService, "name" | "slug">): string {
+  return service.slug || slugifyServiceName(service.name);
 }
 
 /** Извлекает нормализованный хост из поисковой строки (поддерживает вставку полного URL или поддомена). */

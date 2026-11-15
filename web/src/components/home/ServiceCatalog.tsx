@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { Search } from "lucide-react";
 import { Badge } from "@/components/Section";
 import { track } from "@/components/track";
-import { filterCatalogCategories, type CatalogCategory } from "@/lib/catalog";
+import { filterCatalogCategories, serviceSlug, type CatalogCategory } from "@/lib/catalog";
 
 const MAX_DOMAINS = 4;
 
@@ -130,9 +130,14 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "ÐŸÐ
               const open = expanded.has(key) || !!needle;
               const domains = open ? s.domains : s.domains.slice(0, MAX_DOMAINS);
               const rest = s.domains.length - domains.length;
+              const slug = serviceSlug(s);
               return (
                 <li key={key} className="rounded-[var(--radius-card)] border border-line bg-panel p-4">
-                  <div className="font-semibold">{s.name}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Link href={`/services/${slug}`} className="font-semibold text-ink no-underline hover:text-accent hover:underline">
+                      {s.name}
+                    </Link>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {domains.map((d) => (
                       <span key={d} className="chip">
@@ -181,12 +186,15 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "ÐŸÐ
             {proFiltered.flatMap((c) =>
               c.services.map((s) => {
                 const key = `pro:${c.id}:${s.name}`;
+                const slug = serviceSlug(s);
                 return (
                   <li key={key} className="flex flex-col justify-between rounded-[var(--radius-card)] border border-line bg-panel p-4">
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="font-semibold">{s.name}</div>
+                          <Link href={`/services/${slug}`} className="font-semibold text-ink no-underline hover:text-accent hover:underline">
+                            {s.name}
+                          </Link>
                           <div className="mt-0.5 text-xs text-mute">{c.name}</div>
                         </div>
                         <Badge>Pro</Badge>
