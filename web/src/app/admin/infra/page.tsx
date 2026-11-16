@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { requireAdminPage } from "@/lib/admin-auth";
-import { getDefaultNodeMaxClients, getNodeWatchStatus, listNodes, NODE_STALE_MS } from "@/lib/admin";
+import { getDefaultNodeMaxClients, getNodeWatchStatus, getSupercellWatchStatus, listNodes, NODE_STALE_MS } from "@/lib/admin";
 import { collectMonitoredTargets } from "@/jobs/nodewatch";
+import { SUPERCELL_UPSTREAMS } from "@/jobs/supercellwatch";
 import { policyVersion } from "@/lib/policy";
 import { aclVersion, buildAclSnapshot } from "@/lib/acl";
 import { certStatus, renewCommand, acmeTxtRecords } from "@/jobs/certwatch";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminInfraPage() {
   await requireAdminPage();
   const now = new Date();
-  const [nodes, policyV, aclV, acl, cert, defaultMaxClients, nodewatch] = await Promise.all([
+  const [nodes, policyV, aclV, acl, cert, defaultMaxClients, nodewatch, supercellwatch] = await Promise.all([
     listNodes(),
     policyVersion(),
     aclVersion(),
@@ -25,6 +26,7 @@ export default async function AdminInfraPage() {
     certStatus(now),
     getDefaultNodeMaxClients(),
     getNodeWatchStatus(),
+    getSupercellWatchStatus(),
   ]);
   const e = env();
   const stale = (n: (typeof nodes)[number]) => n.enabled && (!n.lastSeenAt || now.getTime() - n.lastSeenAt.getTime() > NODE_STALE_MS);
@@ -133,6 +135,55 @@ export default async function AdminInfraPage() {
         <div className="mt-4">
           <NodeMaxClientsForm defaultMaxClients={defaultMaxClients} />
         </div>
+      </Card>
+
+      <Card title="Рукопожатия Supercell (:9339, supercellwatch)">
+        <p className="m-0 mb-3 text-xs text-mute">
+          Задача <code>supercellwatch</code> раз в 12 часов проверяет рукопожатия <code>ClientHello (10100)</code> со всеми апстримами Supercell на порту <code>9339</code> и уведомляет администратора при смене версий, коллизиях или сбоях.
+          {supercellwatch?.checkedAt ? ` Последняя проверка: ${fmtDt(new Date(supercellwatch.checkedAt))}.` : " Опрос ещё не выполнялся."}
+        </p>
+        <Table head={["Игра", "Апстрим", "Major / MsgVer", "Билд", "Задержка", "Статус"]} empty="Апстримы не заданы.">
+          {(
+            supercellwatch?.upstreams ??
+            SUPERCELL_UPSTREAMS.map((s) => ({
+              id: s.id,
+              name: s.name,
+              host: s.host,
+              port: s.port,
+              ok: true,
+              major: s.expectedMajor,
+              msgVersion: s.expectedMsgVersion,
+              version: null,
+              sha: null,
+              latencyMs: null,
+              error: null,
+              pending: true,
+            }))
+          ).map((u) => (
+            <tr key={u.id}>
+              <td className="font-semibold">{u.name}</td>
+              <td>
+                <Mono>
+                  {u.host}:{u.port}
+                </Mono>
+              </td>
+              <td className="font-mono">{u.major !== null ? `${u.major} / v${u.msgVersion ?? "?"}` : "—"}</td>
+              <td className="font-mono text-xs">{u.version ?? "—"}</td>
+              <td>{u.latencyMs !== null ? `${u.latencyMs} мс` : "—"}</td>
+              <td>
+                {"pending" in u && u.pending ? (
+                  <span className="text-mute">эталон (до опроса)</span>
+                ) : u.ok ? (
+                  <Badge tone="ok">норма</Badge>
+                ) : (
+                  <span title={u.error ?? undefined}>
+                    <Badge tone="warn">ошибка</Badge>
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
       </Card>
 
       <Card title="Единый сертификат">

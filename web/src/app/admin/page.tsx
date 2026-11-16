@@ -14,11 +14,23 @@ export default async function AdminOverviewPage() {
   const o = await adminOverview(now);
   const staleNodes = o.nodes.filter((n) => n.stale);
   const overloadedNodes = (o.nodewatch?.nodes ?? []).filter((n) => n.overloaded);
+  const failedSupercell = (o.supercellwatch?.upstreams ?? []).filter((u) => !u.ok);
+  const supercellCollisions = o.supercellwatch?.collisions ?? [];
   const problems: { text: string; href: string }[] = [];
   if (staleNodes.length) problems.push({ text: `Ноды без связи >10 мин: ${staleNodes.map((n) => n.name).join(", ")}`, href: "/admin/infra" });
   if (overloadedNodes.length)
     problems.push({
       text: `Перегрузка нод (клиентов ≥ порога): ${overloadedNodes.map((n) => `${n.name} (${n.onlineUsers5m}/${n.maxClients})`).join(", ")}`,
+      href: "/admin/infra",
+    });
+  if (failedSupercell.length)
+    problems.push({
+      text: `Supercell (:9339) сбой рукопожатия: ${failedSupercell.map((u) => u.name).join(", ")}`,
+      href: "/admin/infra",
+    });
+  if (supercellCollisions.length)
+    problems.push({
+      text: `Supercell (:9339) коллизия сигнатур: ${supercellCollisions.join("; ")}`,
       href: "/admin/infra",
     });
   if (o.cert && o.cert.daysLeft !== null && o.cert.daysLeft <= 14) problems.push({ text: `Единый сертификат истекает через ${o.cert.daysLeft} дн.`, href: "/admin/infra" });

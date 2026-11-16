@@ -67,6 +67,7 @@ PRO_WORKER_FILES=(
 	"$BUILD_DIR/pro-service-map.json"
 	"$BUILD_DIR/pro-nodes.json"
 	"$SRC_DIR/pro_node_agent.py"
+	"$SRC_DIR/supercell_proxy.py"
 	"$SRC_DIR/stats_collector.py"
 )
 DNSMASQ_CONF="$BUILD_DIR/dnsmasq-geoblock.conf"
@@ -1042,6 +1043,9 @@ PRO_DNS_UNIT="/etc/systemd/system/pereval-pro-dns.service"
 PRO_DNS_STATE="/var/lib/pereval-pro-dns"
 AGENT_DST="/usr/local/bin/pereval-pro-agent.py"
 AGENT_UNIT="/etc/systemd/system/pereval-pro-agent.service"
+SUPERCELL_DST="/usr/local/bin/pereval-supercell-proxy.py"
+SUPERCELL_UNIT="/etc/systemd/system/pereval-supercell.service"
+SUPERCELL_STATE_DIR="/var/lib/pereval-supercell"
 COLLECTOR_DST="/usr/local/bin/pereval-stats-collector.py"
 STATS_UNIT_DST="/etc/systemd/system/pereval-stats.service"
 STATS_STATE_DIR="/var/lib/pereval-stats"
@@ -1231,7 +1235,7 @@ UNIT
 	fi
 
 elif [[ $NODE_ROLE == "pro-worker" ]]; then
-	for f in pro-worker-nginx.conf pro-nginx-sni-allow.map pro-nginx-host-allow.map pro-service-map.json pro-nodes.json pro_node_agent.py stats_collector.py; do
+	for f in pro-worker-nginx.conf pro-nginx-sni-allow.map pro-nginx-host-allow.map pro-service-map.json pro-nodes.json pro_node_agent.py supercell_proxy.py stats_collector.py; do
 		[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал"
 	done
 	install -m 0644 "$STAGE/pro-nginx-sni-allow.map"  "$MAP_DIR/nginx-sni-allow.map"
@@ -1259,13 +1263,13 @@ PYC
 	systemctl enable nginx >/dev/null 2>&1 || true
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx || { restore; fail "nginx не поднялся"; }
 
-	# nftables: доступ к 80/443 только для подписчиков (набор синхронизирует агент)
+	# nftables: доступ к 80/443/9339 только для подписчиков (набор синхронизирует агент)
 	mkdir -p /etc/nftables.d
 	NFT_TRUSTED="$(printf '%s' "$TRUSTED_IPS" | tr ',' ' ' | xargs | tr ' ' ',')"
 	# правило для доверенных IP собираем заранее: внутри ${VAR:+...} фигурные скобки nft ломают раскрытие
 	NFT_TRUSTED_RULE=""
 	if [[ -n $NFT_TRUSTED ]]; then
-		NFT_TRUSTED_RULE="		tcp dport { 80, 443 } ip saddr { $NFT_TRUSTED } accept"
+		NFT_TRUSTED_RULE="		tcp dport { 80, 443, 9339 } ip saddr { $NFT_TRUSTED } accept"
 	fi
 	cat >/etc/nftables.d/pereval-pro.nft <<NFT
 table inet pereval_pro {
@@ -1275,9 +1279,9 @@ table inet pereval_pro {
 	chain input {
 		type filter hook input priority -10; policy accept;
 		iif lo accept
-		tcp dport { 80, 443 } ip saddr @pro_clients accept
+		tcp dport { 80, 443, 9339 } ip saddr @pro_clients accept
 $NFT_TRUSTED_RULE
-		tcp dport { 80, 443 } drop
+		tcp dport { 80, 443, 9339 } drop
 		udp dport 443 reject
 	}
 }
@@ -1290,8 +1294,35 @@ NFT
 	if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
 		ufw allow 80/tcp >/dev/null 2>&1 || true
 		ufw allow 443/tcp >/dev/null 2>&1 || true
+		ufw allow 9339/tcp >/dev/null 2>&1 || true
 	fi
 	say "nftables: таблица pereval_pro применена (доверенные: ${NFT_TRUSTED:-нет})"
+
+	id -u pereval-supercell >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin pereval-supercell
+	mkdir -p "$SUPERCELL_STATE_DIR"
+	chown pereval-supercell:pereval-supercell "$SUPERCELL_STATE_DIR"
+	install -m 0755 "$STAGE/supercell_proxy.py" "$SUPERCELL_DST"
+	cat >"$SUPERCELL_UNIT" <<UNIT
+[Unit]
+Description=Pereval Pro Supercell TCP/9339 game relay daemon
+After=network-online.target nftables.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pereval-supercell
+Group=pereval-supercell
+NoNewPrivileges=yes
+ExecStart=/usr/bin/python3 $SUPERCELL_DST --state-file $SUPERCELL_STATE_DIR/signatures.json
+ExecReload=/bin/kill -HUP \$MAINPID
+StateDirectory=pereval-supercell
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+UNIT
 
 	install -m 0755 "$STAGE/pro_node_agent.py" "$AGENT_DST"
 	cat >"$AGENT_UNIT" <<UNIT
@@ -1327,16 +1358,17 @@ Nice=10
 WantedBy=multi-user.target
 UNIT
 	systemctl daemon-reload
-	systemctl enable pereval-pro-agent.service pereval-stats.service >/dev/null 2>&1 || true
+	systemctl enable pereval-pro-agent.service pereval-stats.service pereval-supercell.service >/dev/null 2>&1 || true
+	systemctl restart pereval-supercell.service || { journalctl -u pereval-supercell -n 20 --no-pager >&2 || true; fail "pereval-supercell не поднялся"; }
 	systemctl restart pereval-stats.service || { journalctl -u pereval-stats -n 20 --no-pager >&2 || true; fail "pereval-stats не поднялся"; }
 	systemctl restart pereval-pro-agent.service || { journalctl -u pereval-pro-agent -n 30 --no-pager >&2 || true; fail "pereval-pro-agent не поднялся"; }
-	say "pereval-pro-agent и pereval-stats перезапущены"
+	say "pereval-supercell, pereval-pro-agent и pereval-stats перезапущены"
 
 	sleep 1
-	for unit in nginx pereval-pro-agent pereval-stats; do
+	for unit in nginx pereval-pro-agent pereval-stats pereval-supercell; do
 		systemctl is-active --quiet "$unit" || fail "$unit не активен"
 	done
-	for port in 80 443; do
+	for port in 80 443 9339; do
 		if ss -tlnH "sport = :$port" | grep -q .; then say "порт $port слушается (доступ ограничен nftables)"; else say "ВНИМАНИЕ: порт $port не слушается"; fi
 	done
 	say "nft set pro_clients: $(nft -j list set inet pereval_pro pro_clients 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(sum(len(x.get("set",{}).get("elem",[]) or []) for x in d.get("nftables",[]) if "set" in x))' 2>/dev/null || echo '?') адресов"
@@ -1436,7 +1468,7 @@ DRYPRE
 				printf '    затем: dnsmasq(cache) :53, resolv.conf, nginx (DoH), pereval-pro-dns (:53/:853/:8057), pereval-cert-sync.timer (единый сертификат с CP: %s)\n' "$CERT_DOMAINS"
 			else
 				for f in "${PRO_WORKER_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-worker"; done
-				printf '    затем: nginx (SNI/Host-прокси), nftables pereval_pro, pereval-pro-agent, pereval-stats\n'
+				printf '    затем: nginx (SNI/Host-прокси), pereval-supercell (:9339), nftables pereval_pro, pereval-pro-agent, pereval-stats\n'
 			fi
 			return 0
 		fi

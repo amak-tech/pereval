@@ -2,17 +2,18 @@
 # -*- coding: utf-8 -*-
 """Агент прокси-воркера «Перевал Pro» (pereval-pro-agent.service), работает от root.
 
-Воркер Pro — это прозрачный SNI/Host-прокси (nginx) без сайта и DNS. Порты 80/443
+Воркер Pro — это прозрачный SNI/Host-прокси (nginx на 80/443) и релей игр Supercell
+(supercell_proxy.py на 9339) без сайта и DNS. Порты 80/443/9339
 на нём закрыты nftables и открываются только IP-адресам подписчиков, которые
 control plane узнаёт от pro_dns.py. Агент:
   1. На старте и в каждом цикле убеждается, что таблица nftables `inet pereval_pro`
      существует (создаёт идемпотентно), а на старте дополнительно атомарно
      переписывает правила цепочки input (чтобы подхватить новые --trusted-ips):
         iif lo accept
-        tcp dport {80,443} ip saddr @pro_clients accept
-        tcp dport {80,443} ip saddr { <TRUSTED_IPS> } accept   (DNS-нода, CP, Free primary)
-        tcp dport {80,443} drop
-        udp dport 443 reject                                   (QUIC -> быстрый откат на TCP)
+        tcp dport {80,443,9339} ip saddr @pro_clients accept
+        tcp dport {80,443,9339} ip saddr { <TRUSTED_IPS> } accept   (DNS-нода, CP, Free primary)
+        tcp dport {80,443,9339} drop
+        udp dport 443 reject                                        (QUIC -> быстрый откат на TCP)
   2. Long-poll GET /api/internal/v1/node/acl?version=N&wait=25 в control plane:
      желаемый набор = static ∪ dynamic (не истёкшие). Текущий набор читается
      `nft -j list set inet pereval_pro pro_clients`, разница применяется ОДНОЙ
@@ -93,16 +94,20 @@ def nft_set_literal(ips) -> str:
     return "{ " + ", ".join(ips) + " }"
 
 
+PROTECTED_TCP_PORTS = (80, 443, 9339)
+
+
 def render_chain_rules(trusted_ips) -> list:
     """Правила цепочки input в нужном порядке."""
+    ports = "{ " + ", ".join(str(p) for p in PROTECTED_TCP_PORTS) + " }"
     rules = [
         "iif lo accept",
-        "tcp dport { 80, 443 } ip saddr @%s accept" % SET_NAME,
+        "tcp dport %s ip saddr @%s accept" % (ports, SET_NAME),
     ]
     trusted = parse_ip_list(trusted_ips)
     if trusted:
-        rules.append("tcp dport { 80, 443 } ip saddr %s accept" % nft_set_literal(trusted))
-    rules.append("tcp dport { 80, 443 } drop")
+        rules.append("tcp dport %s ip saddr %s accept" % (ports, nft_set_literal(trusted)))
+    rules.append("tcp dport %s drop" % ports)
     rules.append("udp dport 443 reject")
     return rules
 

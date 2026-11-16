@@ -12,6 +12,7 @@
  *   resend-link <email>           отправить ссылку входа
  *   webhook replay <id>           переиграть сохранённый вебхук
  *   cert names | cert status      имена единого сертификата (для deploy/issue-cert.sh) | что лежит на CP и что отдают хосты
+ *   supercell status | check      последний сохранённый отчёт supercellwatch | выполнить проверку апстримов Supercell :9339
  *   policy | acl                  показать текущий снапшот
  */
 import { desc, eq } from "drizzle-orm";
@@ -96,6 +97,25 @@ async function main(argv: string[]): Promise<number> {
       console.log(`TXT при продлении: ${cw.acmeTxtRecords().join("; ")}`);
       return 0;
     }
+    case "supercell": {
+      const [sub] = rest;
+      const sw = await import("@/jobs/supercellwatch");
+      if (sub === "check") {
+        const res = await sw.checkSupercellUpstreams();
+        console.log(`проверено: ${res.checked}, ошибок: ${res.failed}, коллизий: ${res.collisions}, письмо: ${res.notified ? "да" : "нет"}`);
+        if (res.changes.length) for (const c of res.changes) console.log(`  — ${c}`);
+      } else if (sub !== "status") {
+        throw new Error("supercell status | supercell check");
+      }
+      const st = await sw.getSupercellWatchStatus();
+      if (!st) {
+        console.log("supercellwatch ещё не запускался (выполните: pnpm admin supercell check)");
+        return 0;
+      }
+      console.log(`проверка: ${st.checkedAt}${st.collisions.length ? `; коллизии: ${st.collisions.join("; ")}` : ""}`);
+      for (const u of st.upstreams) console.log(sw.formatSupercellUpstreamLine(u));
+      return 0;
+    }
     case "webhook": {
       const [sub, id] = rest;
       if (sub !== "replay" || !id) throw new Error("webhook replay <id>");
@@ -110,7 +130,7 @@ async function main(argv: string[]): Promise<number> {
       console.log(JSON.stringify(await buildAclSnapshot(), null, 2));
       return 0;
     default:
-      console.log("команды: users | subs | grant <email> <days> | revoke <email> | node add <name> <kind> [ip] | node list | resend-link <email> | webhook replay <id> | cert names|status | policy | acl");
+      console.log("команды: users | subs | grant <email> <days> | revoke <email> | node add <name> <kind> [ip] | node list | resend-link <email> | webhook replay <id> | cert names|status | supercell status|check | policy | acl");
       return cmd ? 1 : 0;
   }
 }

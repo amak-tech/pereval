@@ -310,7 +310,7 @@ const SUB_PRODUCTS: SubProductDef[] = [
     parentSlug: "supercell",
     name: "Brawl Stars (Supercell)",
     shortName: "Brawl Stars",
-    primaryDomains: ["brawlstarsgame.com", "supercellid.com", "supercell.com", "supercellgames.com"],
+    primaryDomains: ["brawlstarsgame.com", "brawlstars.com", "supercellid.com", "supercell.com", "supercellgames.com"],
     override: {
       title: `Как зайти в Brawl Stars в России и Беларуси без VPN через DNS — ${SITE.name} Pro`,
       description: `Убираем ошибку «Вход не выполнен: ваше текущее местоположение не позволяет выполнить вход» в Brawl Stars на iPhone и Android за 1 минуту с DNS ${SITE.name} Pro.`,
@@ -327,7 +327,7 @@ const SUB_PRODUCTS: SubProductDef[] = [
     parentSlug: "supercell",
     name: "Clash Royale (Supercell)",
     shortName: "Clash Royale",
-    primaryDomains: ["clashroyale.com", "supercellid.com", "supercell.com", "supercellgames.com"],
+    primaryDomains: ["clashroyaleapp.com", "clashroyale.com", "supercellid.com", "supercell.com", "supercellgames.com"],
     override: {
       title: `Как зайти в Clash Royale без VPN в России и Беларуси (DNS) — ${SITE.name} Pro`,
       description: `Быстрый вход в Clash Royale и Supercell ID на iOS и Android без VPN и высокого пинга через персональный зашифрованный DNS ${SITE.name} Pro.`,

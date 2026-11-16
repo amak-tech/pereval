@@ -794,8 +794,9 @@ pro:
       name: Игры и консоли
       pool: default
       services:
-        # ВАЖНО: SNI-прокси пропускает только TCP 80/443 — через него проходит
-        # логин, магазин и API, но не UDP-трафик игровых серверов и стриминга.
+        # ВАЖНО: SNI-прокси nginx пропускает TCP 80/443 (логин, магазин, API), а для игр
+        # Supercell на Pro-воркерах дополнительно работает TCP-релей supercell_proxy.py (:9339);
+        # UDP-трафик самих матчей и стриминга идёт напрямую мимо прокси.
         - name: Supercell (Brawl Stars, Clash Royale, Clash of Clans)
           slug: supercell
           note: "Игры Supercell и вход через Supercell ID заблокированы для IP-адресов РФ и РБ («Вход не выполнен: ваше текущее местоположение не позволяет выполнить вход»)."
@@ -803,9 +804,18 @@ pro:
             - supercell.com
             - supercellid.com
             - supercellgames.com
+            - supercellstore.com
+            - brawlstars.com
             - brawlstarsgame.com
             - clashroyale.com
+            - clashroyaleapp.com
             - clashofclans.com
+            - hayday.com
+            - haydaygame.com
+            - boombeach.com
+            - boombeachgame.com
+            - squadbusters.com
+            - squadbustersgame.com
         - name: Xbox                         # вход в Xbox Live из РФ: ошибка 0x80a40401
           note: "При авторизации профиля Xbox Live с российских IP-адресов консоль блокирует вход с кодом региональной ошибки 0x80a40401."
           domains:

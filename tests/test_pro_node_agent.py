@@ -34,9 +34,9 @@ class PureFunctionTests(unittest.TestCase):
         chain_rules = [ln for ln in lines if ln.startswith(("iif", "tcp", "udp"))]
         self.assertEqual(chain_rules, [
             "iif lo accept",
-            "tcp dport { 80, 443 } ip saddr @pro_clients accept",
-            "tcp dport { 80, 443 } ip saddr { 203.0.113.10, 203.0.113.20 } accept",
-            "tcp dport { 80, 443 } drop",
+            "tcp dport { 80, 443, 9339 } ip saddr @pro_clients accept",
+            "tcp dport { 80, 443, 9339 } ip saddr { 203.0.113.10, 203.0.113.20 } accept",
+            "tcp dport { 80, 443, 9339 } drop",
             "udp dport 443 reject",
         ])
         # без доверенных IP строки с пустым набором быть не должно
