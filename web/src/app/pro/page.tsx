@@ -12,8 +12,8 @@ import { PRO_FAQ } from "@/content/faq";
 import { SITE } from "@/content/site";
 import { proCategories } from "@/lib/catalog";
 
-const TITLE = `${SITE.name} Pro — рабочие инструменты, TikTok и игры без VPN`;
-const DESCRIPTION = `Подписка ${SITE.name} Pro: Notion, Miro, Canva, Adobe, Airtable, Spotify, TikTok, Xbox и PlayStation без VPN на быстрых серверах. Отмена в любой момент.`;
+const TITLE = `${SITE.name} Pro — рабочие инструменты, дизайн, Spotify и игры без VPN`;
+const DESCRIPTION = `Подписка ${SITE.name} Pro: Notion, Miro, Coda, Adobe, Autodesk, Semrush, Spotify, Supercell, Xbox и PlayStation без VPN на быстрых серверах. Отмена в любой момент.`;
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
@@ -70,8 +70,8 @@ export default async function ProPage() {
   };
 
   const benefits = [
-    { icon: Gauge, eyebrow: "Стабильная скорость", title: "Никаких вечерних просадок", text: "На бесплатном сервере один канал делится на всех. В Pro работают отдельные незагруженные серверы только для подписчиков — музыка, видео в высоком качестве, голосовые режимы ChatGPT и игры летают в любое время суток." },
-    { icon: Sparkles, eyebrow: "Рабочие инструменты", title: "Notion, Miro, Canva и Adobe снова работают", text: "В 2026 году сервисы один за другим закрывают доступ по IP из РФ и РБ: Miro, Airtable, Cursor, раньше Notion и Canva. В Pro только проверенные сервисы, которые действительно закрыты по региону, а не по решению регулятора: рабочие инструменты, Spotify, TikTok с актуальной лентой и консольные сервисы." },
+    { icon: Gauge, eyebrow: "Стабильная скорость", title: "Никаких вечерних просадок", text: "На бесплатном сервере один канал делится на всех. В Pro работают отдельные незагруженные серверы только для подписчиков — рабочие пространства, музыка без буферизации, голосовые режимы ChatGPT и игры летают в любое время суток." },
+    { icon: Sparkles, eyebrow: "Рабочие инструменты и дом", title: "Notion, Miro, Coda, Adobe и Autodesk снова работают", text: "В 2026 году зарубежные платформы продолжают закрывать доступ по IP из РФ и РБ: Miro, Notion, Coda, Whimsical, Lucidchart, Adobe, Autodesk и SketchUp. В Pro собраны только проверенные сервисы с реальным зарубежным геоблоком (не из реестров регулятора): рабочие и инженерные инструменты, учёба, Spotify, умная техника Bosch / Dyson и консольные сервисы." },
     { icon: KeyRound, eyebrow: "Личный кабинет", title: "Настройка устройств за 1 клик", text: "В кабинете вы скачиваете готовый профиль для iPhone / macOS, получаете персональные адреса DoH и DoT для Android, Windows и браузера, привязываете домашний IP и включаете нужные категории сайтов." },
   ];
 
@@ -87,7 +87,7 @@ export default async function ProPage() {
             {name} Pro — полный каталог и быстрые серверы без вечерних тормозов
           </h1>
           <p className="mt-5 max-w-[66ch] text-[17px] text-mute">
-            Бесплатный сервер хорош для текстовых нейросетей, но им пользуются тысячи людей одновременно. В {name} Pro вы подключаетесь к свободным серверам и получаете все {counts.free_services} сервисов Free плюс {counts.pro_services} сервисов, которые не работают из России и Беларуси: <strong>Notion, Miro, Canva, Adobe, Airtable, Grammarly, Coursera, Spotify, TikTok, Twitch (1080p), Supercell, Xbox и PlayStation</strong>.
+            Бесплатный сервер хорош для текстовых нейросетей, но им пользуются тысячи людей одновременно. В {name} Pro вы подключаетесь к свободным серверам и получаете все {counts.free_services} сервисов Free плюс {counts.pro_services} сервисов, которые закрывают доступ из России и Беларуси по IP: <strong>Notion, Miro, Coda, Whimsical, Lucidchart, Uizard, Semrush, Adobe, Autodesk, SketchUp, Coursera, edX, Spotify, ElevenLabs, Home Connect, Dyson, Supercell, Xbox и PlayStation</strong>.
           </p>
           <p className="mt-4 text-[17px]">
             <ProPrice size="lg" /> <span className="text-mute">· отмена в любой момент, доступ до конца оплаченного месяца</span>

@@ -16,15 +16,14 @@ const SCENARIOS: { value: Scenario; label: string }[] = [
 ];
 
 const SERVICES: { value: string; checked?: boolean }[] = [
-  { value: "Notion / Miro / Airtable", checked: true },
-  { value: "Canva / Adobe", checked: true },
-  { value: "Grammarly / Coursera" },
-  { value: "Spotify", checked: true },
-  { value: "Twitch 1080p" },
-  { value: "TikTok (актуальная лента)" },
+  { value: "Notion / Miro / Coda", checked: true },
+  { value: "Whimsical / Lucidchart / Uizard" },
+  { value: "Adobe / Autodesk / SketchUp", checked: true },
+  { value: "Semrush / Coursera / edX" },
+  { value: "Spotify / ElevenLabs", checked: true },
+  { value: "Home Connect (Bosch) / Dyson" },
   { value: "Supercell (Brawl Stars / Clash)" },
-  { value: "Xbox / PlayStation / GeForce NOW" },
-  { value: "ElevenLabs / Suno" },
+  { value: "Xbox / PlayStation" },
 ];
 
 /** Заявка на Dedicated → POST /api/leads (plan всегда "dedicated", поле website — honeypot). */

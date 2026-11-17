@@ -40,6 +40,8 @@ const nextConfig: NextConfig = {
       { source: "/stats.html", destination: "/stats", permanent: true },
       { source: "/terms.html", destination: "/terms", permanent: true },
       { source: "/privacy.html", destination: "/privacy", permanent: true },
+      // Удалённые из каталога посадочные страницы сервисов → актуальный справочник
+      { source: "/services/:slug(canva|airtable|grammarly|tiktok|twitch|geforce-now|suno)", destination: "/services", permanent: true },
     ];
   },
 };

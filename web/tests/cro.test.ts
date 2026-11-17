@@ -20,7 +20,7 @@ describe("catalog search across Free and Pro", () => {
     const free = freeCategories();
     const pro = proCategories();
 
-    for (const query of ["Notion", "Miro", "Spotify", "Xbox", "Brawl Stars", "Canva"]) {
+    for (const query of ["Notion", "Miro", "Spotify", "Xbox", "Brawl Stars", "Coda", "Autodesk", "Semrush"]) {
       const freeHits = filterCatalogCategories(free, query);
       const proHits = filterCatalogCategories(pro, query);
       expect(freeHits).toHaveLength(0);

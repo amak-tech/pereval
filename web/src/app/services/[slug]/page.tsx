@@ -218,7 +218,7 @@ export default async function ServiceSeoPage({ params }: { params: Promise<{ slu
             <div className="flex items-start gap-2.5">
               <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden />
               <p className="m-0 text-sm text-mute">
-                <strong className="text-ink">Нужны также Notion, Miro, Canva, Spotify, TikTok или Xbox без вечерних очередей?</strong> В подписке {name} Pro работают отдельные свободные серверы и полный каталог сервисов.
+                <strong className="text-ink">Нужны также Notion, Miro, Coda, Adobe, Autodesk, Spotify или Xbox без вечерних очередей?</strong> В подписке {name} Pro работают отдельные свободные серверы и полный каталог сервисов.
               </p>
             </div>
             <Link href="/pro" className="btn-secondary shrink-0 !text-sm">

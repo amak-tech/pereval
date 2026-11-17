@@ -22,7 +22,7 @@ export function CompareTable() {
       free: `${counts.free_services} сервисов: текстовые ИИ и инструменты разработки`,
       pro: (
         <>
-          <strong>Полный каталог:</strong> Free + {counts.pro_services} сервисов — Notion, Miro, Canva, Adobe, Airtable, Grammarly, Spotify, TikTok, Twitch, Supercell, Xbox, PlayStation и др.
+          <strong>Полный каталог:</strong> Free + {counts.pro_services} сервисов — Notion, Miro, Coda, Whimsical, Lucidchart, Adobe, Autodesk, SketchUp, Semrush, Spotify, ElevenLabs, Supercell, Xbox, PlayStation и др.
         </>
       ),
       dedicated: (

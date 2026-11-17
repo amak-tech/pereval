@@ -134,7 +134,7 @@ const GUIDES: DeviceGuideData[] = [
         fix: `Перейдите в «Настройки → Основные → VPN и управление устройством → DNS» и переключите на «Автоматически», либо удалите профиль «${SITE.name} DNS» одной кнопкой.`,
       },
     ],
-    popularServiceSlugs: ["chatgpt", "claude", "gemini", "spotify", "notion", "brawl-stars", "tiktok", "canva"],
+    popularServiceSlugs: ["chatgpt", "claude", "gemini", "spotify", "notion", "brawl-stars", "dyson", "home-connect"],
     faq: [
       {
         q: "Безопасно ли устанавливать профиль .mobileconfig на iPhone?",
@@ -210,7 +210,7 @@ const GUIDES: DeviceGuideData[] = [
         fix: "Если на телефоне запущен локальный блокировщик рекламы в режиме VPN, укажите наш DoH/DoT-сервер прямо внутри настроек DNS самого AdGuard.",
       },
     ],
-    popularServiceSlugs: ["gemini", "chatgpt", "claude", "spotify", "brawl-stars", "clash-royale", "tiktok", "notion"],
+    popularServiceSlugs: ["gemini", "chatgpt", "claude", "spotify", "brawl-stars", "clash-royale", "notion", "dyson"],
     faq: [
       {
         q: "Почему в поле «Частный DNS» на Android нельзя ввести IP-адрес цифрами?",
@@ -293,7 +293,7 @@ Clear-DnsClientCache
         fix: "Если интернет-провайдер принудительно заворачивает UDP/53 на свой резолвер, настройте шифрованный DNS-over-HTTPS в браузере (/setup/browsers) или на домашнем роутере Keenetic / MikroTik.",
       },
     ],
-    popularServiceSlugs: ["chatgpt", "cursor", "jetbrains", "miro", "notion", "spotify", "twitch", "github-copilot"],
+    popularServiceSlugs: ["chatgpt", "cursor", "jetbrains", "miro", "notion", "spotify", "autodesk", "github-copilot"],
     faq: [
       {
         q: "Нужно ли перезагружать Windows после смены DNS?",
@@ -507,7 +507,7 @@ curl -I https://claude.ai`}</CodeBlock>
         fix: "В Safari нет отдельной настройки DNS: он всегда использует системный профиль Apple — установите его по инструкции для iPhone или macOS.",
       },
     ],
-    popularServiceSlugs: ["chatgpt", "claude", "gemini", "miro", "notion", "canva", "grammarly", "deepl"],
+    popularServiceSlugs: ["chatgpt", "claude", "gemini", "miro", "notion", "coda", "semrush", "deepl"],
     faq: [
       {
         q: "Повлияет ли настройка в браузере на остальные программы на компьютере?",
@@ -577,7 +577,7 @@ curl -I https://claude.ai`}</CodeBlock>
         fix: "На вкладке «Контент-фильтрация» режим фильтрации по умолчанию должен стоять «Без фильтрации» (Системный), чтобы Keenetic использовал именно добавленные вами серверы DoH/DoT.",
       },
     ],
-    popularServiceSlugs: ["xbox", "playstation", "spotify", "twitch", "chatgpt", "gemini", "miro", "brawl-stars"],
+    popularServiceSlugs: ["xbox", "playstation", "spotify", "home-connect", "dyson", "chatgpt", "gemini", "miro"],
     faq: [
       {
         q: "Что лучше указать на Keenetic для тарифа Pro — обычный IPv4 или ссылку DoH?",
@@ -716,7 +716,7 @@ uci commit https-dns-proxy
         fix: "Ряд кабельных провайдеров прозрачно перехватывает незашифрованный трафик на порту 53. Проверьте команду nslookup claude.ai — если возвращается обычный заблокированный IP вместо узла прокси, используйте роутер с поддержкой DoH/DoT или настройте зашифрованный профиль прямо на телефоне/ПК.",
       },
     ],
-    popularServiceSlugs: ["xbox", "playstation", "spotify", "chatgpt", "gemini", "twitch"],
+    popularServiceSlugs: ["xbox", "playstation", "spotify", "home-connect", "dyson", "chatgpt", "gemini"],
     faq: [
       {
         q: "Что вписывать во второе поле «Альтернативный DNS» на роутере, если роутер требует оба поля?",
@@ -783,7 +783,7 @@ uci commit https-dns-proxy
         fix: "Да, DNS-сервер видит внешний адрес NAT-шлюза вашего провайдера и разрешает с него ваши запросы. А если на роутере настроить персональную ссылку DoH, токен авторизует запросы вообще независимо от смены IP.",
       },
     ],
-    popularServiceSlugs: ["xbox", "playstation", "geforce-now", "twitch", "spotify", "brawl-stars"],
+    popularServiceSlugs: ["xbox", "playstation", "spotify", "brawl-stars", "home-connect"],
     faq: [
       {
         q: "Упадёт ли скорость скачивания игр из Game Pass при таком DNS?",
@@ -847,7 +847,7 @@ uci commit https-dns-proxy
         fix: "Проверьте в личном кабинете Pro (с телефона в той же Wi-Fi сети), совпадает ли ваш текущий публичный IP с привязанным. Если ваш провайдер блокирует внешние DNS на 53 порту, пропишите персональную ссылку DoH на роутере.",
       },
     ],
-    popularServiceSlugs: ["playstation", "xbox", "twitch", "spotify", "brawl-stars"],
+    popularServiceSlugs: ["playstation", "xbox", "spotify", "brawl-stars", "home-connect"],
     faq: [
       {
         q: "Позволяет ли DNS покупать игры с российской карты в PS Store?",

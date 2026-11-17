@@ -126,7 +126,7 @@ export function StatsDashboard({ freeDomain, proDomain, serviceCount }: { freeDo
               {freeLoad.upsellMessage.replace(/\s*→$/, "")} ({freeLoad.loadPercent}%)
             </p>
             <p className="m-0 mt-1 text-sm text-mute">
-              Сейчас активны {fmtNum(freeLoad.online)} из {fmtNum(freeLoad.maxClients)} расчётных клиентских мест бесплатного кластера. В подписке Pro работают отдельные незагруженные серверы без вечерних просадок, а также открыты Notion, Miro, Canva, Spotify, TikTok и игры.
+              Сейчас активны {fmtNum(freeLoad.online)} из {fmtNum(freeLoad.maxClients)} расчётных клиентских мест бесплатного кластера. В подписке Pro работают отдельные незагруженные серверы без вечерних просадок, а также открыты Notion, Miro, Coda, Adobe, Autodesk, Spotify и игры.
             </p>
           </div>
           <Link

@@ -180,7 +180,7 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "П�
             </Link>
           </div>
           <p className="m-0 mt-1.5 text-sm text-mute">
-            В подписке {siteName} Pro открыты рабочие сервисы, музыка, TikTok и игры на свободных серверах без вечерних просадок.
+            В подписке {siteName} Pro открыты рабочие и дизайнерские сервисы, музыка, умный дом и игры на свободных серверах без вечерних просадок.
           </p>
           <ul className="m-0 mt-4 grid list-none gap-2.5 p-0 sm:grid-cols-2">
             {proFiltered.flatMap((c) =>

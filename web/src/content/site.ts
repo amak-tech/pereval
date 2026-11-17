@@ -5,7 +5,7 @@ export const SITE = {
   name: catalog.meta.name,
   origin: catalog.meta.origin,
   description:
-    "Бесплатный Smart DNS без VPN: ChatGPT, Claude, Gemini, Cursor, JetBrains и ещё десятки сервисов открываются напрямую, а российские сайты и банки работают как обычно. Pro — Notion, Miro, Canva, Spotify, TikTok, игры и быстрые серверы.",
+    "Бесплатный Smart DNS без VPN: ChatGPT, Claude, Gemini, Cursor, JetBrains и ещё десятки сервисов открываются напрямую, а российские сайты и банки работают как обычно. Pro — Notion, Miro, Coda, Adobe, Autodesk, Spotify, умный дом, игры и быстрые серверы.",
   free: catalog.free,
   pro: catalog.pro,
   counts: catalog.counts,
@@ -19,7 +19,7 @@ export const SITE = {
   /** Профиль Apple (DNS-over-TLS) для бесплатной версии — маршрут src/app/dns.mobileconfig. */
   appleProfilePath: "/dns.mobileconfig",
   /** Дата редакции правовых документов (ISO). */
-  legalUpdated: "2026-11-09",
+  legalUpdated: "2026-11-17",
 } as const;
 
 export const NAV = [

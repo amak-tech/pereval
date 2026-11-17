@@ -393,6 +393,11 @@ categories:
         note: "Веб-переводчик, приложения и API DeepL закрыли доступ с IP-адресов РФ и РБ («DeepL is not available in your region»)."
         domains:
           - deepl.com
+      - name: Hume AI
+        slug: hume-ai
+        note: "Облачный API голосового ИИ Hume AI (api.hume.ai) отклоняет прямые подключения с российских IP-адресов (HTTP 403 Forbidden)."
+        domains:
+          - hume.ai
   - id: dev
     name: Инструменты разработки, SaaS и облака
     pool: default
@@ -508,7 +513,6 @@ categories:
       - name: Framer
         domains:
           - framer.com
-          - framer.app
           - framerstatic.com
           - framercanvas.com
           - framerusercontent.com
@@ -573,6 +577,18 @@ categories:
       - name: FatSecret
         domains:
           - fatsecret.com
+      - name: Intel
+        slug: intel
+        note: "Портал документации, спецификаций ARK и загрузок драйверов intel.com перенаправляет запросы с IP-адресов РФ и РБ на страницу о приостановке работы в регионе."
+        domains:
+          - intel.com
+      - name: Cisco / Networking Academy
+        slug: cisco
+        note: "Образовательная платформа Cisco Networking Academy (netacad.com), портал загрузок software.cisco.com и база Talos ограничивают доступ с IP-адресов РФ и РБ (HTTP 403)."
+        domains:
+          - cisco.com
+          - netacad.com
+          - talosintelligence.com
 disabled:
   - name: Общая инфраструктура Google и Firebase
     note: >-
@@ -681,7 +697,7 @@ pro:
       fallback: default
       max_clients: 100                      # консервативный лимит для пула ai в Pro (защита от бана Google Gemini)
     media:
-      note: Стриминги и TikTok Pro — тяжёлый трафик.
+      note: Музыкальный стриминг Pro — выделенный пул.
       fallback: default
 #    reserve:
 #      note: Карантин — воркер выведен из обслуживания (его выходной IP Google относит к RU/недоступному региону; см. YouTube "GL" перед вводом в пул ai).
@@ -701,7 +717,7 @@ pro:
     # и за которые есть реальный спрос. Что не геоблокируется (Reddit, Pinterest, Trello,
     # Duolingo, Figma, Slack, Docker Hub) — в Pro не держим.
     - id: media
-      name: Музыка, видео и TikTok
+      name: Музыка и голосовой ИИ
       pool: media
       services:
         - name: Spotify                      # закрыт для РФ (why-not-available), в РБ работает
@@ -712,47 +728,20 @@ pro:
             - spotifycdn.com
             - spotifycdn.net
             - spoti.fi
-        - name: Twitch                       # не геоблок, а замедление у провайдеров РФ: через воркер идёт 1080p
-          note: "На прямом подключении у российских провайдеров поток упирается в 720p и буферизацию; через медиа-пул Перевал Pro стабильно работает 1080p60."
-          domains:
-            - twitch.tv
-            - ttvnw.net
-            - jtvnw.net
-            - twitchcdn.net
-            - twitchsvc.net
-        - name: TikTok                       # с 2022 для РФ урезанный режим: старая лента, без загрузки
-          note: "С 2022 года для российских IP включён урезанный региональный режим со старыми роликами без актуальной мировой ленты и загрузки видео."
-          domains:
-            - tiktok.com
-            - tiktokcdn.com
-            - tiktokcdn-us.com
-            - tiktokcdn-eu.com
-            - tiktokv.com
-            - tiktokv.us
-            - tiktokstatic.com
-            - ttwstatic.com
-            - byteoversea.com
-            - ibyteimg.com
-            - ibytedtos.com
-            - muscdn.com
-            - musical.ly
-        - name: ElevenLabs / Suno            # ElevenLabs: geo-restriction для РФ и РБ
+        - name: ElevenLabs                   # geo-restriction для РФ и РБ
           slug: elevenlabs
           pool: ai
-          note: "Голосовой синтезатор ElevenLabs и музыкальный генератор Suno блокируют доступ и генерацию по геолокации IP для РФ и РБ."
+          note: "Платформа синтеза речи, клонирования голоса и дубляжа ElevenLabs блокирует веб-интерфейс и API для IP-адресов РФ и РБ (редирект на geo-restriction.elevenlabs.io)."
           domains:
             - elevenlabs.io
-            - suno.com
-            - suno.ai
     - id: work
-      name: Рабочие инструменты и учёба
+      name: Рабочие инструменты, дизайн, учёба и умный дом
       pool: default
       services:
         - name: Notion                       # с сентября 2024 закрыт для РФ (403), в РБ работает
           note: "С сентября 2024 года серверы Notion отвечают HTTP 403 Forbidden на запросы с российских IP в браузере и приложениях; из РБ сервис открывается."
           domains:
             - notion.so
-            - notion.site
             - notion.com
             - notion.new
             - notionusercontent.com
@@ -763,11 +752,6 @@ pro:
           domains:
             - miro.com
             - realtimeboard.com
-        - name: Canva                        # закрыт для РФ с июня 2022
-          note: "С июня 2022 года Canva блокирует соединения с российских IP-адресов (HTTP 403 / заглушка о недоступности в регионе)."
-          domains:
-            - canva.com
-            - canva.link
         - name: Adobe (Firefly, Creative Cloud)  # Firefly: denied для РФ и РБ; adobe.com целиком закрыт для РБ
           slug: adobe
           note: "Генеративный ИИ Adobe Firefly отклоняет запросы из РФ и РБ (Access Denied), а сайт adobe.com и вход в Creative Cloud целиком закрыты для IP РБ."
@@ -775,21 +759,70 @@ pro:
             - adobe.com
             - adobelogin.com
             - adobe.io
-        - name: Airtable                     # с 19.02.2026 закрыт для РФ (обрыв TLS), в РБ работает
-          note: "С февраля 2026 года серверы Airtable разрывают TLS-соединение при обращении с российских IP-адресов; из Беларуси сервис доступен."
+            - adobe.net
+        - name: Coda
+          slug: coda
+          note: "Рабочие пространства, документы и API Coda возвращают ошибку HTTP 403 Forbidden при подключении с российских и белорусских IP-адресов."
           domains:
-            - airtable.com
-            - airtableusercontent.com
-            - airtableblocks.com
-        - name: Grammarly                    # 451 для РБ, обрыв TLS для РФ
-          note: "Сервис возвращает ошибку HTTP 451 для белорусских IP-адресов и сбрасывает TLS-рукопожатие при подключении с российских IP."
+            - coda.io
+        - name: Whimsical
+          slug: whimsical
+          note: "Сервис диаграмм, вайрфреймов и командных досок Whimsical закрывает доступ для IP-адресов РФ и РБ с кодом HTTP 451 («not available in your region»)."
           domains:
-            - grammarly.com
-            - grammarly.io
+            - whimsical.com
+        - name: Lucidchart / Lucidspark
+          slug: lucidchart
+          note: "Онлайн-редакторы схем и досок Lucidchart и Lucidspark перенаправляют запросы с IP-адресов РФ и РБ на страницу ограничения региона (lucid.co/region-not-available)."
+          domains:
+            - lucid.app
+            - lucidchart.com
+            - lucidspark.com
+            - lucid.co
+        - name: Uizard
+          slug: uizard
+          note: "ИИ-редактор прототипов и интерфейсов Uizard отклоняет запросы к сайту и приложению app.uizard.io с IP-адресов РФ и РБ (HTTP 403)."
+          domains:
+            - uizard.io
+        - name: Semrush
+          slug: semrush
+          note: "Платформа поискового маркетинга и аналитики Semrush блокирует вход с российских и белорусских IP-адресов на уровне балансировщика (HTTP 448 / 403)."
+          domains:
+            - semrush.com
+        - name: Autodesk
+          slug: autodesk
+          note: "Авторизация Autodesk ID (accounts.autodesk.com), управление лицензиями и облачные службы AutoCAD и Fusion блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
+          domains:
+            - autodesk.com
+            - autodesk.net
+            - cdn.web-platform.io
+        - name: SketchUp
+          slug: sketchup
+          note: "Веб-редактор 3D-моделирования app.sketchup.com и библиотека моделей 3D Warehouse возвращают ошибку HTTP 403 для подключений из РФ и РБ."
+          domains:
+            - sketchup.com
+            - trimble.com
         - name: Coursera                     # закрыт для РФ (обрыв TLS), в РБ работает
           note: "Платформа обрывает TLS-соединение при прямом подключении с российских IP-адресов; из Беларуси курсы открываются напрямую."
           domains:
             - coursera.org
+        - name: edX
+          slug: edx
+          note: "Образовательная платформа edX блокирует подключения с российских IP-адресов на уровне CloudFront (HTTP 403 Country Block)."
+          domains:
+            - edx.org
+            - edx-cdn.org
+        - name: Home Connect (Bosch / Siemens)
+          slug: home-connect
+          note: "Облачный API умной бытовой техники Bosch и Siemens (api.home-connect.com) отклоняет прямые подключения с российских и белорусских IP-адресов (HTTP 403)."
+          domains:
+            - home-connect.com
+            - singlekey-id.com
+        - name: Dyson (MyDyson)
+          slug: dyson
+          note: "Сайт и облачный API приложения MyDyson (appapi.cp.dyson.com) для управления очистителями и техникой Dyson блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
+          domains:
+            - dyson.com
+            - dyson.co.uk
     - id: games
       name: Игры и консоли
       pool: default
@@ -829,9 +862,3 @@ pro:
             - playstation.com
             - playstation.net
             - sonyentertainmentnetwork.com
-        - name: NVIDIA GeForce NOW           # РФ и РБ вне списка регионов GFN
-          slug: geforce-now
-          note: "Россия и Беларусь не входят в список поддерживаемых регионов NVIDIA GeForce NOW при проверке IP во время входа в аккаунт и каталога игр."
-          domains:
-            - geforcenow.com
-            - nvidiagrid.net

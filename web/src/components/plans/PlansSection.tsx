@@ -27,12 +27,12 @@ export function PlansSection() {
       eyebrow: "Подписка · для себя",
       title: `${name} Pro`,
       price: <ProPrice size="lg" />,
-      text: "Быстрые серверы без вечерних просадок и полный каталог: рабочие инструменты, музыка, TikTok и игры.",
+      text: "Быстрые серверы без вечерних просадок и полный каталог: рабочие инструменты, дизайн и 3D, музыка, умный дом и игры.",
       items: [
         `Всё из Free + ${counts.pro_services} сервисов в ${counts.pro_categories} категориях`,
-        "Notion, Miro, Canva, Adobe, Airtable, Grammarly",
-        "Spotify, TikTok, Twitch, Supercell, Xbox, PlayStation",
-        "Личный кабинет: профили, персональные DoH/DoT, выбор категорий",
+        "Notion, Miro, Coda, Lucidchart, Adobe, Autodesk, SketchUp",
+        "Spotify, ElevenLabs, Coursera, edX, Home Connect, Dyson",
+        "Supercell, Xbox, PlayStation + личный кабинет (DoH/DoT, IP)",
         "Отмена в любой момент, доступ до конца оплаченного месяца",
       ],
       cta: (

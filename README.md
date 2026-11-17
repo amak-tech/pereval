@@ -8,7 +8,7 @@
 
 # Перевал — Smart DNS для доступа к ChatGPT, Claude, Gemini и инструментам разработки без VPN
 
-**Перевал** — это умный DNS-сервер (Smart DNS), который восстанавливает доступ к зарубежным ИИ-сервисам и инструментам разработки, ограничивающим российские и белорусские IP-адреса по геолокации, **без установки VPN-приложений**, без регистрации и без падения скорости интернета. Бесплатная версия покрывает ИИ и инструменты разработки; подписка **Перевал Pro** добавляет стриминги, соцсети, игры и отдельные быстрые серверы.
+**Перевал** — это умный DNS-сервер (Smart DNS), который восстанавливает доступ к зарубежным ИИ-сервисам и инструментам разработки, ограничивающим российские и белорусские IP-адреса по геолокации, **без установки VPN-приложений**, без регистрации и без падения скорости интернета. Бесплатная версия покрывает ИИ и инструменты разработки; подписка **Перевал Pro** добавляет рабочие пространства, дизайн и 3D, музыку, умный дом, игры и отдельные быстрые серверы.
 
 👉 **Сайт, пошаговые инструкции и личный кабинет:**  
 **[https://pereval.top](https://pereval.top/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=hero)**
@@ -47,8 +47,8 @@
 
 Поддерживаются самые востребованные сервисы для работы с ИИ и разработки (список и поиск — на [сайте](https://pereval.top/?utm_source=github&utm_medium=readme&utm_campaign=pereval&utm_content=services)):
 
-- **ИИ и языковые модели:** ChatGPT (OpenAI), Claude (Anthropic), Google Gemini, AI Studio, NotebookLM и Jules, Grok (xAI), Microsoft Copilot, GitHub Copilot, Cursor, Windsurf / Codeium, OpenRouter, Groq, Lambda Labs, Lightning AI, Augment Code, Cline, Trae, Qoder, Manus, Genspark, Langdock, DeepL.
-- **Инструменты разработки, SaaS и облака:** JetBrains, HashiCorp, Atlassian, Sentry, MongoDB, Redis, Neo4j, Liquibase, Grafana, Graylog, Snyk, PostHog, Amplitude, Pingdom, Buf, Spacelift, Algolia, GitGuardian, Swagger, Netlify, Heroku, Framer, ngrok, Tailscale, HTTP Toolkit, Oracle, Liberica JDK, Qt, Bitnami, NVIDIA Developer, Mattermost, Outline, ClickUp, Zapier.
+- **ИИ и языковые модели:** ChatGPT (OpenAI), Claude (Anthropic), Google Gemini, AI Studio, NotebookLM и Jules, Grok (xAI), Microsoft Copilot, GitHub Copilot, Cursor, Windsurf / Codeium, OpenRouter, Groq, Lambda Labs, Lightning AI, Augment Code, Cline, Trae, Qoder, Manus, Genspark, Langdock, Hume AI, DeepL.
+- **Инструменты разработки, SaaS и облака:** JetBrains, HashiCorp, Atlassian, Sentry, MongoDB, Redis, Neo4j, Liquibase, Grafana, Graylog, Snyk, PostHog, Amplitude, Pingdom, Buf, Spacelift, Algolia, GitGuardian, Swagger, Netlify, Heroku, Framer, ngrok, Tailscale, HTTP Toolkit, Oracle, Intel, Cisco / NetAcad, Liberica JDK, Qt, Bitnami, NVIDIA Developer, Mattermost, Outline, ClickUp, Zapier.
 
 ---
 
@@ -56,8 +56,8 @@
 
 **[pereval.top/pro](https://pereval.top/pro)** — платная подписка (месяц, оплата в рублях или долларах через платёжный сервис lava.top):
 
-- **Отдельные быстрые серверы** без вечерних перегрузок, маршрутизация по пулам: ИИ-сервисы — с постоянного IP, «тяжёлые» стриминги и TikTok — через отдельные ноды.
-- **Расширенный каталог:** все сервисы Free + Notion, Miro, Canva, Adobe, Airtable, Grammarly, Coursera, Spotify, Twitch, TikTok, Supercell, Xbox, PlayStation, GeForce NOW. Только сервисы с подтверждённым геоблоком для РФ или РБ.
+- **Отдельные быстрые серверы** без вечерних перегрузок, маршрутизация по пулам: ИИ-сервисы — с постоянного IP, музыкальный стриминг — через отдельный медиа-пул.
+- **Расширенный каталог:** все сервисы Free + Notion, Miro, Coda, Whimsical, Lucidchart, Uizard, Semrush, Adobe, Autodesk, SketchUp, Coursera, edX, Spotify, ElevenLabs, Home Connect (Bosch / Siemens), Dyson, Supercell, Xbox, PlayStation. Только сервисы с подтверждённым геоблоком для РФ или РБ.
 - **Личный кабинет** ([pereval.top/account](https://pereval.top/account)): персональные адреса DoH (`https://pro.pereval.top/dns/<token>`) и DoT (`<token>.pro.pereval.top`), профиль для Apple в один клик, привязка IP для роутера, DDNS для динамических адресов (опрос имени или DynDNS2-push с роутера), включение и отключение категорий, вход по ссылке на email или через Google.
 - **Перевал Dedicated** ([pereval.top/dedicated](https://pereval.top/dedicated)) — выделенный сервер со своим IP и собственными доменами для семьи или команды; сейчас принимаются заявки.
 

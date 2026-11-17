@@ -110,7 +110,7 @@ export default function HomePage() {
         <ConnectivityCheck />
       </Section>
 
-      <Section id="services" eyebrow="Каталог" title="Какие сервисы охвачены" lead={`${counts.free_services} сервисов в ${counts.free_categories} категориях — ${counts.free_domains} базовых доменов и все их поддомены. Нужны Notion, Miro, Canva, Spotify, TikTok или игровые сервисы — они в каталоге Pro (и тоже ищутся ниже).`}>
+      <Section id="services" eyebrow="Каталог" title="Какие сервисы охвачены" lead={`${counts.free_services} сервисов в ${counts.free_categories} категориях — ${counts.free_domains} базовых доменов и все их поддомены. Нужны Notion, Miro, Coda, Adobe, Autodesk, Spotify, умный дом или игровые сервисы — они в каталоге Pro (и тоже ищутся ниже).`}>
         <ServiceCatalog categories={freeCategories()} proCategories={proCategories()} siteName={name} telegram={SITE.telegram} />
       </Section>
 
@@ -130,7 +130,7 @@ export default function HomePage() {
         </div>
       </Section>
 
-      <Section id="plans" eyebrow="Тарифы" title="Free, Pro и выделенный сервер" lead={`Базовый сервер «${name}» бесплатен и рассчитан на текстовые нейросети и инструменты разработки. Нужна стабильная скорость вечером, рабочие инструменты вроде Notion и Miro, музыка, TikTok и игры — это Pro. Свой сервер на роутер для семьи или команды — Dedicated.`}>
+      <Section id="plans" eyebrow="Тарифы" title="Free, Pro и выделенный сервер" lead={`Базовый сервер «${name}» бесплатен и рассчитан на текстовые нейросети и инструменты разработки. Нужна стабильная скорость вечером, рабочие инструменты вроде Notion, Miro, Coda и Adobe, Spotify, умный дом и игры — это Pro. Свой сервер на роутер для семьи или команды — Dedicated.`}>
         <PlansSection />
       </Section>
 

@@ -30,9 +30,9 @@ describe("Programmatic SEO — страницы сервисов (/services/[slu
     }
   });
 
-  it("покрывает все ключевые поисковые интенты (chatgpt, claude, cursor, notion, miro, spotify, xbox, brawl-stars, canva)", () => {
-    const requiredFree = ["chatgpt", "claude", "cursor", "gemini", "notebooklm", "jetbrains", "terraform"];
-    const requiredPro = ["notion", "miro", "spotify", "xbox", "brawl-stars", "canva", "playstation", "suno"];
+  it("покрывает все ключевые поисковые интенты (chatgpt, claude, cursor, notion, miro, spotify, xbox, brawl-stars, coda, autodesk)", () => {
+    const requiredFree = ["chatgpt", "claude", "cursor", "gemini", "notebooklm", "jetbrains", "terraform", "hume-ai", "intel", "cisco", "netacad"];
+    const requiredPro = ["notion", "miro", "spotify", "xbox", "brawl-stars", "coda", "autodesk", "semrush", "elevenlabs", "home-connect", "dyson", "playstation", "lucidspark"];
 
     for (const slug of requiredFree) {
       const p = servicePageBySlug(slug);

@@ -8,7 +8,7 @@ import { SITE } from "@/content/site";
 import { catalog } from "@/lib/catalog";
 
 const TITLE = `Каталог сервисов без VPN (${SITE.name} Free и Pro) — ИИ, работа, музыка и игры`;
-const DESCRIPTION = `Полный список зарубежных платформ, которые открывает Smart DNS ${SITE.name} из России и Беларуси без VPN: ChatGPT, Claude, Gemini, Cursor, Notion, Miro, Canva, Spotify, TikTok, Xbox и ещё десятки сервисов.`;
+const DESCRIPTION = `Полный список зарубежных платформ, которые открывает Smart DNS ${SITE.name} из России и Беларуси без VPN: ChatGPT, Claude, Gemini, Cursor, Notion, Miro, Coda, Adobe, Autodesk, Spotify, Xbox и ещё десятки сервисов.`;
 
 export const metadata: Metadata = {
   title: { absolute: TITLE },
@@ -62,7 +62,7 @@ export default function ServicesIndexPage() {
       <Section
         id="pro-list"
         eyebrow={`Подписка ${SITE.name} Pro`}
-        title="Рабочие пространства, медиа, музыка и консоли"
+        title="Рабочие пространства, дизайн, музыка, умный дом и консоли"
         lead="Сервисы с подтверждённым геоблоком IP для РФ и РБ на выделенных незагруженных серверах."
       >
         {catalog.categories
