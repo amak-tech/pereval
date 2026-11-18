@@ -164,7 +164,7 @@ categories:
           - openai.qualtrics.com
           - ct.sendgrid.net
           - js.intercomcdn.com
-      - name: Google Gemini / AI Studio / NotebookLM / Jules / Antigravity
+      - name: Google Gemini / AI Studio / NotebookLM / Jules
         slug: gemini
         note: "Google перенаправляет запросы с IP РФ и РБ на страницу неподдерживаемых регионов для Gemini, Google AI Studio, NotebookLM и облачных ИИ-инструментов."
         domains:
@@ -217,33 +217,13 @@ categories:
           - labs.google.com
           - opal.google
           - opal.google.com
-          - flow.google
-          - flow.google.com
           - aitestkitchen.withgoogle.com
           - deepmind.google
           - deepmind.com
-          - antigravity.google
-          - antigravity.google.com
-          - antigravity-pa.googleapis.com
-          - antigravity.googleapis.com
-          - antigravity-unleash.goog
-          - antigravity-auto-updater-974169037036.us-central1.run.app
-          - antigravity-cli-auto-updater-974169037036.us-central1.run.app
-          - antigravity-hub-auto-updater-974169037036.us-central1.run.app
           - cloudcode-pa.googleapis.com
-          - daily-cloudcode-pa.googleapis.com
-          - daily-cloudcode-pa.sandbox.googleapis.com
-          - preprod-daily-cloudcode-pa.sandbox.googleapis.com
-          - autopush-cloudcode-pa.sandbox.googleapis.com
           - cloudaicompanion.googleapis.com
-          - staging-cloudaicompanion.sandbox.googleapis.com
-          - aicode.googleapis.com
-          - businessaicode.googleapis.com
           - aiplatform.googleapis.com
           - iamcredentials.googleapis.com
-          - jetski-webchannel.googleapis.com
-          - aisandbox-pa.googleapis.com
-          - aisandbox-pa.clients6.google.com
           - aida.googleapis.com
           - geller-pa.googleapis.com
           - geller-pa.clients6.google.com
@@ -871,8 +851,53 @@ pro:
     # резолвятся через прокси только для пользователей с email из ADMIN_EMAIL / ADMIN_EMAILS,
     # не отображаются на сайте и не учитываются в статистике (трафик nginx и счётчики DNS).
     # Либо пометьте сервис внутри pro.categories полем `admin_only: true`.
-    # Пример:
-    # - name: Example Test Service
-    #   pool: default
-    #   domains:
-    #     - example-test.org
+    - name: Google Flow
+      slug: google-flow
+      pool: ai
+      domains:
+        - flow.google
+        - flow.google.com
+        - aisandbox-pa.googleapis.com
+        - aisandbox-pa.clients6.google.com
+        - aisandbox-pa-webchannel.clients6.google.com
+    - name: Google Antigravity
+      slug: google-antigravity
+      pool: ai
+      domains:
+        - antigravity.google
+        - antigravity.google.com
+        - antigravity-pa.googleapis.com
+        - antigravity.googleapis.com
+        - antigravity-unleash.goog
+        - antigravity-auto-updater-974169037036.us-central1.run.app
+        - antigravity-cli-auto-updater-974169037036.us-central1.run.app
+        - antigravity-hub-auto-updater-974169037036.us-central1.run.app
+        - daily-cloudcode-pa.googleapis.com
+        - daily-cloudcode-pa.sandbox.googleapis.com
+        - preprod-daily-cloudcode-pa.sandbox.googleapis.com
+        - autopush-cloudcode-pa.sandbox.googleapis.com
+        - staging-cloudaicompanion.sandbox.googleapis.com
+        - aicode.googleapis.com
+        - businessaicode.googleapis.com
+        - businessaicode.us.rep.googleapis.com
+        - businessaicode.eu.rep.googleapis.com
+        - aiplatform.us.rep.googleapis.com
+        - aiplatform.eu.rep.googleapis.com
+        - discoveryengine.googleapis.com
+        - us-discoveryengine.googleapis.com
+        - eu-discoveryengine.googleapis.com
+        - jetski-webchannel.googleapis.com
+    - name: Moltbook
+      slug: moltbook
+      pool: default
+      domains:
+        - moltbook.com
+    - name: Hatching Triage
+      slug: triage
+      pool: default
+      domains:
+        - tria.ge
+        - hatching.io
+        - sandbox.recordedfuture.com
+        - us-sandbox.recordedfuture.com
+        - apj-sandbox.recordedfuture.com
