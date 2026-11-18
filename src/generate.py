@@ -38,6 +38,7 @@
       pools: {...}
       workers: [...]
       categories: [...]                     # как categories (+ id, pool)
+      admin_services: [...]                 # сервисы только для админа (Pro, без сайта и статистики)
 
 Требуется PyYAML:  pip3 install pyyaml   (в Debian/Ubuntu: apt install python3-yaml)
 Совместимо с Python 3.9+.
@@ -190,6 +191,7 @@ class ProConfig(Cluster):
         self.dns_ip = None
         self.cp_ip = None
         self.categories = []
+        self.admin_services = []
 
 
 class FreeConfig:
@@ -199,11 +201,12 @@ class FreeConfig:
 
 
 class Service:
-    def __init__(self, name, pool=None, slug=None, note=None):
+    def __init__(self, name, pool=None, slug=None, note=None, admin_only=False):
         self.name = name
         self.pool = pool
         self.slug = slug
         self.note = note
+        self.admin_only = bool(admin_only)
         self.domains = []
 
 
@@ -251,6 +254,41 @@ class Doc:
 
     def all_categories(self):
         return list(self.categories) + list(self.pro.categories)
+
+    def pro_admin_category(self):
+        """Служебная категория для pro.admin_services (маршрутизация воркеров и фильтрация метрик)."""
+        if not self.pro.admin_services:
+            return None
+        cat = Category("admin", "Тестирование (админ)", pool=poolrouting.DEFAULT_POOL, tier="pro")
+        cat.services = list(self.pro.admin_services)
+        return cat
+
+    def all_pro_routing_categories(self):
+        """Все категории для Pro-воркеров и Pro DNS (Free + Pro + admin_services)."""
+        cats = self.all_categories()
+        adm = self.pro_admin_category()
+        if adm is not None:
+            cats.append(adm)
+        return cats
+
+    @staticmethod
+    def public_categories(categories):
+        """Копии категорий без admin_only-сервисов (пустые после фильтрации категории опускаются)."""
+        out = []
+        for c in categories:
+            svcs = [s for s in c.services if not s.admin_only]
+            if not svcs:
+                continue
+            cc = Category(c.id, c.name, pool=c.pool, tier=c.tier)
+            cc.services = svcs
+            out.append(cc)
+        return out
+
+    def admin_only_services(self):
+        """Все admin-only сервисы Pro (из pro.categories с admin_only: true и из pro.admin_services)."""
+        out = [s for c in self.pro.categories for s in c.services if s.admin_only]
+        out.extend(self.pro.admin_services)
+        return out
 
     def active_workers(self, primary_ip=None):
         """Воркеры Free, исключая совпадающие с primary_ip."""
@@ -426,6 +464,26 @@ def _parse_workers(raw, where, cluster):
             raise ParseError("%s: ожидался словарь или строка с IP" % wwhere)
 
 
+def _parse_service(sraw, swhere, default_admin_only=False):
+    if not isinstance(sraw, dict):
+        raise ParseError("%s: ожидался словарь описания сервиса, а не %s" % (swhere, type(sraw).__name__))
+    sname = _need(sraw, "name", swhere, str).strip()
+    sslug = _opt_str(sraw, "slug", swhere)
+    admin_only = _opt_bool(sraw, "admin_only", swhere, default=default_admin_only)
+    if default_admin_only and not admin_only:
+        raise ParseError("%s: в списке admin_services нельзя указывать admin_only: false" % swhere)
+    svc = Service(
+        sname,
+        pool=_opt_str(sraw, "pool", swhere),
+        slug=sslug.lower() if sslug else None,
+        note=_opt_str(sraw, "note", swhere),
+        admin_only=admin_only,
+    )
+    svc.domains = _domains(_need(sraw, "domains", "сервис «%s»" % sname, list),
+                           "сервис «%s»" % sname)
+    return svc
+
+
 def _parse_categories(raw, where, tier):
     if not isinstance(raw, list) or not raw:
         raise ParseError("%s: categories должен быть непустым списком" % where)
@@ -437,17 +495,7 @@ def _parse_categories(raw, where, tier):
         cat = Category(cid, cname, pool=_opt_str(craw, "pool", cwhere), tier=tier)
         for si, sraw in enumerate(_need(craw, "services", "categories «%s»" % cname, list), 1):
             swhere = "categories «%s» / services[%d]" % (cname, si)
-            sname = _need(sraw, "name", swhere, str).strip()
-            sslug = _opt_str(sraw, "slug", swhere)
-            svc = Service(
-                sname,
-                pool=_opt_str(sraw, "pool", swhere),
-                slug=sslug.lower() if sslug else None,
-                note=_opt_str(sraw, "note", swhere),
-            )
-            svc.domains = _domains(_need(sraw, "domains", "сервис «%s»" % sname, list),
-                                   "сервис «%s»" % sname)
-            cat.services.append(svc)
+            cat.services.append(_parse_service(sraw, swhere, default_admin_only=False))
         out.append(cat)
     return out
 
@@ -516,6 +564,10 @@ def parse(path):
         doc.passthrough.note = str(pt.get("note") or "").strip()
         doc.passthrough.domains = _domains(pt.get("domains") or [], "%s: passthrough" % path)
 
+    if "admin_services" in data:
+        raise ParseError("%s: admin_services задаётся внутри секции pro: "
+                         "(сервисы только для админа доступны только в Pro)" % path)
+
     pro_raw = data.get("pro")
     if pro_raw is not None:
         where = "%s: pro" % path
@@ -529,6 +581,14 @@ def parse(path):
         _parse_pools(pro_raw.get("pools"), where, doc.pro)
         _parse_workers(_need(pro_raw, "workers", where, list), where, doc.pro)
         doc.pro.categories = _parse_categories(pro_raw.get("categories"), where, "pro")
+        admin_svcs_raw = pro_raw.get("admin_services")
+        if admin_svcs_raw is not None:
+            if not isinstance(admin_svcs_raw, list):
+                raise ParseError("%s: admin_services должен быть списком сервисов" % where)
+            for si, sraw in enumerate(admin_svcs_raw, 1):
+                doc.pro.admin_services.append(
+                    _parse_service(sraw, "%s: admin_services[%d]" % (where, si), default_admin_only=True)
+                )
 
     return doc
 
@@ -617,7 +677,43 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
                 errors.append("%s: в пуле «%s» нет ни одного воркера" % (label, pname))
 
 
-def _validate_categories(categories, pools, label, errors, warnings, seen, seen_slugs=None):
+def _validate_service_list(services, cat_name, pools, label, errors, warnings, seen, seen_slugs,
+                           allow_admin_only=False):
+    names = [s.name for s in services]
+    for n in sorted(set(n for n in names if names.count(n) > 1)):
+        warnings.append("%s: в «%s» два сервиса с именем «%s»" % (label, cat_name, n))
+    for s in services:
+        svc_loc = "%s / %s" % (cat_name, s.name)
+        if s.admin_only and not allow_admin_only:
+            errors.append("%s: сервис «%s» помечен admin_only — сервисы только для админа доступны только в pro "
+                          "(pro.admin_services или pro.categories)" % (label, svc_loc))
+        eff_slug = s.slug or service_slug(s.name)
+        if len(eff_slug) < 2 or len(eff_slug) > 48 or not SERVICE_SLUG_RE.match(eff_slug):
+            errors.append("%s: некорректный slug «%s» у сервиса «%s» (ожидается %s, 2..48 симв.)"
+                          % (label, eff_slug, svc_loc, SERVICE_SLUG_RE.pattern))
+        elif eff_slug in seen_slugs:
+            errors.append("slug сервиса «%s» совпадает у «%s» и «%s» — укажите уникальный slug"
+                          % (eff_slug, seen_slugs[eff_slug], svc_loc))
+        else:
+            seen_slugs[eff_slug] = svc_loc
+        if s.pool and s.pool not in pools:
+            errors.append("%s: сервис «%s» ссылается на неизвестный пул «%s»"
+                          % (label, svc_loc, s.pool))
+        if not s.domains:
+            warnings.append("%s: сервис «%s» без доменов" % (label, svc_loc))
+        for d in s.domains:
+            if not DOMAIN_RE.match(d):
+                errors.append("некорректный домен «%s» (%s)" % (d, svc_loc))
+            elif IPISH_RE.match(d):
+                warnings.append("«%s» похож на IP-адрес, а не на домен (%s)" % (d, svc_loc))
+            if d in seen:
+                errors.append("домен %s указан дважды: «%s» и «%s»" % (d, seen[d], svc_loc))
+            else:
+                seen[d] = svc_loc
+
+
+def _validate_categories(categories, pools, label, errors, warnings, seen, seen_slugs=None,
+                         allow_admin_only=False):
     """Проверяет домены/пулы/слаги категорий; seen — общий словарь домен -> «кат / сервис»."""
     ids = set()
     if seen_slugs is None:
@@ -633,33 +729,8 @@ def _validate_categories(categories, pools, label, errors, warnings, seen, seen_
             errors.append("%s: категория «%s» ссылается на неизвестный пул «%s»" % (label, c.name, c.pool))
         if not c.services:
             warnings.append("%s: категория «%s» пуста" % (label, c.name))
-        names = [s.name for s in c.services]
-        for n in sorted(set(n for n in names if names.count(n) > 1)):
-            warnings.append("%s: в категории «%s» два сервиса с именем «%s»" % (label, c.name, n))
-        for s in c.services:
-            eff_slug = s.slug or service_slug(s.name)
-            if len(eff_slug) < 2 or len(eff_slug) > 48 or not SERVICE_SLUG_RE.match(eff_slug):
-                errors.append("%s: некорректный slug «%s» у сервиса «%s / %s» (ожидается %s, 2..48 симв.)"
-                              % (label, eff_slug, c.name, s.name, SERVICE_SLUG_RE.pattern))
-            elif eff_slug in seen_slugs:
-                errors.append("slug сервиса «%s» совпадает у «%s» и «%s / %s» — укажите уникальный slug"
-                              % (eff_slug, seen_slugs[eff_slug], c.name, s.name))
-            else:
-                seen_slugs[eff_slug] = "%s / %s" % (c.name, s.name)
-            if s.pool and s.pool not in pools:
-                errors.append("%s: сервис «%s / %s» ссылается на неизвестный пул «%s»"
-                              % (label, c.name, s.name, s.pool))
-            if not s.domains:
-                warnings.append("%s: сервис «%s / %s» без доменов" % (label, c.name, s.name))
-            for d in s.domains:
-                if not DOMAIN_RE.match(d):
-                    errors.append("некорректный домен «%s» (%s / %s)" % (d, c.name, s.name))
-                elif IPISH_RE.match(d):
-                    warnings.append("«%s» похож на IP-адрес, а не на домен (%s / %s)" % (d, c.name, s.name))
-                if d in seen:
-                    errors.append("домен %s указан дважды: «%s» и «%s / %s»" % (d, seen[d], c.name, s.name))
-                else:
-                    seen[d] = "%s / %s" % (c.name, s.name)
+        _validate_service_list(c.services, c.name, pools, label, errors, warnings, seen, seen_slugs,
+                               allow_admin_only=allow_admin_only)
     return ids
 
 
@@ -711,7 +782,12 @@ def validate(doc, primary_ip=None):
         if doc.pro.dns_ip:
             forbidden.add(doc.pro.dns_ip)
         _validate_cluster(doc.pro, "pro", forbidden, errors, warnings)
-        pro_ids = _validate_categories(doc.pro.categories, doc.pro.pools, "pro.categories", errors, warnings, seen, seen_slugs)
+        pro_ids = _validate_categories(doc.pro.categories, doc.pro.pools, "pro.categories", errors, warnings,
+                                       seen, seen_slugs, allow_admin_only=True)
+        if doc.pro.admin_services:
+            _validate_service_list(doc.pro.admin_services, "admin_services", doc.pro.pools,
+                                   "pro.admin_services", errors, warnings, seen, seen_slugs,
+                                   allow_admin_only=True)
         for cid in sorted(free_ids & pro_ids):
             errors.append("id категории «%s» используется и в categories, и в pro.categories" % cid)
 
@@ -826,16 +902,19 @@ def domain_pools(categories):
 
 
 def service_map_json(doc, categories=None):
-    """{домен: {service, category, category_id, tier, pool}} для статистики и healthcheck."""
+    """{домен: {service, category, category_id, tier, pool[, admin_only]}} для статистики и healthcheck."""
     mapping = OrderedDict()
     for d, c, s in doc.active(categories):
-        mapping[d] = OrderedDict([
+        entry = OrderedDict([
             ("service", s.name),
             ("category", c.name),
             ("category_id", c.id),
             ("tier", c.tier),
             ("pool", effective_pool(c, s)),
         ])
+        if s.admin_only:
+            entry["admin_only"] = True
+        mapping[d] = entry
     return json.dumps(mapping, ensure_ascii=False, indent=2) + "\n"
 
 
@@ -913,16 +992,30 @@ def free_policy_map_json(doc, primary_ip):
 
 
 def pro_policy_map_json(doc):
-    """Карта доменов и пулов для pro_dns.py (каталог Free + Pro)."""
+    """Карта доменов и пулов для pro_dns.py (каталог Free + Pro + admin_services)."""
     cats = doc.all_categories()
+    pub_cats = doc.public_categories(cats)
     domains = OrderedDict()
     for d, c, s in doc.active(cats):
-        domains[d] = OrderedDict([
+        entry = OrderedDict([
             ("service", s.name),
             ("category_id", c.id),
             ("tier", c.tier),
             ("pool", effective_pool(c, s)),
         ])
+        if s.admin_only:
+            entry["admin_only"] = True
+        domains[d] = entry
+    adm_cat = doc.pro_admin_category()
+    if adm_cat is not None:
+        for d, c, s in doc.active([adm_cat]):
+            domains[d] = OrderedDict([
+                ("service", s.name),
+                ("category_id", ""),
+                ("tier", "pro"),
+                ("pool", effective_pool(c, s)),
+                ("admin_only", True),
+            ])
     payload = OrderedDict([
         ("tier", "pro"),
         ("domain", doc.pro.domain),
@@ -936,7 +1029,7 @@ def pro_policy_map_json(doc):
                 ("id", c.id), ("name", c.name), ("tier", c.tier),
                 ("pool", c.pool or poolrouting.DEFAULT_POOL),
                 ("service_count", len(c.services)), ("domain_count", c.count),
-            ]) for c in cats
+            ]) for c in pub_cats
         ]),
         ("passthrough", sorted(set(doc.passthrough.domains))),
         ("domains", domains),
@@ -945,8 +1038,11 @@ def pro_policy_map_json(doc):
 
 
 def services_json(doc, primary_ip):
-    """Каталог для веб-приложения (web/src/generated/services.json)."""
+    """Каталог для веб-приложения (web/src/generated/services.json) — без admin-only сервисов."""
     free_domain = extract_domain(doc)
+    pub_free = doc.public_categories(doc.categories)
+    pub_pro = doc.public_categories(doc.pro.categories)
+    pub_all = pub_free + pub_pro
 
     def svc_dict(c, s):
         d = OrderedDict([
@@ -997,18 +1093,18 @@ def services_json(doc, primary_ip):
             ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.active_workers(primary_ip), 1)]),
         ])),
         ("pro", pro),
-        ("categories", [cat_dict(c) for c in doc.all_categories()]),
+        ("categories", [cat_dict(c) for c in pub_all]),
         ("disabled", [OrderedDict([("name", g.name), ("note", g.note), ("domains", list(g.domains))])
                       for g in doc.disabled]),
         ("passthrough", OrderedDict([("note", doc.passthrough.note),
                                      ("domains", sorted(set(doc.passthrough.domains)))])),
         ("counts", OrderedDict([
-            ("free_categories", len(doc.categories)),
-            ("free_services", sum(len(c.services) for c in doc.categories)),
-            ("free_domains", doc.total),
-            ("pro_categories", len(doc.pro.categories)),
-            ("pro_services", sum(len(c.services) for c in doc.pro.categories)),
-            ("pro_domains", sum(c.count for c in doc.pro.categories)),
+            ("free_categories", len(pub_free)),
+            ("free_services", sum(len(c.services) for c in pub_free)),
+            ("free_domains", sum(c.count for c in pub_free)),
+            ("pro_categories", len(pub_pro)),
+            ("pro_services", sum(len(c.services) for c in pub_pro)),
+            ("pro_domains", sum(c.count for c in pub_pro)),
         ])),
     ])
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -1155,8 +1251,8 @@ def build_values(doc, ip, source):
 
 
 def pro_values(doc, base):
-    """Переопределения для шаблонов Pro: каталог Free + Pro, узлы Pro."""
-    cats = doc.all_categories()
+    """Переопределения для шаблонов Pro: каталог Free + Pro + admin_services, узлы Pro."""
+    cats = doc.all_pro_routing_categories()
     pro_workers_ips = [w.ip for w in doc.pro.workers]
     v = dict(base)
     v.update({
@@ -1291,11 +1387,12 @@ def main(argv=None):
         rendered.extend(strict_pool_maps(doc, doc.nodes, doc.categories, ""))
         if doc.pro.enabled:
             pv = pro_values(doc, values)
+            pro_routing_cats = doc.all_pro_routing_categories()
             rendered.extend((out_name, render(tpl_dir, tpl_name, pv)) for tpl_name, out_name, _ in PRO_TEMPLATES)
             rendered.append(("pro-policy-map.json", pro_policy_map_json(doc)))
             rendered.append(("pro-nodes.json", pro_nodes_json(doc)))
-            rendered.append(("pro-service-map.json", service_map_json(doc, doc.all_categories())))
-            rendered.extend(strict_pool_maps(doc, doc.pro, doc.all_categories(), "pro-"))
+            rendered.append(("pro-service-map.json", service_map_json(doc, pro_routing_cats)))
+            rendered.extend(strict_pool_maps(doc, doc.pro, pro_routing_cats, "pro-"))
         catalog = services_json(doc, ip)
     except ParseError as exc:
         print("ошибка шаблона: %s" % exc, file=sys.stderr)
@@ -1303,9 +1400,14 @@ def main(argv=None):
 
     pro_note = ""
     if doc.pro.enabled:
+        pub_pro = doc.public_categories(doc.pro.categories)
         pro_note = "; Pro: %d категорий, %d сервисов, %d доменов" % (
-            len(doc.pro.categories), sum(len(c.services) for c in doc.pro.categories),
-            sum(c.count for c in doc.pro.categories))
+            len(pub_pro), sum(len(c.services) for c in pub_pro),
+            sum(c.count for c in pub_pro))
+        adm_svcs = doc.admin_only_services()
+        if adm_svcs:
+            pro_note += " (+ %d admin-only сервисов, %d доменов)" % (
+                len(adm_svcs), sum(len(s.domains) for s in adm_svcs))
     print("%s: Free: %d категорий, %s сервисов, %d доменов, %d отключено, %d passthrough%s" % (
         src, len(doc.categories), values["service_count"], doc.total,
         sum(len(g.domains) for g in doc.disabled), len(set(doc.passthrough.domains)), pro_note))

@@ -162,6 +162,7 @@ class PolicyMap:
                 "category_id": str(info.get("category_id") or ""),
                 "tier": str(info.get("tier") or ""),
                 "pool": str(info.get("pool") or poolrouting.DEFAULT_POOL),
+                "admin_only": bool(info.get("admin_only", False)),
             }
 
     @classmethod
@@ -230,6 +231,7 @@ class Policy:
             "mode": mode,
             "disabled_categories": frozenset(str(c) for c in disabled),
             "qps_limit": max(1, qps),
+            "is_admin": bool(raw.get("is_admin", False)),
         }
 
     @classmethod
@@ -255,12 +257,15 @@ class Policy:
 
     def to_dict(self) -> dict:
         def _dump(u):
-            return {
+            d = {
                 "user_id": u["user_id"],
                 "mode": u["mode"],
                 "disabled_categories": sorted(u["disabled_categories"]),
                 "qps_limit": u["qps_limit"],
             }
+            if u.get("is_admin"):
+                d["is_admin"] = True
+            return d
         return {
             "version": self.version,
             "generated_at": self.generated_at,
@@ -446,7 +451,7 @@ class ActivityTracker:
             self.token_ips.clear()
             self.alerted_counts.clear()
 
-    def record(self, ident: Identity, now: float = None):
+    def record(self, ident: Identity, now: float = None, count_activity: bool = True):
         """Учитывает один запрос известного подписчика."""
         if not ident.known:
             return
@@ -466,6 +471,9 @@ class ActivityTracker:
                 if k not in self.pending_acl:
                     self.pending_acl[k] = {"ip": ip, "token": token, "user_id": user["user_id"]}
                     self._notify_acl()
+
+        if not count_activity:
+            return
 
         # Активность: без IP, только хэш
         ak = (token, user["user_id"], ip_hash)
@@ -768,6 +776,7 @@ class ProDnsServer:
             "mode": "proxy",
             "disabled_categories": frozenset(),
             "qps_limit": max(1, int(self.args.default_qps)),
+            "is_admin": False,
         }
         return Identity("subnet", subnet, user, eff_ip)
 
@@ -818,8 +827,12 @@ class ProDnsServer:
         if self.policy_map.is_passthrough(q.qname):
             return D_FORWARD, "passthrough"
         dom, info = self.policy_map.match(q.qname)
-        if info is None or info["category_id"] in ident.user["disabled_categories"]:
-            return D_FORWARD, "nomatch" if info is None else "disabled"
+        if info is None:
+            return D_FORWARD, "nomatch"
+        if info.get("admin_only") and (self.tier != "pro" or not ident.user.get("is_admin")):
+            return D_FORWARD, "admin_only"
+        if info["category_id"] and info["category_id"] in ident.user["disabled_categories"]:
+            return D_FORWARD, "disabled"
         if q.qtype == dnscommon.QTYPE_A or q.qtype in NODATA_QTYPES:
             sticky_key = self._sticky_client_key(ident, info["service"])
             ip = poolrouting.pick_for_client(
@@ -877,9 +890,11 @@ class ProDnsServer:
         self.counters[action] += 1
         if action in (D_REFUSED, D_RATELIMIT):
             return dnscommon.build_refused(wire)
-        # дальше запрос легитимен — учитываем активность (в Pro)
+        # дальше запрос легитимен — учитываем активность (в Pro; admin_only-сервисы не пишем в статистику запросов)
         if self.tier == "pro":
-            self.tracker.record(ident, now)
+            _, matched_info = self.policy_map.match(q.qname)
+            is_admin_svc = bool(matched_info and matched_info.get("admin_only"))
+            self.tracker.record(ident, now, count_activity=not is_admin_svc)
         if action == D_SYNTH_A:
             return dnscommon.build_response(
                 wire, [dnscommon.a_record(q.qname, detail, self.args.answer_ttl)]

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { bestSubscription, grantPeriodEnd, parseAdminEmails } from "@/lib/admin";
 import { adminActionSchema } from "@/lib/admin-actions";
+import { buildPolicyEntry } from "@/lib/policy";
 
 describe("parseAdminEmails", () => {
   it("объединяет ADMIN_EMAILS и ADMIN_EMAIL, нормализует регистр и пробелы, отбрасывает мусор", () => {
@@ -47,5 +48,33 @@ describe("adminActionSchema", () => {
     expect(() => adminActionSchema.parse({ action: "user.delete", userId: "u1" })).toThrow();
     expect(() => adminActionSchema.parse({ action: "user.grant", userId: "u1", days: 0 })).toThrow();
     expect(() => adminActionSchema.parse({ action: "nodes.push", what: "everything" })).toThrow();
+  });
+});
+
+describe("buildPolicyEntry (флаг is_admin для Pro DNS)", () => {
+  it("проставляет is_admin: true только администраторам", () => {
+    const states = new Map([
+      ["u-admin", { mode: "proxy" as const, disabled: [] }],
+      ["u-user", { mode: "proxy" as const, disabled: ["media"] }],
+    ]);
+    const adminIds = new Set(["u-admin"]);
+
+    const adminEntry = buildPolicyEntry("u-admin", states, adminIds);
+    expect(adminEntry).toEqual({
+      user_id: "u-admin",
+      mode: "proxy",
+      disabled_categories: [],
+      qps_limit: 50,
+      is_admin: true,
+    });
+
+    const userEntry = buildPolicyEntry("u-user", states, adminIds);
+    expect(userEntry).toEqual({
+      user_id: "u-user",
+      mode: "proxy",
+      disabled_categories: ["media"],
+      qps_limit: 50,
+    });
+    expect("is_admin" in userEntry).toBe(false);
   });
 });

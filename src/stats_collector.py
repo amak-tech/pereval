@@ -120,19 +120,33 @@ def normalize_domain(raw: str) -> str:
     return d.strip(".")
 
 
-def resolve_service(domain: str, service_map: dict) -> tuple:
-    """Map a domain or subdomain (e.g. api.anthropic.com) to (service_name, category_name)."""
-    if not domain:
-        return ("Неизвестно", "Другое")
+def lookup_service_info(domain: str, service_map: dict) -> tuple:
+    """Find matching (key, info) in service_map.json by exact domain or parent suffix."""
+    if not domain or not service_map:
+        return (None, None)
     if domain in service_map:
-        info = service_map[domain]
-        return (info.get("service", domain), info.get("category", "Другое"))
+        return (domain, service_map[domain])
     parts = domain.split(".")
     for i in range(1, len(parts) - 1):
         suffix = ".".join(parts[i:])
         if suffix in service_map:
-            info = service_map[suffix]
-            return (info.get("service", suffix), info.get("category", "Другое"))
+            return (suffix, service_map[suffix])
+    return (None, None)
+
+
+def is_admin_only_domain(domain: str, service_map: dict) -> bool:
+    """Return True if domain (or its parent suffix) belongs to an admin-only service."""
+    _, info = lookup_service_info(domain, service_map)
+    return bool(info and info.get("admin_only"))
+
+
+def resolve_service(domain: str, service_map: dict) -> tuple:
+    """Map a domain or subdomain (e.g. api.anthropic.com) to (service_name, category_name)."""
+    if not domain:
+        return ("Неизвестно", "Другое")
+    matched_key, info = lookup_service_info(domain, service_map)
+    if info is not None:
+        return (info.get("service", matched_key), info.get("category", "Другое"))
     return (domain, "Другое")
 
 
@@ -590,6 +604,8 @@ class StatsCollector:
             return True
         if status == 403 and up_clean == "-":
             return True
+        if is_admin_only_domain(domain, self.service_map):
+            return True
         return False
 
     def record_event(self, ip: str, ts: int, domain: str, sent: int, recv: int, now: int = None):
@@ -597,6 +613,8 @@ class StatsCollector:
             now = int(time.time())
         self._rotate_salt_if_needed(now)
         if ts < now - 86400 or ts > now + 300:
+            return
+        if is_admin_only_domain(domain, self.service_map):
             return
 
         ip_hash = self.hash_ip(ip)

@@ -1,4 +1,5 @@
-import { and, gt, isNotNull, isNull, or } from "drizzle-orm";
+import { and, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { adminEmails } from "@/lib/admin-emails";
 import { db, schema } from "@/lib/db/client";
 import { env } from "@/lib/env";
 import { CHANNEL_POLICY, notify } from "@/lib/bus";
@@ -15,6 +16,7 @@ export type PolicyEntry = {
   mode: DnsMode;
   disabled_categories: string[];
   qps_limit?: number;
+  is_admin?: boolean;
 };
 
 export type PolicySnapshot = {
@@ -76,6 +78,22 @@ export async function userAccessStates(now: Date = new Date()): Promise<Map<stri
   return out;
 }
 
+export function buildPolicyEntry(
+  userId: string,
+  states: ReadonlyMap<string, Pick<UserAccessState, "mode" | "disabled">>,
+  adminUserIds: ReadonlySet<string>,
+): PolicyEntry {
+  const st = states.get(userId);
+  const entry: PolicyEntry = {
+    user_id: userId,
+    mode: st?.mode ?? "plain",
+    disabled_categories: st?.disabled ?? [],
+    qps_limit: 50,
+  };
+  if (adminUserIds.has(userId)) entry.is_admin = true;
+  return entry;
+}
+
 export async function buildPolicySnapshot(now: Date = new Date()): Promise<PolicySnapshot> {
   const version = await policyVersion();
   const states = await userAccessStates(now);
@@ -89,20 +107,27 @@ export async function buildPolicySnapshot(now: Date = new Date()): Promise<Polic
     .from(schema.boundIps)
     .where(and(isNotNull(schema.boundIps.ip)));
 
-  const entryFor = (userId: string): PolicyEntry => {
-    const st = states.get(userId);
-    return {
-      user_id: userId,
-      mode: st?.mode ?? "plain",
-      disabled_categories: st?.disabled ?? [],
-      qps_limit: 50,
-    };
-  };
+  const adminUserIds = new Set<string>();
+  const admins = adminEmails();
+  if (admins.size > 0) {
+    const userIds = new Set<string>();
+    for (const t of tokens) userIds.add(t.userId);
+    for (const b of ips) if (b.ip) userIds.add(b.userId);
+    if (userIds.size > 0) {
+      const users = await db()
+        .select({ id: schema.users.id, email: schema.users.email })
+        .from(schema.users)
+        .where(inArray(schema.users.id, [...userIds]));
+      for (const u of users) {
+        if (admins.has(u.email.toLowerCase())) adminUserIds.add(u.id);
+      }
+    }
+  }
 
   const tokenMap: Record<string, PolicyEntry> = {};
-  for (const t of tokens) tokenMap[t.token] = entryFor(t.userId);
+  for (const t of tokens) tokenMap[t.token] = buildPolicyEntry(t.userId, states, adminUserIds);
   const ipMap: Record<string, PolicyEntry> = {};
-  for (const b of ips) if (b.ip) ipMap[String(b.ip)] = entryFor(b.userId);
+  for (const b of ips) if (b.ip) ipMap[String(b.ip)] = buildPolicyEntry(b.userId, states, adminUserIds);
 
   return { version, generated_at: now.toISOString(), tokens: tokenMap, ips: ipMap, workers: null };
 }

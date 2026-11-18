@@ -23,34 +23,15 @@ import {
 import { getSupercellWatchStatus, type SupercellWatchReport } from "@/jobs/supercellwatch";
 import type { NodeKind, SubscriptionStatus } from "@/lib/db/schema";
 import { NODE_KINDS } from "@/lib/admin-constants";
+import { adminEmails, isAdminEmail, parseAdminEmails } from "@/lib/admin-emails";
 
-export { NODE_KINDS };
+export { NODE_KINDS, adminEmails, isAdminEmail, parseAdminEmails };
 
 /**
  * Админ-панель (/admin) и админ-CLI: данные и действия поверх БД.
  * Без импорта next-auth — модуль попадает в бандл scripts/admin.ts (esbuild, чистый Node).
  * Проверка прав — в admin-auth.ts; здесь только «что сделать», с записью в audit_log.
  */
-
-// ---------------------------------------------------------------- кто админ
-
-export function parseAdminEmails(adminEmails: string, adminEmail: string): Set<string> {
-  return new Set(
-    `${adminEmails},${adminEmail}`
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter((s) => s.includes("@")),
-  );
-}
-
-export function adminEmails(): Set<string> {
-  const e = env();
-  return parseAdminEmails(e.ADMIN_EMAILS, e.ADMIN_EMAIL);
-}
-
-export function isAdminEmail(email: string | null | undefined): boolean {
-  return !!email && adminEmails().has(email.toLowerCase());
-}
 
 export type Admin = { id: string | null; email: string };
 

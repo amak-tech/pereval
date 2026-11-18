@@ -104,7 +104,7 @@ build/                 выход generate.py (gitignored)
 - `dnsmasq_options`: строки опций dnsmasq для Free.
 - `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`). Поддомены покрываются автоматически.
 - `disabled[]`, `passthrough`: как раньше (закомментированные домены; российские домены, которые нельзя проксировать).
-- `pro`: `domain`, `dns_ip`, `cp_ip`, `pools`, `workers`, `categories[]` (тот же формат, tier=pro). Адреса из `203.0.113.0/24` считаются заглушками (предупреждение).
+- `pro`: `domain`, `dns_ip`, `cp_ip`, `pools`, `workers`, `categories[]` (тот же формат, tier=pro), опционально `admin_services[]` (или `admin_only: true` у сервиса в `pro.categories`) — сервисы Pro только для админов (`ADMIN_EMAIL`/`ADMIN_EMAILS`), скрытые с сайта и исключённые из статистики. Адреса из `203.0.113.0/24` считаются заглушками (предупреждение).
 
 ### 4.2. Валидация (`validate`)
 Ошибки: невалидные домены/IP, дубли доменов (включая между Free и Pro), пересечения с `passthrough`, неизвестный пул у категории/сервиса/воркера, пул без воркеров, цикл `fallback`, дубль `id` категории, `pro` без `domain/dns_ip/workers`. Предупреждения: IP-подобные домены, покрытые поддомены, пустые категории, адреса-заглушки.
