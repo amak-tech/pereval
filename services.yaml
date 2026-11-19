@@ -251,6 +251,42 @@ categories:
           - geminiweb-pa.clients.google.com
           - geminiweb-pa.clients6.google.com
           - geminiweb-pa.googleapis.com
+      - name: Google Flow
+        slug: google-flow
+        note: "ИИ-студия Google Flow (flow.google) для генерации видео и сцен на моделях Veo и Imagen перенаправляет запросы с IP-адресов РФ и РБ на страницу неподдерживаемых регионов."
+        domains:
+          - flow.google
+          - flow.google.com
+          - aisandbox-pa.googleapis.com
+          - aisandbox-pa.clients6.google.com
+          - aisandbox-pa-webchannel.clients6.google.com
+      - name: Google Antigravity
+        slug: google-antigravity
+        note: "Агентная среда разработки Google Antigravity (IDE, десктопный менеджер агентов и CLI) ограничивает авторизацию, обращения к моделям и автообновление с IP-адресов РФ и РБ."
+        domains:
+          - antigravity.google
+          - antigravity.google.com
+          - antigravity-pa.googleapis.com
+          - antigravity.googleapis.com
+          - antigravity-unleash.goog
+          - antigravity-auto-updater-974169037036.us-central1.run.app
+          - antigravity-cli-auto-updater-974169037036.us-central1.run.app
+          - antigravity-hub-auto-updater-974169037036.us-central1.run.app
+          - daily-cloudcode-pa.googleapis.com
+          - daily-cloudcode-pa.sandbox.googleapis.com
+          - preprod-daily-cloudcode-pa.sandbox.googleapis.com
+          - autopush-cloudcode-pa.sandbox.googleapis.com
+          - staging-cloudaicompanion.sandbox.googleapis.com
+          - aicode.googleapis.com
+          - businessaicode.googleapis.com
+          - businessaicode.us.rep.googleapis.com
+          - businessaicode.eu.rep.googleapis.com
+          - aiplatform.us.rep.googleapis.com
+          - aiplatform.eu.rep.googleapis.com
+          - discoveryengine.googleapis.com
+          - us-discoveryengine.googleapis.com
+          - eu-discoveryengine.googleapis.com
+          - jetski-webchannel.googleapis.com
       - name: xAI / Grok
         slug: grok
         note: "Веб-интерфейс grok.com и API xAI отклоняют подключения с российских и белорусских IP-адресов."
@@ -382,6 +418,12 @@ categories:
         note: "Облачный API голосового ИИ Hume AI (api.hume.ai) отклоняет прямые подключения с российских IP-адресов (HTTP 403 Forbidden)."
         domains:
           - hume.ai
+      - name: Moltbook
+        slug: moltbook
+        pool: default
+        note: "Социальная сеть и API-платформа для автономных ИИ-агентов Moltbook (moltbook.com) ограничивают доступ к веб-интерфейсу и API с российских и белорусских IP-адресов."
+        domains:
+          - moltbook.com
   - id: dev
     name: Инструменты разработки, SaaS и облака
     pool: default
@@ -573,6 +615,15 @@ categories:
           - cisco.com
           - netacad.com
           - talosintelligence.com
+      - name: Hatching Triage
+        slug: triage
+        note: "Облачная песочница анализа вредоносного ПО Hatching Triage (tria.ge, Recorded Future) блокирует веб-интерфейс, отчёты и API для подключений с IP-адресов РФ и РБ (HTTP 403)."
+        domains:
+          - tria.ge
+          - hatching.io
+          - sandbox.recordedfuture.com
+          - us-sandbox.recordedfuture.com
+          - apj-sandbox.recordedfuture.com
 disabled:
   - name: Общая инфраструктура Google и Firebase
     note: >-
@@ -851,53 +902,8 @@ pro:
     # резолвятся через прокси только для пользователей с email из ADMIN_EMAIL / ADMIN_EMAILS,
     # не отображаются на сайте и не учитываются в статистике (трафик nginx и счётчики DNS).
     # Либо пометьте сервис внутри pro.categories полем `admin_only: true`.
-    - name: Google Flow
-      slug: google-flow
-      pool: ai
-      domains:
-        - flow.google
-        - flow.google.com
-        - aisandbox-pa.googleapis.com
-        - aisandbox-pa.clients6.google.com
-        - aisandbox-pa-webchannel.clients6.google.com
-    - name: Google Antigravity
-      slug: google-antigravity
-      pool: ai
-      domains:
-        - antigravity.google
-        - antigravity.google.com
-        - antigravity-pa.googleapis.com
-        - antigravity.googleapis.com
-        - antigravity-unleash.goog
-        - antigravity-auto-updater-974169037036.us-central1.run.app
-        - antigravity-cli-auto-updater-974169037036.us-central1.run.app
-        - antigravity-hub-auto-updater-974169037036.us-central1.run.app
-        - daily-cloudcode-pa.googleapis.com
-        - daily-cloudcode-pa.sandbox.googleapis.com
-        - preprod-daily-cloudcode-pa.sandbox.googleapis.com
-        - autopush-cloudcode-pa.sandbox.googleapis.com
-        - staging-cloudaicompanion.sandbox.googleapis.com
-        - aicode.googleapis.com
-        - businessaicode.googleapis.com
-        - businessaicode.us.rep.googleapis.com
-        - businessaicode.eu.rep.googleapis.com
-        - aiplatform.us.rep.googleapis.com
-        - aiplatform.eu.rep.googleapis.com
-        - discoveryengine.googleapis.com
-        - us-discoveryengine.googleapis.com
-        - eu-discoveryengine.googleapis.com
-        - jetski-webchannel.googleapis.com
-    - name: Moltbook
-      slug: moltbook
-      pool: default
-      domains:
-        - moltbook.com
-    - name: Hatching Triage
-      slug: triage
-      pool: default
-      domains:
-        - tria.ge
-        - hatching.io
-        - sandbox.recordedfuture.com
-        - us-sandbox.recordedfuture.com
-        - apj-sandbox.recordedfuture.com
+    # Пример:
+    # - name: Example Test Service
+    #   pool: default
+    #   domains:
+    #     - example-test.org

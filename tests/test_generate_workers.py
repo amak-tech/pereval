@@ -61,7 +61,7 @@ class WorkerSecretEnvTests(unittest.TestCase):
                 if "note" in svc:
                     notes[svc["slug"]] = svc["note"]
         self.assertEqual(len(slugs), len(set(slugs)), "слаги сервисов должны быть уникальны")
-        for expected in ("chatgpt", "claude", "gemini", "cursor", "notion", "miro", "spotify", "xbox", "coda", "autodesk", "hume-ai", "intel", "cisco"):
+        for expected in ("chatgpt", "claude", "gemini", "google-flow", "google-antigravity", "cursor", "notion", "miro", "spotify", "xbox", "coda", "autodesk", "hume-ai", "moltbook", "intel", "cisco", "triage"):
             self.assertIn(expected, slugs)
             self.assertTrue(notes.get(expected))
 
