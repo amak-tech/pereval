@@ -132,6 +132,9 @@ class RouterTests(unittest.TestCase):
         self.assertEqual(r2.games["brawlstars"]["major"], 72)
         self.assertEqual(r2.games["brawlstars"]["version"], "72.10.1")
         self.assertEqual(r2.games["brawlstars"]["sha"], "b" * 40)
+        self.assertIn("moco", r2.games)
+        self.assertEqual(r2.games["moco"]["host"], "game.mocogame.com")
+        self.assertEqual(r2.games["moco"]["port"], 9339)
 
 
 class RelayAndProbeIntegrationTests(unittest.TestCase):

@@ -252,6 +252,9 @@ categories:
           - geminiweb-pa.clients.google.com
           - geminiweb-pa.clients6.google.com
           - geminiweb-pa.googleapis.com
+          - opal.withgoogle.com
+          - notebook-pa.googleapis.com
+          - playground.google
       - name: Google Flow
         slug: google-flow
         note: "ИИ-студия Google Flow (flow.google) для генерации видео и сцен на моделях Veo и Imagen перенаправляет запросы с IP-адресов РФ и РБ на страницу неподдерживаемых регионов."
@@ -288,6 +291,8 @@ categories:
           - us-discoveryengine.googleapis.com
           - eu-discoveryengine.googleapis.com
           - jetski-webchannel.googleapis.com
+          - appcatalyst.pa.googleapis.com
+          - developerprofiles-pa.googleapis.com
       - name: xAI / Grok
         slug: grok
         note: "Веб-интерфейс grok.com и API xAI отклоняют подключения с российских и белорусских IP-адресов."
@@ -364,6 +369,8 @@ categories:
           - cursor.com
           - cursorapi.com
           - cursor-cdn.com
+          - cursorvm.com
+          - download.todesktop.com
       - name: Windsurf / Codeium
         slug: windsurf
         note: "Облачные ИИ-модели в IDE Windsurf и расширении Codeium ограничивают соединения из неподдерживаемых регионов."
@@ -397,7 +404,8 @@ categories:
       - name: Manus
         domains:
           - manus.im
-          - files.manus.cdn
+          - manuscdn.com
+          - files.manuscdn.com
       - name: Genspark
         domains:
           - genspark.ai
@@ -407,6 +415,7 @@ categories:
       - name: Reve
         domains:
           - reve.com
+          - reve.art
       - name: Vizard
         domains:
           - vizard.ai
@@ -414,6 +423,8 @@ categories:
         note: "Веб-переводчик, приложения и API DeepL закрыли доступ с IP-адресов РФ и РБ («DeepL is not available in your region»)."
         domains:
           - deepl.com
+          - deepl.app
+          - linguee.com
       - name: Hume AI
         slug: hume-ai
         note: "Облачный API голосового ИИ Hume AI (api.hume.ai) отклоняет прямые подключения с российских IP-адресов (HTTP 403 Forbidden)."
@@ -425,6 +436,26 @@ categories:
         note: "Социальная сеть и API-платформа для автономных ИИ-агентов Moltbook (moltbook.com) ограничивают доступ к веб-интерфейсу и API с российских и белорусских IP-адресов."
         domains:
           - moltbook.com
+      - name: Cerebras
+        slug: cerebras
+        note: "Облачная консоль и API сверхбыстрого инференса Cerebras (cloud.cerebras.ai, api.cerebras.ai) блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
+        domains:
+          - cerebras.ai
+      - name: CoreWeave
+        slug: coreweave
+        note: "GPU-облако CoreWeave и панель управления console.coreweave.com блокируют подключения с российских и белорусских IP-адресов (HTTP 403)."
+        domains:
+          - coreweave.com
+      - name: Inception Labs
+        slug: inception-labs
+        note: "API диффузионных языковых моделей Mercury от Inception Labs (api.inceptionlabs.ai) закрыт на уровне CloudFront для запросов из РФ и РБ (HTTP 403 Country Block)."
+        domains:
+          - inceptionlabs.ai
+      - name: Monica
+        slug: monica
+        note: "Веб-интерфейс и API ИИ-ассистента Monica (monica.im, api.monica.im) отклоняют прямые подключения с IP-адресов региона на уровне CloudFront (HTTP 403)."
+        domains:
+          - monica.im
   - id: dev
     name: Инструменты разработки, SaaS и облака
     pool: default
@@ -560,6 +591,7 @@ categories:
       - name: Tailscale
         domains:
           - pkgs.tailscale.com
+          - controlplane.tailscale.com
       - name: HTTP Toolkit
         domains:
           - httptoolkit.com
@@ -589,6 +621,8 @@ categories:
       - name: NVIDIA Developer
         domains:
           - developer.nvidia.com
+          - build.nvidia.com
+          - ngc.nvidia.com
       - name: Mattermost
         domains:
           - mattermost.com
@@ -601,6 +635,7 @@ categories:
       - name: Zapier
         domains:
           - zapier.com
+          - zapier-deployment.com
       - name: Strava
         domains:
           - strava.com
@@ -612,6 +647,8 @@ categories:
         note: "Портал документации, спецификаций ARK и загрузок драйверов intel.com перенаправляет запросы с IP-адресов РФ и РБ на страницу о приостановке работы в регионе."
         domains:
           - intel.com
+          - intel.de
+          - intel.se
       - name: Cisco / Networking Academy
         slug: cisco
         note: "Образовательная платформа Cisco Networking Academy (netacad.com), портал загрузок software.cisco.com и база Talos ограничивают доступ с IP-адресов РФ и РБ (HTTP 403)."
@@ -628,6 +665,66 @@ categories:
           - sandbox.recordedfuture.com
           - us-sandbox.recordedfuture.com
           - apj-sandbox.recordedfuture.com
+      - name: Broadcom / VMware
+        slug: broadcom
+        note: "Порталы поддержки, загрузок VMware и управления учётными записями Broadcom (support.broadcom.com, access.broadcom.com, profile.broadcom.com) блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
+        domains:
+          - broadcom.com
+          - access.broadcom.com
+          - support.broadcom.com
+          - knowledge.broadcom.com
+          - profile.broadcom.com
+      - name: n8n Cloud
+        slug: n8n-cloud
+        note: "Облачная платформа автоматизации воркфлоу n8n Cloud официально закрыла обслуживание и доступ к облачным инстансам для IP-адресов РФ и РБ."
+        domains:
+          - n8n.cloud
+      - name: Tableau
+        slug: tableau
+        note: "Портал аналитической BI-платформы Tableau и раздел загрузок www.tableau.com блокируют запросы с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+        domains:
+          - tableau.com
+      - name: Dell
+        slug: dell
+        note: "Портал поддержки и сервер загрузок драйверов и прошивок Dell (dell.com, dl.dell.com) отклоняют запросы с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+        domains:
+          - dell.com
+          - dellcdn.com
+          - dl.dell.com
+      - name: NetApp
+        slug: netapp
+        note: "Сайт, документация и портал поддержки mysupport.netapp.com блокируют подключения с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+        domains:
+          - netapp.com
+          - mysupport.netapp.com
+      - name: Texas Instruments
+        slug: texas-instruments
+        note: "Каталог микросхем, даташиты и загрузки SDK на ti.com закрыты для IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+        domains:
+          - ti.com
+      - name: Analog Devices
+        slug: analog-devices
+        note: "Портал документации, инженерная вики и загрузки Analog Devices закрыты для IP-адресов РФ и РБ по правилам экспортного контроля США (Access denied under U.S. EAR)."
+        domains:
+          - analog.com
+          - wiki.analog.com
+          - ez.analog.com
+      - name: Microchip
+        slug: microchip
+        note: "Сайт, документация и загрузки сред разработки Microchip (microchip.com) отклоняют запросы с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+        domains:
+          - microchip.com
+      - name: DigiKey
+        slug: digikey
+        note: "Каталог электронных компонентов и технической документации DigiKey блокирует запросы с IP-адресов РФ и РБ (HTTP 403)."
+        domains:
+          - digikey.com
+          - digikeyassets.com
+      - name: Mouser Electronics
+        slug: mouser
+        note: "Каталог электронных компонентов и даташитов Mouser Electronics отклоняет подключения с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+        domains:
+          - mouser.com
 disabled:
   - name: Общая инфраструктура Google и Firebase
     note: >-
@@ -763,6 +860,7 @@ pro:
           note: "Закрыт для российских IP-адресов (редирект на why-not-available и ошибка входа в приложение); из Беларуси работает напрямую."
           domains:
             - spotify.com
+            - spotify.dev
             - scdn.co
             - spotifycdn.com
             - spotifycdn.net
@@ -773,6 +871,8 @@ pro:
           note: "Платформа синтеза речи, клонирования голоса и дубляжа ElevenLabs блокирует веб-интерфейс и API для IP-адресов РФ и РБ (редирект на geo-restriction.elevenlabs.io)."
           domains:
             - elevenlabs.io
+            - elevenmusic.io
+            - elevenreader.io
     - id: work
       name: Рабочие инструменты, дизайн, учёба и умный дом
       pool: default
@@ -799,6 +899,8 @@ pro:
             - adobelogin.com
             - adobe.io
             - adobe.net
+            - astockcdn.net
+            - behance.net
         - name: Coda
           slug: coda
           note: "Рабочие пространства, документы и API Coda возвращают ошибку HTTP 403 Forbidden при подключении с российских и белорусских IP-адресов."
@@ -862,6 +964,8 @@ pro:
           domains:
             - dyson.com
             - dyson.co.uk
+            - dyson.de
+            - dyson.se
     - id: games
       name: Игры и консоли
       pool: default
@@ -888,6 +992,7 @@ pro:
             - boombeachgame.com
             - squadbusters.com
             - squadbustersgame.com
+            - mocogame.com
         - name: Xbox                         # вход в Xbox Live из РФ: ошибка 0x80a40401
           note: "При авторизации профиля Xbox Live с российских IP-адресов консоль блокирует вход с кодом региональной ошибки 0x80a40401."
           domains:
@@ -906,8 +1011,37 @@ pro:
     # резолвятся через прокси только для пользователей с email из ADMIN_EMAIL / ADMIN_EMAILS,
     # не отображаются на сайте и не учитываются в статистике (трафик nginx и счётчики DNS).
     # Либо пометьте сервис внутри pro.categories полем `admin_only: true`.
-    # Пример:
-    # - name: Example Test Service
-    #   pool: default
-    #   domains:
-    #     - example-test.org
+    - name: Canva / Affinity
+      slug: canva
+      pool: default
+      note: "Графический редактор Canva официально закрыл доступ с российских IP-адресов (HTTP 403); вместе с Canva проверяются Affinity и инструменты Kaleido AI (remove.bg, unscreen, designify)."
+      domains:
+        - canva.com
+        - canva-apps.com
+        - canva.dev
+        - affinity.studio
+        - kaleido.ai
+        - remove.bg
+        - unscreen.com
+        - designify.com
+    - name: Chaos / Enscape
+      slug: chaos
+      pool: default
+      note: "Личный кабинет лицензий Chaos (V-Ray, Corona — my.chaos.com, ssooauth.chaos.com) и портал Enscape (enscape3d.com) блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
+      domains:
+        - chaos.com
+        - enscape3d.com
+    - name: Basecamp / 37signals
+      slug: basecamp
+      pool: default
+      note: "Сервис управления проектами Basecamp перенаправляет подключения с IP-адресов РФ и РБ на страницу санкционных ограничений (basecamp.com/sanctions)."
+      domains:
+        - basecamp.com
+        - basecampapi.com
+        - 37signals.com
+    - name: Parsec
+      slug: parsec
+      pool: default
+      note: "Сервер раздачи клиентов и автообновлений Parsec (builds.parsec.app) блокирует запросы с IP-адресов региона (HTTP 403); сам видеопоток P2P по UDP идёт напрямую."
+      domains:
+        - parsec.app

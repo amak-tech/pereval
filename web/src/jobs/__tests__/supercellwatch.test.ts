@@ -127,6 +127,7 @@ describe("evaluateSupercellChanges", () => {
   }
 
   it("не шлёт ложный алерт при первом запуске, если все апстримы соответствуют эталону", () => {
+    expect(SUPERCELL_UPSTREAMS.some((u) => u.id === "moco" && u.host === "game.mocogame.com" && u.port === 9339)).toBe(true);
     const entries = matchingBaselineEntries();
     const res = evaluateSupercellChanges(entries, null, now);
     expect(res.shouldNotify).toBe(false);

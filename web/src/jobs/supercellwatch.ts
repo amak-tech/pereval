@@ -88,6 +88,15 @@ export const SUPERCELL_UPSTREAMS: readonly SupercellUpstreamSpec[] = [
     expectedMsgVersion: 11,
     vintError: false,
   },
+  {
+    id: "moco",
+    name: "mo.co",
+    host: "game.mocogame.com",
+    port: 9339,
+    expectedMajor: 13,
+    expectedMsgVersion: 11,
+    vintError: false,
+  },
 ];
 
 export type SupercellUpstreamEntry = {

@@ -7,7 +7,7 @@
 
 Зачем нужен отдельный демон вместо nginx stream:
   Игровые клиенты Supercell (Brawl Stars, Clash Royale, Clash of Clans, Hay Day,
-  Boom Beach, Squad Busters) подключаются к своим лобби-серверам по TCP/9339 по
+  Boom Beach, Squad Busters, mo.co) подключаются к своим лобби-серверам по TCP/9339 по
   собственному бинарному протоколу Pepper без TLS и без SNI. Первый пакет клиента —
   всегда незашифрованный ClientHello с msg_id == 10100 (первые два байта 0x27 0x74),
   содержащий protocol, key_version, major_version, minor/build и SHA-1 content_hash.
@@ -135,6 +135,18 @@ DEFAULT_GAMES = (
         "vint_error": False,
         "version": "14.415.0",
         "sha": "",
+    },
+    {
+        "id": "moco",
+        "name": "mo.co",
+        "host": "game.mocogame.com",
+        "port": 9339,
+        "major": 13,
+        "protocols": [1],
+        "msg_version": 11,
+        "vint_error": False,
+        "version": "13.5.1.1",
+        "sha": "6bb2cf52ebd2f26a4a7c78154daea6ca2dd371a6",
     },
 )
 
