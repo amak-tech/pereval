@@ -76,6 +76,12 @@ class WorkerSecretEnvTests(unittest.TestCase):
         generate._validate_categories([c1], {"default": generate.Pool("default")}, "categories", errors, warnings, {})
         self.assertTrue(any("slug сервиса «same-slug» совпадает" in e for e in errors), errors)
 
+    def test_validate_allows_covered_subdomains_without_warning(self):
+        doc = generate.parse(str(ROOT / "services.yaml"))
+        errors, warnings = generate.validate(doc, primary_ip="153.80.200.170")
+        self.assertEqual(errors, [])
+        self.assertFalse(any("уже покрыт" in w for w in warnings), warnings)
+
 
 if __name__ == "__main__":
     unittest.main()

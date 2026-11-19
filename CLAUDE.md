@@ -57,4 +57,5 @@ pnpm lava:mock payment.success <invoiceId> <email>   # эмуляция вебх
 - **Регэкспы логов** в `src/stats_collector.py` привязаны к `log_format sni/hostproxy` во всех nginx-шаблонах.
 - **DNS-петля**: nginx и ОС на нодах никогда не используют `127.0.0.1` как резолвер; `filter-AAAA`/`HTTPS`/`SVCB` обязательны, иначе клиенты уйдут мимо прокси по IPv6/ECH.
 - Новый плейсхолдер `{{...}}` в шаблоне → добавить в `build_values()` / `pro_values()` в `generate.py`; каждый объявленный пул должен иметь воркера.
+- **Покрытые поддомены в `services.yaml`** (например, `plugins.jetbrains.com` рядом с `jetbrains.com`) не удалять: в DNS/SNI они покрыты родительским доменом, но нужны для работы через `/etc/hosts` (`src/update_hosts.py`).
 - Адреса из `203.0.113.0/24` в `services.yaml` — заглушки (генератор предупреждает).

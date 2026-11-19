@@ -102,12 +102,12 @@ build/                 выход generate.py (gitignored)
 - `free.domain` (`free.pereval.top`) и `free.legacy_domains` (`pereval.portbuddy.tech`): все имена попадают в `server_name`, в SNI-map (→ 8443); legacy-имена вне зоны сайта добавляются в SAN единого сертификата (`cert_domains`).
 - `nodes`: `primary`, `include_primary_in_dns`, `probe_sni`, `pools` (`{name: {note, fallback, strict_allowlist}}`), `workers` (`ip, name, weight, pools[], ssh_*`).
 - `dnsmasq_options`: строки опций dnsmasq для Free.
-- `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`). Поддомены покрываются автоматически.
+- `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`). Поддомены в DNS/SNI покрываются автоматически, но конкретные поддомены допустимо указывать явно — они нужны для работы через `/etc/hosts` (`src/update_hosts.py`).
 - `disabled[]`, `passthrough`: как раньше (закомментированные домены; российские домены, которые нельзя проксировать).
 - `pro`: `domain`, `dns_ip`, `cp_ip`, `pools`, `workers`, `categories[]` (тот же формат, tier=pro), опционально `admin_services[]` (или `admin_only: true` у сервиса в `pro.categories`) — сервисы Pro только для админов (`ADMIN_EMAIL`/`ADMIN_EMAILS`), скрытые с сайта и исключённые из статистики. Адреса из `203.0.113.0/24` считаются заглушками (предупреждение).
 
 ### 4.2. Валидация (`validate`)
-Ошибки: невалидные домены/IP, дубли доменов (включая между Free и Pro), пересечения с `passthrough`, неизвестный пул у категории/сервиса/воркера, пул без воркеров, цикл `fallback`, дубль `id` категории, `pro` без `domain/dns_ip/workers`. Предупреждения: IP-подобные домены, покрытые поддомены, пустые категории, адреса-заглушки.
+Ошибки: невалидные домены/IP, дубли доменов (включая между Free и Pro), пересечения с `passthrough`, неизвестный пул у категории/сервиса/воркера, пул без воркеров, цикл `fallback`, дубль `id` категории, `pro` без `domain/dns_ip/workers`. Предупреждения: IP-подобные домены, пустые категории, адреса-заглушки.
 
 ### 4.3. Выходы
 `build/`: `dnsmasq-geoblock.conf`, `nginx.conf`, `nginx-sni-allow.map`, `nginx-host-allow.map`, `nginx-workers-stream.conf`, `nginx-workers-http.conf`, `service-map.json` (домен → service/category/category_id/tier/pool), `cluster-nodes.json` (+ `free_domains`, `site_origin`, `cert_domains`, `pools`), `pro-dns-nginx.conf`, `pro-worker-nginx.conf`, `pro-nginx-sni-allow.map`, `pro-nginx-host-allow.map`, `cache-dnsmasq.conf`, `pro-policy-map.json`, `pro-nodes.json`, `pro-service-map.json`, опционально `nginx-*-allow.<pool>.map` для пулов со `strict_allowlist`. Плюс `web/src/generated/services.json`.
@@ -180,7 +180,7 @@ python3 -m unittest discover -s tests
 ## 8. Правила для агентов и контрибьюторов
 
 1. **Не править `build/` и `web/src/generated/`** — только `services.yaml`, `templates/`, `src/`, затем `generate.py` (оба каталога gitignored и генерируются автоматически в CI и при сборке).
-2. **Домены**: проверять покрытие родительским доменом; не добавлять широкие общие домены (`google.com`, `googleapis.com`, `cloudflare.com`); числовые домены — в кавычках; после правок — `--check` и полная сборка; Pro-домены — в `pro.categories`, с пулом.
+2. **Домены**: в DNS/SNI родительский домен покрывает поддомены автоматически, но явно указанные поддомены (например, `plugins.jetbrains.com` при наличии `jetbrains.com`) удалять не нужно и можно добавлять — покрытые поддомены нужны для работы `/etc/hosts` (`src/update_hosts.py`, который не поддерживает wildcard и разворачивает только типовые префиксы); не добавлять широкие общие домены (`google.com`, `googleapis.com`, `cloudflare.com`); числовые домены — в кавычках; после правок — `--check` и полная сборка; Pro-домены — в `pro.categories`, с пулом.
 3. **Пулы**: новый воркер — в `nodes.workers`/`pro.workers` с `pools`; новая категория/сервис — с `pool` при необходимости; каждый объявленный пул должен иметь воркера (иначе ошибка сборки).
 4. **Шаблоны**: `{{placeholder}}`; новый плейсхолдер → `build_values()`; шаблоны самодостаточны.
 5. **Python-демоны**: только stdlib, Python 3.9+; `dnscommon.py`/`poolrouting.py` ищутся рядом с файлом и в `/usr/local/lib/pereval`; файлы, читаемые nginx, писать атомарно (`Path.replace`).

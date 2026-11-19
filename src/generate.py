@@ -800,14 +800,6 @@ def validate(doc, primary_ip=None):
         warnings.append("домен %s активен, но также перечислен в disabled «%s» — эта строка ни на что не влияет"
                         % (d, dis[d]))
 
-    # поддомен, уже покрытый родительской записью
-    parents = sorted(seen, key=len)
-    for d in sorted(seen):
-        for p in parents:
-            if p != d and d.endswith("." + p):
-                warnings.append("домен %s уже покрыт записью %s — строку можно удалить" % (d, p))
-                break
-
     return errors, warnings
 
 
