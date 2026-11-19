@@ -447,6 +447,7 @@ categories:
           - jb.gg
           - ingrazzio-cloud-prod.labs.jb.gg
           - junie.jetbrains.com
+          - plugins.jetbrains.com
       - name: HashiCorp
         note: "Реестр провайдеров Terraform (registry.terraform.io) и загрузки HashiCorp возвращают ошибку 403/451 для IP-адресов из РФ и РБ."
         domains:
