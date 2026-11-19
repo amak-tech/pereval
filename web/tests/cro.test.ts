@@ -16,41 +16,53 @@ import {
 } from "@/lib/cluster-load";
 
 describe("catalog search across Free and Pro", () => {
-  it("находит Notion, Miro, Spotify, Xbox и Brawl Stars в каталоге Pro, когда их нет во Free", () => {
+  it("находит домены сервисов Pro в каталоге Pro и не путает их с Free", () => {
     const free = freeCategories();
     const pro = proCategories();
+    const proServices = pro.flatMap((c) => c.services);
+    expect(proServices.length).toBeGreaterThan(0);
 
-    for (const query of ["Notion", "Miro", "Spotify", "Xbox", "Brawl Stars", "Coda", "Autodesk", "Semrush"]) {
-      const freeHits = filterCatalogCategories(free, query);
-      const proHits = filterCatalogCategories(pro, query);
-      expect(freeHits).toHaveLength(0);
-      expect(proHits.length).toBeGreaterThan(0);
+    for (const svc of proServices) {
+      const domain = svc.domains[0]!;
+      const freeHits = filterCatalogCategories(free, domain);
+      const proHits = filterCatalogCategories(pro, domain);
+      expect(freeHits, `домен Pro ${domain} не должен быть во Free`).toHaveLength(0);
+      expect(proHits.flatMap((c) => c.services.map((s) => s.name))).toContain(svc.name);
     }
   });
 
   it("поддерживает поиск по поддоменам и полным URL", () => {
-    expect(normalizeSearchHost("https://open.spotify.com/track/123?si=abc")).toBe("open.spotify.com");
-    expect(normalizeSearchHost("  APP.MIRO.COM:443/app/board  ")).toBe("app.miro.com");
+    expect(normalizeSearchHost("https://open.example.com/track/123?si=abc")).toBe("open.example.com");
+    expect(normalizeSearchHost("  APP.BOARD.EXAMPLE.IO:443/app/board  ")).toBe("app.board.example.io");
 
     const pro = proCategories();
-    const spotifyHits = filterCatalogCategories(pro, "https://open.spotify.com/track/123");
-    expect(spotifyHits.flatMap((c) => c.services.map((s) => s.name))).toContain("Spotify");
+    const samplePro = pro[0]?.services[0];
+    expect(samplePro).toBeDefined();
+    const sampleDomain = samplePro!.domains[0]!;
 
-    const miroHits = filterCatalogCategories(pro, "app.miro.com");
-    expect(miroHits.flatMap((c) => c.services.map((s) => s.name))).toContain("Miro");
+    const urlHits = filterCatalogCategories(pro, `https://app.${sampleDomain}/track/123?ref=1`);
+    expect(urlHits.flatMap((c) => c.services.map((s) => s.name))).toContain(samplePro!.name);
 
-    const claudeService = { name: "Anthropic / Claude", pool: "ai", domains: ["claude.ai", "anthropic.com"] };
-    expect(matchesCatalogService(claudeService, "api.anthropic.com")).toBe(true);
-    expect(matchesCatalogService(claudeService, "unknown-example.org")).toBe(false);
+    const hostHits = filterCatalogCategories(pro, `  SUB.${sampleDomain.toUpperCase()}:443/path  `);
+    expect(hostHits.flatMap((c) => c.services.map((s) => s.name))).toContain(samplePro!.name);
+
+    const sampleService = { name: "Sample / AI", pool: "ai", domains: ["sample-ai.example", "cdn.sample-ai.example"] };
+    expect(matchesCatalogService(sampleService, "api.sample-ai.example")).toBe(true);
+    expect(matchesCatalogService(sampleService, "unknown-example.org")).toBe(false);
   });
 
   it("учитывает выбранную категорию Free и возвращает пустой список при отсутствии совпадений", () => {
     const free = freeCategories();
-    const aiOnly = filterCatalogCategories(free, "Claude", "ai");
-    const devOnly = filterCatalogCategories(free, "Claude", "dev");
+    expect(free.length).toBeGreaterThanOrEqual(2);
+    const firstCat = free[0]!;
+    const secondCat = free[1]!;
+    const targetDomain = firstCat.services[0]!.domains[0]!;
 
-    expect(aiOnly.length).toBeGreaterThan(0);
-    expect(devOnly).toHaveLength(0);
+    const matchHits = filterCatalogCategories(free, targetDomain, firstCat.id);
+    const otherHits = filterCatalogCategories(free, targetDomain, secondCat.id);
+
+    expect(matchHits.length).toBeGreaterThan(0);
+    expect(otherHits).toHaveLength(0);
     expect(filterCatalogCategories(proCategories(), "definitely-non-existent-service-xyz")).toHaveLength(0);
   });
 });

@@ -196,12 +196,15 @@ class GenerateMaxClientsTests(unittest.TestCase):
         fpm = json.loads(generate.free_policy_map_json(doc, doc.nodes.primary))
         self.assertEqual(fpm["tier"], "free")
         self.assertEqual(fpm["max_clients"], doc.nodes.max_clients)
-        self.assertEqual(fpm["pools"]["ai"].get("max_clients"), doc.nodes.pools["ai"].max_clients)
-        self.assertIn("gosuslugi.ru", fpm["passthrough"])
-        self.assertIn("claude.ai", fpm["domains"])
-        # Фоновые домены Google перенесены в disabled
-        self.assertNotIn("notifications-pa.clients6.google.com", fpm["domains"])
-        self.assertNotIn("people-pa.clients6.google.com", fpm["domains"])
+        for pool_name, pool_obj in doc.nodes.pools.items():
+            self.assertEqual(fpm["pools"][pool_name].get("max_clients"), pool_obj.max_clients)
+        self.assertEqual(set(fpm["passthrough"]), set(doc.passthrough.domains))
+
+        free_domains = {d for cat in doc.categories for svc in cat.services for d in svc.domains}
+        self.assertEqual(set(fpm["domains"]), free_domains)
+
+        disabled_domains = {d for g in doc.disabled for d in g.domains}
+        self.assertTrue(disabled_domains.isdisjoint(fpm["domains"]))
 
 
 class HealthcheckDnsmasqTests(unittest.TestCase):

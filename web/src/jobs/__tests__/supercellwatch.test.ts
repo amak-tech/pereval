@@ -111,6 +111,7 @@ describe("evaluateSupercellChanges", () => {
   const now = new Date("2026-11-16T12:00:00Z");
 
   function matchingBaselineEntries(): SupercellUpstreamEntry[] {
+    const firstId = SUPERCELL_UPSTREAMS[0]!.id;
     return SUPERCELL_UPSTREAMS.map((s) => ({
       id: s.id,
       name: s.name,
@@ -119,7 +120,7 @@ describe("evaluateSupercellChanges", () => {
       ok: true,
       major: s.expectedMajor,
       msgVersion: s.expectedMsgVersion,
-      version: s.id === "brawlstars" ? "70.820.1" : null,
+      version: s.id === firstId ? `${s.expectedMajor}.820.1` : null,
       sha: null,
       latencyMs: 35,
       error: null,
@@ -127,7 +128,9 @@ describe("evaluateSupercellChanges", () => {
   }
 
   it("не шлёт ложный алерт при первом запуске, если все апстримы соответствуют эталону", () => {
-    expect(SUPERCELL_UPSTREAMS.some((u) => u.id === "moco" && u.host === "game.mocogame.com" && u.port === 9339)).toBe(true);
+    expect(SUPERCELL_UPSTREAMS.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(SUPERCELL_UPSTREAMS.map((u) => u.id)).size).toBe(SUPERCELL_UPSTREAMS.length);
+    expect(SUPERCELL_UPSTREAMS.every((u) => u.host.length > 0 && u.port === 9339)).toBe(true);
     const entries = matchingBaselineEntries();
     const res = evaluateSupercellChanges(entries, null, now);
     expect(res.shouldNotify).toBe(false);
@@ -136,6 +139,9 @@ describe("evaluateSupercellChanges", () => {
   });
 
   it("обнаруживает смену major_version, билда, падение апстрима и коллизию сигнатур", () => {
+    const [first, second, third] = SUPERCELL_UPSTREAMS;
+    expect(first && second && third).toBeDefined();
+
     const prevEntries = matchingBaselineEntries();
     const prevReport = {
       checkedAt: "2026-11-16T00:00:00.000Z",
@@ -144,27 +150,29 @@ describe("evaluateSupercellChanges", () => {
       alertedAt: null,
     };
 
-    // 1. Обновление major у Brawl Stars (70 -> 71)
+    // 1. Обновление major у первого апстрима
+    const nextMajor = first!.expectedMajor + 1;
     const next1 = matchingBaselineEntries().map((u) =>
-      u.id === "brawlstars" ? { ...u, major: 71, version: "71.100.1" } : u,
+      u.id === first!.id ? { ...u, major: nextMajor, version: `${nextMajor}.100.1` } : u,
     );
     const d1 = evaluateSupercellChanges(next1, prevReport, now);
     expect(d1.shouldNotify).toBe(true);
-    expect(d1.changes.some((c) => c.includes("70 → 71"))).toBe(true);
-    expect(d1.changes.some((c) => c.includes("70.820.1 → 71.100.1"))).toBe(true);
+    expect(d1.changes.some((c) => c.includes(`${first!.expectedMajor} → ${nextMajor}`))).toBe(true);
+    expect(d1.changes.some((c) => c.includes(`${first!.expectedMajor}.820.1 → ${nextMajor}.100.1`))).toBe(true);
 
-    // 2. Коллизия major между Clash Royale и Clash of Clans (оба = 18)
+    // 2. Коллизия major между вторым и третьим апстримами
+    const collidedMajor = third!.expectedMajor;
     const nextCollision = matchingBaselineEntries().map((u) =>
-      u.id === "clashroyale" ? { ...u, major: 18 } : u,
+      u.id === second!.id ? { ...u, major: collidedMajor } : u,
     );
-    expect(findMajorCollisions(nextCollision)).toEqual(["major=18: Clash Royale, Clash of Clans"]);
+    expect(findMajorCollisions(nextCollision).some((c) => c.includes(`major=${collidedMajor}:`))).toBe(true);
     const dCol = evaluateSupercellChanges(nextCollision, prevReport, now);
     expect(dCol.shouldNotify).toBe(true);
     expect(dCol.changes.some((c) => c.includes("коллизия"))).toBe(true);
 
     // 3. Падение апстрима и повторное напоминание только спустя 24 часа
     const nextDown = matchingBaselineEntries().map((u) =>
-      u.id === "hayday" ? { ...u, ok: false, major: null, msgVersion: null, error: "timeout after 4000ms" } : u,
+      u.id === third!.id ? { ...u, ok: false, major: null, msgVersion: null, error: "timeout after 4000ms" } : u,
     );
     const dDown1 = evaluateSupercellChanges(nextDown, prevReport, now);
     expect(dDown1.shouldNotify).toBe(true);

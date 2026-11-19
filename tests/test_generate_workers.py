@@ -52,18 +52,27 @@ class WorkerSecretEnvTests(unittest.TestCase):
         self.assertEqual(errors, [])
         payload = json.loads(generate.services_json(doc, "153.80.200.170"))
         slugs = []
-        notes = {}
+        by_slug = {}
         for cat in payload["categories"]:
             for svc in cat["services"]:
                 self.assertIn("slug", svc)
                 self.assertRegex(svc["slug"], r"^[a-z0-9]+(-[a-z0-9]+)*$")
+                self.assertTrue(svc["domains"])
                 slugs.append(svc["slug"])
-                if "note" in svc:
-                    notes[svc["slug"]] = svc["note"]
+                by_slug[svc["slug"]] = svc
         self.assertEqual(len(slugs), len(set(slugs)), "слаги сервисов должны быть уникальны")
-        for expected in ("chatgpt", "claude", "gemini", "google-flow", "google-antigravity", "cursor", "notion", "miro", "spotify", "xbox", "coda", "autodesk", "hume-ai", "moltbook", "intel", "cisco", "triage"):
-            self.assertIn(expected, slugs)
-            self.assertTrue(notes.get(expected))
+
+        public_doc_cats = list(doc.categories) + (list(doc.pro.categories) if doc.pro else [])
+        expected_public = [
+            svc for cat in public_doc_cats for svc in cat.services if not getattr(svc, "admin_only", False)
+        ]
+        self.assertEqual(len(slugs), len(expected_public))
+        for svc in expected_public:
+            slug = svc.slug or generate.service_slug(svc.name)
+            self.assertIn(slug, by_slug)
+            self.assertEqual(by_slug[slug]["domains"], svc.domains)
+            if svc.note:
+                self.assertEqual(by_slug[slug].get("note"), svc.note)
 
     def test_validate_rejects_duplicate_service_slug(self):
         c1 = generate.Category("ai", "AI")

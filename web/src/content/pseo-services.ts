@@ -43,7 +43,7 @@ type ServiceOverride = {
   priority?: number;
 };
 
-type SubProductDef = {
+export type SubProductDef = {
   slug: string;
   parentSlug: string;
   name: string;
@@ -1106,6 +1106,10 @@ const SERVICE_MAP = new Map<string, ServicePageData>(ALL_SERVICE_PAGES.map((p) =
 
 export function allServicePages(): ServicePageData[] {
   return ALL_SERVICE_PAGES;
+}
+
+export function subProductDefinitions(): readonly SubProductDef[] {
+  return SUB_PRODUCTS;
 }
 
 export function servicePageBySlug(slug: string): ServicePageData | undefined {

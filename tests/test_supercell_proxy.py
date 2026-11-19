@@ -124,17 +124,19 @@ class RouterTests(unittest.TestCase):
     def test_state_file_roundtrip(self):
         tmp = Path(tu.tmpdir()) / "signatures.json"
         r1 = sp.SupercellRouter()
-        r1.apply_discovered({"id": "brawlstars", "ok": True, "major": 72, "version": "72.10.1", "sha": "b" * 40})
+        target_id = sp.DEFAULT_GAMES[0]["id"]
+        r1.apply_discovered({"id": target_id, "ok": True, "major": 72, "version": "72.10.1", "sha": "b" * 40})
         r1.save_state_file(tmp)
 
         r2 = sp.SupercellRouter()
         self.assertTrue(r2.load_state_file(tmp))
-        self.assertEqual(r2.games["brawlstars"]["major"], 72)
-        self.assertEqual(r2.games["brawlstars"]["version"], "72.10.1")
-        self.assertEqual(r2.games["brawlstars"]["sha"], "b" * 40)
-        self.assertIn("moco", r2.games)
-        self.assertEqual(r2.games["moco"]["host"], "game.mocogame.com")
-        self.assertEqual(r2.games["moco"]["port"], 9339)
+        self.assertEqual(r2.games[target_id]["major"], 72)
+        self.assertEqual(r2.games[target_id]["version"], "72.10.1")
+        self.assertEqual(r2.games[target_id]["sha"], "b" * 40)
+        self.assertEqual(set(r2.games), {g["id"] for g in sp.DEFAULT_GAMES})
+        for g in sp.DEFAULT_GAMES:
+            self.assertTrue(r2.games[g["id"]]["host"])
+            self.assertEqual(r2.games[g["id"]]["port"], 9339)
 
 
 class RelayAndProbeIntegrationTests(unittest.TestCase):
