@@ -81,7 +81,8 @@ templates/
   nginx/pro-worker-nginx.conf    → build/pro-worker-nginx.conf
 tests/                 unittest: poolrouting/healthcheck, dnscommon, pro_dns, pro_node_agent, cert_sync (python3 -m unittest discover -s tests)
 web/                   control plane (Next.js 16, React 19, TypeScript, Tailwind v4, Drizzle + Postgres, Auth.js v5)
-  src/app/             страницы (/, /pro, /dedicated, /stats, /terms, /privacy, /account/*), API (/api/*), /nic/update, /dns.mobileconfig
+  src/app/             страницы (/, /pro, /dedicated, /services/*, /setup/*, /stats, /terms, /privacy, /account/*), API (/api/*), /nic/update, /dns.mobileconfig
+  src/content/         контент сайта и pSEO-посадочных страниц сервисов/устройств (pseo-services.ts, pseo-devices.tsx, faq.ts, site.ts)
   src/lib/             env, db (schema, client), auth, billing, lava, lava-webhook, policy, acl, account, ddns, leads, mail, ...
   src/jobs/            фоновый процесс (outbox, acl-expire, ddns, nodewatch, reconcile, certwatch, supercellwatch, digest, retention)
   src/generated/services.json   каталог из services.yaml (gitignored, генерируется generate.py)
@@ -180,7 +181,7 @@ python3 -m unittest discover -s tests
 ## 8. Правила для агентов и контрибьюторов
 
 1. **Не править `build/` и `web/src/generated/`** — только `services.yaml`, `templates/`, `src/`, затем `generate.py` (оба каталога gitignored и генерируются автоматически в CI и при сборке).
-2. **Домены**: в DNS/SNI родительский домен покрывает поддомены автоматически, но явно указанные поддомены (например, `plugins.jetbrains.com` при наличии `jetbrains.com`) удалять не нужно и можно добавлять — покрытые поддомены нужны для работы `/etc/hosts` (`src/update_hosts.py`, который не поддерживает wildcard и разворачивает только типовые префиксы); не добавлять широкие общие домены (`google.com`, `googleapis.com`, `cloudflare.com`); числовые домены — в кавычках; после правок — `--check` и полная сборка; Pro-домены — в `pro.categories`, с пулом.
+2. **Домены и сервисы**: в DNS/SNI родительский домен покрывает поддомены автоматически, но явно указанные поддомены (например, `plugins.jetbrains.com` при наличии `jetbrains.com`) удалять не нужно и можно добавлять — покрытые поддомены нужны для работы `/etc/hosts` (`src/update_hosts.py`, который не поддерживает wildcard и разворачивает только типовые префиксы); не добавлять широкие общие домены (`google.com`, `googleapis.com`, `cloudflare.com`); числовые домены — в кавычках; после правок — `--check` и полная сборка; Pro-домены — в `pro.categories`, с пулом. **При добавлении новых сервисов в `services.yaml` (`categories`, `pro.categories` или `pro.admin_services`) всегда обновлять `web/src/content/pseo-services.ts`** (`OVERRIDES`, а для значимых подпродуктов/игр — `SUB_PRODUCTS`) и `web/tests/pseo.test.ts` (карточки для `pro.admin_services` не публикуются на сайте, пока сервис не перенесён в `pro.categories`, но сразу готовы к публикации).
 3. **Пулы**: новый воркер — в `nodes.workers`/`pro.workers` с `pools`; новая категория/сервис — с `pool` при необходимости; каждый объявленный пул должен иметь воркера (иначе ошибка сборки).
 4. **Шаблоны**: `{{placeholder}}`; новый плейсхолдер → `build_values()`; шаблоны самодостаточны.
 5. **Python-демоны**: только stdlib, Python 3.9+; `dnscommon.py`/`poolrouting.py` ищутся рядом с файлом и в `/usr/local/lib/pereval`; файлы, читаемые nginx, писать атомарно (`Path.replace`).

@@ -47,8 +47,38 @@ describe("Programmatic SEO — страницы сервисов (/services/[slu
       "cisco",
       "netacad",
       "triage",
+      "cerebras",
+      "coreweave",
+      "inception-labs",
+      "monica",
+      "broadcom",
+      "vmware",
+      "n8n-cloud",
+      "tableau",
+      "dell",
+      "netapp",
+      "texas-instruments",
+      "analog-devices",
+      "microchip",
+      "digikey",
+      "mouser",
     ];
-    const requiredPro = ["notion", "miro", "spotify", "xbox", "brawl-stars", "coda", "autodesk", "semrush", "elevenlabs", "home-connect", "dyson", "playstation", "lucidspark"];
+    const requiredPro = [
+      "notion",
+      "miro",
+      "spotify",
+      "xbox",
+      "brawl-stars",
+      "moco",
+      "coda",
+      "autodesk",
+      "semrush",
+      "elevenlabs",
+      "home-connect",
+      "dyson",
+      "playstation",
+      "lucidspark",
+    ];
 
     for (const slug of requiredFree) {
       const p = servicePageBySlug(slug);
@@ -66,6 +96,8 @@ describe("Programmatic SEO — страницы сервисов (/services/[slu
 
     expect(servicePageBySlug("xbox")?.h1).toContain("0x80a40401");
     expect(servicePageBySlug("brawl-stars")?.domains[0]).toBe("brawlstarsgame.com");
+    expect(servicePageBySlug("moco")?.domains[0]).toBe("mocogame.com");
+    expect(servicePageBySlug("vmware")?.domains[0]).toBe("support.broadcom.com");
   });
 
   it("ссылается только на существующие гайды устройств и соседние сервисы", () => {
