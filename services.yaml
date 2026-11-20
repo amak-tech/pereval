@@ -121,6 +121,9 @@ categories:
           - intercom.io
           - downloads.intercomcdn.com
           - vector.co
+          - sso.claude.com
+          - www.anthropic.com
+          - assets-proxy.anthropic.com
       - name: OpenAI / ChatGPT
         slug: chatgpt
         note: "OpenAI возвращает «ChatGPT is not available in your country» (HTTP 403) для запросов с российских и белорусских IP-адресов в браузере, приложениях и API."
