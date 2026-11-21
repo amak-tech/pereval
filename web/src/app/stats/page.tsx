@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { StatsDashboard } from "@/components/stats/StatsDashboard";
 import { SITE } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const DESCRIPTION = `Нагрузка DNS-прокси ${SITE.name} в реальном времени: пользователи онлайн, запросы в минуту, трафик, популярные сервисы и состояние узлов кластера.`;
 
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   title: "Статистика и нагрузка",
   description: DESCRIPTION,
   alternates: { canonical: "/stats" },
-  openGraph: { url: "/stats", title: `Статистика и нагрузка — ${SITE.name}`, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/stats", title: `Статистика и нагрузка — ${SITE.name}`, description: DESCRIPTION }),
 };
 
 export default function StatsPage() {

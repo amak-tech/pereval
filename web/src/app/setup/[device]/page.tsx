@@ -10,6 +10,7 @@ import { ConnectivityCheck } from "@/components/home/ConnectivityCheck";
 import { allDeviceGuides, deviceGuideBySlug } from "@/content/pseo-devices";
 import { servicePageBySlug } from "@/content/pseo-services";
 import { SITE } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 export const dynamicParams = false;
 
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ device: s
     title: { absolute: guide.title },
     description: guide.description,
     alternates: { canonical: path },
-    openGraph: { url: path, title: guide.title, description: guide.description },
+    openGraph: pageOpenGraph({ url: path, title: guide.title, description: guide.description }),
   };
 }
 

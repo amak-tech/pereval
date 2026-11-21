@@ -22,4 +22,4 @@
 - `assets/favicon.svg` (и `templates/assets/favicon.svg`) — векторная иконка сайта и логотип в шапке страниц (`index.html`, `stats.html`, `terms.html`, `privacy.html`).
 - `assets/favicon.ico` — мультиразмерная иконка (`16×16`, `32×32`, `48×48`) для совместимости со всеми браузерами.
 - `assets/apple-touch-icon.png` (`180×180`) — иконка для домашнего экрана iOS / iPadOS и закладок Safari.
-- `web/public/og-image.svg` → `web/public/og-image.png` (`1200×630`) — карточка предпросмотра ссылок Open Graph / X / Telegram. PNG не коммитится: `pnpm og-image` (`web/scripts/og-image.mjs`, resvg + вшитые шрифты Inter/JetBrains Mono) запускается автоматически в `pnpm build` и `pnpm dev`.
+- `web/scripts/og-image.svg` → `web/public/og-image.png` (`1200×630`) — карточка предпросмотра ссылок Open Graph / X / Telegram. PNG не коммитится: `pnpm og-image` (`web/scripts/og-image.mjs`, resvg + вшитые шрифты Inter/JetBrains Mono) запускается автоматически в `pnpm build` и `pnpm dev` и записывает версионированный URL с хэшем в `web/src/generated/og-image.json`.

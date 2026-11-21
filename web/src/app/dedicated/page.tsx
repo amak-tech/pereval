@@ -8,6 +8,7 @@ import { Badge, Section } from "@/components/Section";
 import { LeadForm } from "@/components/dedicated/LeadForm";
 import { DEDICATED_FAQ } from "@/content/faq";
 import { SITE } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const TITLE = `${SITE.name} Dedicated — выделенный DNS-прокси для семьи и команд`;
 const DESCRIPTION = `Персональный DNS-прокси сервер со своим IP и доменом: на домашний роутер для всей семьи, Smart TV и консолей или для команды с собственным списком доменов.`;
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: "/dedicated" },
-  openGraph: { url: "/dedicated", title: TITLE, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/dedicated", title: TITLE, description: DESCRIPTION }),
 };
 
 export default function DedicatedPage() {

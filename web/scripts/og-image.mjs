@@ -1,5 +1,7 @@
-// Рендерит public/og-image.png из public/og-image.svg с вшитыми шрифтами (в образе нет системных).
-import { readFileSync, writeFileSync } from "node:fs";
+// Рендерит public/og-image.png из scripts/og-image.svg с вшитыми шрифтами (в образе нет системных)
+// и сохраняет версионированный URL с хэшем в src/generated/og-image.json для сброса кэша соцсетей/Telegram.
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Resvg } from "@resvg/resvg-js";
 
@@ -10,8 +12,9 @@ const fontFiles = [
   require.resolve("@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.ttf"),
 ];
 
-const root = new URL("../public/", import.meta.url);
-const catalog = JSON.parse(readFileSync(new URL("../src/generated/services.json", import.meta.url), "utf8"));
+const publicDir = new URL("../public/", import.meta.url);
+const generatedDir = new URL("../src/generated/", import.meta.url);
+const catalog = JSON.parse(readFileSync(new URL("services.json", generatedDir), "utf8"));
 
 // Русское склонение: 1 сервис, 2 сервиса, 5 сервисов
 function plural(n, one, few, many) {
@@ -30,7 +33,7 @@ const values = {
   categories: `${categories} ${plural(categories, "категория", "категории", "категорий")}`,
 };
 const escapeXml = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const svg = readFileSync(new URL("og-image.svg", root), "utf8").replace(/\{\{(\w+)\}\}/g, (_, key) => {
+const svg = readFileSync(new URL("og-image.svg", import.meta.url), "utf8").replace(/\{\{(\w+)\}\}/g, (_, key) => {
   if (!(key in values)) throw new Error(`og-image.svg: неизвестный плейсхолдер {{${key}}}`);
   return escapeXml(values[key]);
 });
@@ -38,5 +41,10 @@ const png = new Resvg(svg, {
   fitTo: { mode: "width", value: 1200 },
   font: { loadSystemFonts: false, fontFiles, defaultFontFamily: "Inter" },
 }).render().asPng();
-writeFileSync(new URL("og-image.png", root), png);
-console.log(`og-image.png: ${png.length} bytes`);
+writeFileSync(new URL("og-image.png", publicDir), png);
+
+const hash = createHash("sha256").update(png).digest("hex").slice(0, 8);
+const meta = { url: `/og-image.png?v=${hash}`, hash, width: 1200, height: 630 };
+mkdirSync(generatedDir, { recursive: true });
+writeFileSync(new URL("og-image.json", generatedDir), `${JSON.stringify(meta, null, 2)}\n`);
+console.log(`og-image.png: ${png.length} bytes (${meta.url})`);

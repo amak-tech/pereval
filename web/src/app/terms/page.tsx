@@ -3,6 +3,7 @@ import Script from "next/script";
 import { LegalDocument } from "@/components/legal/LegalDocument";
 import { termsIntro, termsSections } from "@/content/legal";
 import { SITE, formatRuDate } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const DESCRIPTION = `Пользовательское соглашение DNS-сервиса ${SITE.name}: правила использования, отказ от гарантий, ограничение ответственности и условия платной подписки Pro.`;
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   title: "Пользовательское соглашение",
   description: DESCRIPTION,
   alternates: { canonical: "/terms" },
-  openGraph: { url: "/terms", type: "article", title: `Пользовательское соглашение — ${SITE.name}`, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/terms", type: "article", title: `Пользовательское соглашение — ${SITE.name}`, description: DESCRIPTION }),
 };
 
 export default function TermsPage() {

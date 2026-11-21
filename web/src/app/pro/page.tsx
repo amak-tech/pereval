@@ -13,6 +13,7 @@ import { ProCatalog } from "@/components/pro/ProCatalog";
 import { PRO_FAQ } from "@/content/faq";
 import { SITE } from "@/content/site";
 import { proCategories } from "@/lib/catalog";
+import { OG_IMAGE, pageOpenGraph } from "@/lib/metadata";
 
 const TITLE = `${SITE.name} Pro — работа, дизайн, автодиагностика, Spotify и игры без VPN`;
 const DESCRIPTION = `Подписка ${SITE.name} Pro: Notion, Miro, Canva, Adobe, Autodesk, Spotify, автодиагностика и базы СТО (Tesla, ALLDATA, TecDoc, Carfax), Supercell, Xbox и PlayStation без VPN. Отмена в любой момент.`;
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: "/pro" },
-  openGraph: { url: "/pro", title: TITLE, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/pro", title: TITLE, description: DESCRIPTION }),
 };
 
 /** Цены для Offer в JSON-LD: запрос к собственному API с ревалидацией раз в 10 минут; при ошибке — без цены. */
@@ -67,7 +68,7 @@ export default async function ProPage() {
     description: DESCRIPTION,
     brand: { "@type": "Brand", name },
     url: `${SITE.origin}/pro`,
-    image: `${SITE.origin}/og-image.png`,
+    image: `${SITE.origin}${OG_IMAGE.url}`,
     offers: offer,
   };
 

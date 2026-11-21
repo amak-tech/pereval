@@ -15,6 +15,7 @@ import { Checkout } from "@/components/pro/Checkout";
 import { deviceGuidesBySlugs } from "@/content/pseo-devices";
 import { allServicePages, poolSummaryForPage, relatedServicePages, servicePageBySlug } from "@/content/pseo-services";
 import { SITE } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 export const dynamicParams = false;
 
@@ -31,7 +32,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title: { absolute: entry.title },
     description: entry.description,
     alternates: { canonical: path },
-    openGraph: { url: path, title: entry.title, description: entry.description },
+    openGraph: pageOpenGraph({ url: path, title: entry.title, description: entry.description }),
   };
 }
 

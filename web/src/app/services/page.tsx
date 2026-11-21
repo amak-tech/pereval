@@ -8,6 +8,7 @@ import { CollapsibleServiceGrid } from "@/components/services/CollapsibleService
 import { allServicePages } from "@/content/pseo-services";
 import { SITE } from "@/content/site";
 import { catalog } from "@/lib/catalog";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const TITLE = `Каталог сервисов без VPN (${SITE.name} Free и Pro) — ИИ, работа, музыка и игры`;
 const DESCRIPTION = `Полный список зарубежных платформ, которые открывает Smart DNS ${SITE.name} из России и Беларуси без VPN: ChatGPT, Claude, Gemini, Cursor, Notion, Miro, Coda, Adobe, Autodesk, Spotify, Xbox и ещё десятки сервисов.`;
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: "/services" },
-  openGraph: { url: "/services", title: TITLE, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/services", title: TITLE, description: DESCRIPTION }),
 };
 
 export default function ServicesIndexPage() {

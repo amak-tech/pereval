@@ -6,6 +6,7 @@ import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
 import { Badge, Section } from "@/components/Section";
 import { allDeviceGuides, type DeviceGroup } from "@/content/pseo-devices";
 import { SITE } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const TITLE = `Настройка Smart DNS ${SITE.name} на iPhone, Android, Windows, Keenetic, MikroTik и Xbox`;
 const DESCRIPTION = `Пошаговые инструкции по настройке зашифрованного DNS ${SITE.name} (DoH, DoT, .mobileconfig, update_hosts.py) на смартфонах, компьютерах, роутерах Keenetic и MikroTik, консолях Xbox и PlayStation.`;
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: "/setup" },
-  openGraph: { url: "/setup", title: TITLE, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/setup", title: TITLE, description: DESCRIPTION }),
 };
 
 const GROUPS: { id: DeviceGroup; eyebrow: string; title: string; lead: string }[] = [

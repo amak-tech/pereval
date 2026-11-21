@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { TouchSplashCanvas } from "@/components/TouchSplashCanvas";
 import { SITE } from "@/content/site";
+import { DEFAULT_OPEN_GRAPH, OG_IMAGE } from "@/lib/metadata";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter", display: "swap" });
@@ -25,13 +26,8 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-touch-icon.png",
   },
-  openGraph: {
-    type: "website",
-    siteName: SITE.name,
-    locale: "ru_RU",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: `${SITE.name} — Smart DNS для доступа к ИИ-сервисам` }],
-  },
-  twitter: { card: "summary_large_image", images: ["/og-image.png"] },
+  openGraph: DEFAULT_OPEN_GRAPH,
+  twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
   robots: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
 };
 

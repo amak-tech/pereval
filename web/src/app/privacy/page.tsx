@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LegalDocument } from "@/components/legal/LegalDocument";
 import { privacyIntro, privacySections } from "@/content/legal";
 import { SITE, formatRuDate } from "@/content/site";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const DESCRIPTION = `Политика конфиденциальности ${SITE.name}: какие технические данные обрабатывает DNS-прокси, что хранится для подписки Pro, платежи через платёжный сервис и cookie сайта.`;
 
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   title: "Политика конфиденциальности",
   description: DESCRIPTION,
   alternates: { canonical: "/privacy" },
-  openGraph: { url: "/privacy", type: "article", title: `Политика конфиденциальности — ${SITE.name}`, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/privacy", type: "article", title: `Политика конфиденциальности — ${SITE.name}`, description: DESCRIPTION }),
 };
 
 export default function PrivacyPage() {

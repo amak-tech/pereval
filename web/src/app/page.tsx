@@ -18,6 +18,7 @@ import { PlansSection } from "@/components/plans/PlansSection";
 import { HOME_FAQ } from "@/content/faq";
 import { SITE } from "@/content/site";
 import { catalog, freeCategories, proCategories } from "@/lib/catalog";
+import { pageOpenGraph } from "@/lib/metadata";
 
 const TITLE = `${SITE.name} — ChatGPT, Claude и Gemini без VPN: Smart DNS`;
 const DESCRIPTION = `Бесплатный Smart DNS: ChatGPT, Claude, Gemini, Cursor и JetBrains без VPN, а российские сайты и банки работают напрямую. Настройка за минуту, без программ.`;
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
   title: { absolute: TITLE },
   description: DESCRIPTION,
   alternates: { canonical: "/" },
-  openGraph: { url: "/", title: TITLE, description: DESCRIPTION },
+  openGraph: pageOpenGraph({ url: "/", title: TITLE, description: DESCRIPTION }),
 };
 
 export default function HomePage() {

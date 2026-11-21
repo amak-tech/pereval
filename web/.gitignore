@@ -46,5 +46,5 @@ next-env.d.ts
 !deploy/.env.example
 /.lighthouseci
 
-# генерируется scripts/og-image.mjs из og-image.svg
+# генерируется scripts/og-image.mjs из scripts/og-image.svg
 /public/og-image.png
