@@ -1,6 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 import { Briefcase, Car, Clapperboard, Gamepad2, Sparkles } from "lucide-react";
 import { poolLabel, serviceSlug, type CatalogCategory } from "@/lib/catalog";
+
+const INITIAL_CHIPS = 8;
 
 const ICONS: Record<string, typeof Sparkles> = {
   media: Clapperboard,
@@ -11,11 +16,25 @@ const ICONS: Record<string, typeof Sparkles> = {
 
 /** Карточки Pro-категорий: сервисы как чипы со ссылками на подробные страницы, пул как «локация». */
 export function ProCatalog({ categories }: { categories: CatalogCategory[] }) {
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(() => new Set());
+
+  function toggleCategory(id: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {categories.map((c) => {
         const Icon = ICONS[c.id] ?? Sparkles;
         const domainCount = c.services.reduce((n, s) => n + s.domains.length, 0);
+        const hasMore = c.services.length > INITIAL_CHIPS;
+        const catOpen = expandedCats.has(c.id);
+        const hiddenCount = c.services.length - INITIAL_CHIPS;
         return (
           <article key={c.id} className="card" aria-labelledby={`pro-cat-${c.id}`}>
             <div className="flex items-start justify-between gap-3">
@@ -32,8 +51,8 @@ export function ProCatalog({ categories }: { categories: CatalogCategory[] }) {
               {c.services.length} сервисов · {domainCount} доменов · локация: <span className="text-ink">{poolLabel(c.pool)}</span>
             </p>
             <ul className="m-0 mt-3 flex list-none flex-wrap gap-1.5 p-0">
-              {c.services.map((s) => (
-                <li key={s.name}>
+              {c.services.map((s, idx) => (
+                <li key={s.name} className={!catOpen && idx >= INITIAL_CHIPS ? "hidden" : undefined}>
                   <Link
                     href={`/services/${serviceSlug(s)}`}
                     className="chip !font-sans !text-[13px] no-underline transition-colors hover:border-accent hover:text-accent"
@@ -44,6 +63,18 @@ export function ProCatalog({ categories }: { categories: CatalogCategory[] }) {
                   </Link>
                 </li>
               ))}
+              {hasMore ? (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(c.id)}
+                    aria-expanded={catOpen}
+                    className="chip !border-accent/25 !bg-accent-soft !font-sans !text-[13px] font-medium !text-accent transition-colors hover:border-accent"
+                  >
+                    {catOpen ? "Свернуть" : `Показать все (+${hiddenCount})`}
+                  </button>
+                </li>
+              ) : null}
             </ul>
           </article>
         );

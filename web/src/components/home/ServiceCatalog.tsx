@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Badge } from "@/components/Section";
 import { track } from "@/components/track";
 import { filterCatalogCategories, serviceSlug, type CatalogCategory } from "@/lib/catalog";
 
 const MAX_DOMAINS = 4;
+const INITIAL_SERVICES = 6;
 
 type Props = {
   categories: CatalogCategory[];
@@ -33,6 +34,7 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "П�
   const q = typed ?? urlQ;
   const [cat, setCat] = useState<string>("all");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(() => new Set());
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,6 +57,15 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "П�
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleCategory(id: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -119,48 +130,81 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "П�
         </div>
       ) : null}
 
-      {filtered.map((c) => (
-        <section key={c.id} className="mt-6" aria-labelledby={`cat-${c.id}`}>
-          <h3 id={`cat-${c.id}`} className="m-0 mb-3 text-[17px] font-semibold">
-            {c.name} <span className="font-normal text-mute">· {c.services.length}</span>
-          </h3>
-          <ul className="grid list-none gap-2.5 p-0 sm:grid-cols-2">
-            {c.services.map((s) => {
-              const key = `${c.id}:${s.name}`;
-              const open = expanded.has(key) || !!needle;
-              const domains = open ? s.domains : s.domains.slice(0, MAX_DOMAINS);
-              const rest = s.domains.length - domains.length;
-              const slug = serviceSlug(s);
-              return (
-                <li key={key} className="rounded-[var(--radius-card)] border border-line bg-panel p-4 transition-colors hover:border-line-strong">
-                  <div className="flex items-center justify-between gap-2">
-                    <Link href={`/services/${slug}`} className="font-semibold text-ink no-underline hover:text-accent hover:underline">
-                      {s.name}
-                    </Link>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {domains.map((d) => (
-                      <span key={d} className="chip">
-                        {d}
-                      </span>
-                    ))}
-                    {rest > 0 ? (
-                      <button type="button" onClick={() => toggle(key)} className="chip !bg-accent-soft !text-accent hover:underline" aria-expanded={false}>
-                        ещё {rest}
-                      </button>
-                    ) : null}
-                    {open && !needle && s.domains.length > MAX_DOMAINS ? (
-                      <button type="button" onClick={() => toggle(key)} className="chip !bg-accent-soft !text-accent hover:underline" aria-expanded>
-                        свернуть
-                      </button>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ))}
+      {filtered.map((c) => {
+        const hasMore = !needle && c.services.length > INITIAL_SERVICES;
+        const catOpen = expandedCats.has(c.id) || !!needle;
+        const hiddenCount = c.services.length - INITIAL_SERVICES;
+        const listId = `cat-list-${c.id}`;
+        return (
+          <section key={c.id} className="mt-6" aria-labelledby={`cat-${c.id}`}>
+            <h3 id={`cat-${c.id}`} className="m-0 mb-3 text-[17px] font-semibold">
+              {c.name} <span className="font-normal text-mute">· {c.services.length}</span>
+            </h3>
+            <ul id={listId} className="grid list-none gap-2.5 p-0 sm:grid-cols-2">
+              {c.services.map((s, idx) => {
+                const key = `${c.id}:${s.name}`;
+                const open = expanded.has(key) || !!needle;
+                const domains = open ? s.domains : s.domains.slice(0, MAX_DOMAINS);
+                const rest = s.domains.length - domains.length;
+                const slug = serviceSlug(s);
+                const isHidden = !catOpen && idx >= INITIAL_SERVICES;
+                return (
+                  <li
+                    key={key}
+                    className={`rounded-[var(--radius-card)] border border-line bg-panel p-4 transition-colors hover:border-line-strong${isHidden ? " hidden" : ""}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <Link href={`/services/${slug}`} className="font-semibold text-ink no-underline hover:text-accent hover:underline">
+                        {s.name}
+                      </Link>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {domains.map((d) => (
+                        <span key={d} className="chip">
+                          {d}
+                        </span>
+                      ))}
+                      {rest > 0 ? (
+                        <button type="button" onClick={() => toggle(key)} className="chip !bg-accent-soft !text-accent hover:underline" aria-expanded={false}>
+                          ещё {rest}
+                        </button>
+                      ) : null}
+                      {open && !needle && s.domains.length > MAX_DOMAINS ? (
+                        <button type="button" onClick={() => toggle(key)} className="chip !bg-accent-soft !text-accent hover:underline" aria-expanded>
+                          свернуть
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {hasMore ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(c.id)}
+                  aria-expanded={catOpen}
+                  aria-controls={listId}
+                  className="btn-secondary !py-2 !text-sm"
+                >
+                  {catOpen ? (
+                    <>
+                      Свернуть <ChevronUp className="h-4 w-4" aria-hidden />
+                    </>
+                  ) : (
+                    <>
+                      Показать все ({c.services.length})
+                      <span className="font-normal text-mute">· ещё {hiddenCount}</span>
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
 
       {proFiltered.length > 0 ? (
         <section className="mt-6 rounded-[var(--radius-card)] border border-accent bg-accent-soft p-4 sm:p-5" aria-labelledby="cat-pro-matches">

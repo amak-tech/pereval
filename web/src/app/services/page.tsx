@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { JsonLd } from "@/components/JsonLd";
 import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
 import { Badge, Section } from "@/components/Section";
+import { CollapsibleServiceGrid } from "@/components/services/CollapsibleServiceGrid";
 import { allServicePages } from "@/content/pseo-services";
 import { SITE } from "@/content/site";
 import { catalog } from "@/lib/catalog";
@@ -76,27 +77,16 @@ export default function ServicesIndexPage() {
                 <h3 className="m-0 mb-3 text-[18px] font-semibold">
                   {cat.name} <span className="font-normal text-mute">· {items.length}</span>
                 </h3>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {items.map((item) => (
-                    <Link
-                      key={item.slug}
-                      href={`/services/${item.slug}`}
-                      className="card group flex flex-col justify-between no-underline transition-colors hover:border-accent"
-                    >
-                      <div>
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-semibold text-ink group-hover:text-accent">{item.shortName}</span>
-                          <Badge>Pro</Badge>
-                        </div>
-                        <p className="m-0 mt-1.5 line-clamp-2 text-sm text-mute">{item.whyBlocked}</p>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-xs text-mute">
-                        <span className="font-mono">{item.domains[0]}</span>
-                        <span className="font-medium text-accent">Открыть инструкцию →</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+                <CollapsibleServiceGrid
+                  id={`pro-${cat.id}`}
+                  variant="pro"
+                  items={items.map((item) => ({
+                    slug: item.slug,
+                    shortName: item.shortName,
+                    primaryDomain: item.domains[0] ?? "",
+                    summary: item.whyBlocked,
+                  }))}
+                />
               </div>
             );
           })}
@@ -117,21 +107,16 @@ export default function ServicesIndexPage() {
                 <h3 className="m-0 mb-3 text-[18px] font-semibold">
                   {cat.name} <span className="font-normal text-mute">· {items.length}</span>
                 </h3>
-                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                  {items.map((item) => (
-                    <Link
-                      key={item.slug}
-                      href={`/services/${item.slug}`}
-                      className="rounded-[var(--radius-card)] border border-line bg-panel p-4 no-underline transition-colors hover:border-accent"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-ink">{item.shortName}</span>
-                        <span className="text-xs font-mono text-mute">{item.domains[0]}</span>
-                      </div>
-                      <p className="m-0 mt-1.5 line-clamp-2 text-xs text-mute">{item.errorBadge}</p>
-                    </Link>
-                  ))}
-                </div>
+                <CollapsibleServiceGrid
+                  id={`free-${cat.id}`}
+                  variant="free"
+                  items={items.map((item) => ({
+                    slug: item.slug,
+                    shortName: item.shortName,
+                    primaryDomain: item.domains[0] ?? "",
+                    summary: item.errorBadge,
+                  }))}
+                />
               </div>
             );
           })}
