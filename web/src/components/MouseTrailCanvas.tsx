@@ -164,16 +164,21 @@ export function MouseTrailCanvas({ cellSize = 18, maxAlpha = 0.24, decay = 0.028
       lastRow = -1;
     };
 
+    let eventTarget: HTMLElement = parent;
+    while (eventTarget.parentElement && window.getComputedStyle(eventTarget).pointerEvents === "none") {
+      eventTarget = eventTarget.parentElement;
+    }
+
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(parent);
-    parent.addEventListener("pointermove", onPointerMove, { passive: true });
-    parent.addEventListener("pointerleave", onPointerLeave, { passive: true });
+    eventTarget.addEventListener("pointermove", onPointerMove, { passive: true });
+    eventTarget.addEventListener("pointerleave", onPointerLeave, { passive: true });
 
     return () => {
       ro.disconnect();
-      parent.removeEventListener("pointermove", onPointerMove);
-      parent.removeEventListener("pointerleave", onPointerLeave);
+      eventTarget.removeEventListener("pointermove", onPointerMove);
+      eventTarget.removeEventListener("pointerleave", onPointerLeave);
       if (rafId) window.cancelAnimationFrame(rafId);
     };
   }, [cellSize, maxAlpha, decay]);

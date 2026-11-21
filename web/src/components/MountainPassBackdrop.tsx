@@ -5,8 +5,8 @@ import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 
 /**
  * Динамический векторный фон горного перевала для светлой темы:
- * координатная сетка, мягкий световой ореол и три слоя топографических хребтов
- * плавно отклоняются и наклоняются в сторону курсора (в духе junie.jetbrains.com).
+ * координатная сетка и три слоя топографических хребтов плавно отклоняются
+ * и наклоняются в сторону курсора, поверх идёт пиксельный шлейф в духе junie.jetbrains.com.
  */
 export function MountainPassBackdrop({
   variant = "hero",
@@ -16,12 +16,11 @@ export function MountainPassBackdrop({
   trail?: boolean;
 }) {
   const isHero = variant === "hero";
-  const showTrail = trail ?? isHero;
+  const showTrail = trail ?? true;
   const uid = useId().replace(/:/g, "");
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const glowRef = useRef<HTMLDivElement | null>(null);
   const farRidgeRef = useRef<SVGGElement | null>(null);
   const contourRef = useRef<SVGGElement | null>(null);
   const frontRidgeRef = useRef<SVGGElement | null>(null);
@@ -39,8 +38,6 @@ export function MountainPassBackdrop({
     let targetY = 0;
     let curX = 0;
     let curY = 0;
-    let glowOpacityTarget = 0;
-    let glowOpacity = 0;
     let rafId = 0;
 
     const strength = isHero ? 1 : 0.65;
@@ -48,7 +45,6 @@ export function MountainPassBackdrop({
     const applyTransforms = () => {
       curX += (targetX - curX) * 0.085;
       curY += (targetY - curY) * 0.085;
-      glowOpacity += (glowOpacityTarget - glowOpacity) * 0.08;
 
       if (gridRef.current) {
         const gx = curX * 18 * strength;
@@ -56,13 +52,6 @@ export function MountainPassBackdrop({
         const rotY = curX * 2.8 * strength;
         const rotX = -curY * 2.2 * strength;
         gridRef.current.style.transform = `perspective(950px) translate3d(${gx.toFixed(2)}px, ${gy.toFixed(2)}px, 0) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale(1.04)`;
-      }
-
-      if (glowRef.current) {
-        const px = 50 + curX * 36;
-        const py = 45 + curY * 32;
-        glowRef.current.style.background = `radial-gradient(520px circle at ${px.toFixed(1)}% ${py.toFixed(1)}%, rgba(69, 133, 255, 0.16), rgba(11, 92, 255, 0.045) 45%, transparent 72%)`;
-        glowRef.current.style.opacity = glowOpacity.toFixed(3);
       }
 
       if (farRidgeRef.current) {
@@ -77,8 +66,7 @@ export function MountainPassBackdrop({
 
       const settled =
         Math.abs(targetX - curX) < 0.002 &&
-        Math.abs(targetY - curY) < 0.002 &&
-        Math.abs(glowOpacityTarget - glowOpacity) < 0.005;
+        Math.abs(targetY - curY) < 0.002;
 
       if (!settled) {
         rafId = window.requestAnimationFrame(applyTransforms);
@@ -98,14 +86,12 @@ export function MountainPassBackdrop({
       const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;
       targetX = Math.max(-1, Math.min(1, nx));
       targetY = Math.max(-1, Math.min(1, ny));
-      glowOpacityTarget = 1;
       startLoop();
     };
 
     const onPointerLeave = () => {
       targetX = 0;
       targetY = 0;
-      glowOpacityTarget = 0;
       startLoop();
     };
 
@@ -120,88 +106,87 @@ export function MountainPassBackdrop({
   }, [isHero]);
 
   return (
-    <div ref={rootRef} className="pointer-events-none absolute inset-0 overflow-hidden select-none" aria-hidden="true">
-      {/* Динамическая координатная сетка, отклоняющаяся к курсору */}
-      <div
-        ref={gridRef}
-        className="absolute -inset-6 will-change-transform"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgb(11 92 255 / 0.085) 1px, transparent 1px), linear-gradient(to bottom, rgb(11 92 255 / 0.085) 1px, transparent 1px)",
-          backgroundSize: "52px 52px",
-          maskImage: "radial-gradient(ellipse 82% 76% at 50% 10%, black 32%, transparent 100%)",
-          WebkitMaskImage: "radial-gradient(ellipse 82% 76% at 50% 10%, black 32%, transparent 100%)",
-        }}
-      />
+    <>
+      <div ref={rootRef} className="pointer-events-none absolute inset-0 overflow-hidden select-none" aria-hidden="true">
+        {/* Динамическая координатная сетка, отклоняющаяся к курсору */}
+        <div
+          ref={gridRef}
+          className="absolute -inset-6 will-change-transform"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, rgb(11 92 255 / 0.085) 1px, transparent 1px), linear-gradient(to bottom, rgb(11 92 255 / 0.085) 1px, transparent 1px)",
+            backgroundSize: "52px 52px",
+            maskImage: "radial-gradient(ellipse 82% 76% at 50% 10%, black 32%, transparent 100%)",
+            WebkitMaskImage: "radial-gradient(ellipse 82% 76% at 50% 10%, black 32%, transparent 100%)",
+          }}
+        />
 
-      {/* Мягкий световой ореол, следующий за мышкой */}
-      <div ref={glowRef} className="absolute inset-0 opacity-0 will-change-[opacity]" />
+        {/* Силуэт горного перевала и контурные линии рельефа с параллаксом */}
+        <svg
+          viewBox="0 0 1440 420"
+          preserveAspectRatio="xMidYMax slice"
+          className={`absolute inset-x-0 bottom-0 w-full ${isHero ? "h-[300px] sm:h-[380px] opacity-95" : "h-[200px] sm:h-[240px] opacity-70"}`}
+        >
+          <defs>
+            <linearGradient id={`pass-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#0b5cff" stopOpacity={isHero ? "0.11" : "0.07"} />
+              <stop offset="100%" stopColor="#f3f7fe" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id={`pass-ridge-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#0f1524" stopOpacity="0" />
+              <stop offset="26%" stopColor="#0f1524" stopOpacity="0.14" />
+              <stop offset="50%" stopColor="#0b5cff" stopOpacity={isHero ? "0.62" : "0.38"} />
+              <stop offset="74%" stopColor="#0f1524" stopOpacity="0.14" />
+              <stop offset="100%" stopColor="#0f1524" stopOpacity="0" />
+            </linearGradient>
+          </defs>
 
-      {/* Пиксельный шлейф за курсором в духе junie.jetbrains.com */}
-      {showTrail ? <MouseTrailCanvas cellSize={18} maxAlpha={0.22} decay={0.026} /> : null}
+          {/* Слой 1: дальний хребет */}
+          <g ref={farRidgeRef} className="will-change-transform">
+            <path
+              d="M-60 330 L170 250 L320 285 L520 190 L660 258 L720 272 L785 255 L950 175 L1145 255 L1310 215 L1500 270 L1500 440 L-60 440 Z"
+              fill={`url(#pass-fill-${uid})`}
+            />
+            <path
+              d="M-60 330 L170 250 L320 285 L520 190 L660 258 L720 272 L785 255 L950 175 L1145 255 L1310 215 L1500 270"
+              fill="none"
+              stroke="rgb(15 21 36 / 0.1)"
+              strokeWidth="1"
+            />
+          </g>
 
-      {/* Силуэт горного перевала и контурные линии рельефа с параллаксом */}
-      <svg
-        viewBox="0 0 1440 420"
-        preserveAspectRatio="xMidYMax slice"
-        className={`absolute inset-x-0 bottom-0 w-full ${isHero ? "h-[300px] sm:h-[380px] opacity-95" : "h-[200px] sm:h-[240px] opacity-70"}`}
-      >
-        <defs>
-          <linearGradient id={`pass-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0b5cff" stopOpacity={isHero ? "0.11" : "0.07"} />
-            <stop offset="100%" stopColor="#f3f7fe" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id={`pass-ridge-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#0f1524" stopOpacity="0" />
-            <stop offset="26%" stopColor="#0f1524" stopOpacity="0.14" />
-            <stop offset="50%" stopColor="#0b5cff" stopOpacity={isHero ? "0.62" : "0.38"} />
-            <stop offset="74%" stopColor="#0f1524" stopOpacity="0.14" />
-            <stop offset="100%" stopColor="#0f1524" stopOpacity="0" />
-          </linearGradient>
-        </defs>
+          {/* Слой 2: топографические контуры склонов */}
+          <g ref={contourRef} className="will-change-transform">
+            <path
+              d="M-60 365 L210 295 L410 322 L595 245 L720 296 L855 240 L1060 305 L1255 268 L1500 320"
+              fill="none"
+              stroke="rgb(11 92 255 / 0.15)"
+              strokeWidth="1"
+              strokeDasharray="4 6"
+            />
+          </g>
 
-        {/* Слой 1: дальний хребет */}
-        <g ref={farRidgeRef} className="will-change-transform">
-          <path
-            d="M-60 330 L170 250 L320 285 L520 190 L660 258 L720 272 L785 255 L950 175 L1145 255 L1310 215 L1500 270 L1500 440 L-60 440 Z"
-            fill={`url(#pass-fill-${uid})`}
-          />
-          <path
-            d="M-60 330 L170 250 L320 285 L520 190 L660 258 L720 272 L785 255 L950 175 L1145 255 L1310 215 L1500 270"
-            fill="none"
-            stroke="rgb(15 21 36 / 0.1)"
-            strokeWidth="1"
-          />
-        </g>
+          {/* Слой 3: передний хребет с выраженной седловиной перевала по центру */}
+          <g ref={frontRidgeRef} className="will-change-transform">
+            <path
+              d="M-60 392 L195 318 L385 352 L565 252 L682 314 Q720 332 758 314 L885 244 L1085 338 L1265 292 L1500 362"
+              fill="none"
+              stroke={`url(#pass-ridge-${uid})`}
+              strokeWidth="1.6"
+            />
+            {isHero ? (
+              <g>
+                <circle cx="720" cy="323" r="15" fill="rgb(11 92 255 / 0.12)" />
+                <circle cx="720" cy="323" r="3.5" fill="#0b5cff" />
+              </g>
+            ) : null}
+          </g>
+        </svg>
+      </div>
 
-        {/* Слой 2: топографические контуры склонов */}
-        <g ref={contourRef} className="will-change-transform">
-          <path
-            d="M-60 365 L210 295 L410 322 L595 245 L720 296 L855 240 L1060 305 L1255 268 L1500 320"
-            fill="none"
-            stroke="rgb(11 92 255 / 0.15)"
-            strokeWidth="1"
-            strokeDasharray="4 6"
-          />
-        </g>
-
-        {/* Слой 3: передний хребет с выраженной седловиной перевала по центру */}
-        <g ref={frontRidgeRef} className="will-change-transform">
-          <path
-            d="M-60 392 L195 318 L385 352 L565 252 L682 314 Q720 332 758 314 L885 244 L1085 338 L1265 292 L1500 362"
-            fill="none"
-            stroke={`url(#pass-ridge-${uid})`}
-            strokeWidth="1.6"
-          />
-          {isHero ? (
-            <g>
-              <circle cx="720" cy="323" r="15" fill="rgb(11 92 255 / 0.12)" />
-              <circle cx="720" cy="323" r="3.5" fill="#0b5cff" />
-            </g>
-          ) : null}
-        </g>
-      </svg>
-    </div>
+      {/* Пиксельный шлейф за курсором — рендерится напрямую в секции, чтобы получать pointermove */}
+      {showTrail ? <MouseTrailCanvas cellSize={16} maxAlpha={isHero ? 0.18 : 0.14} decay={0.03} /> : null}
+    </>
   );
 }
 
