@@ -66,7 +66,11 @@ export function PlansSection() {
           className={`relative overflow-hidden flex flex-col ${p.featured ? "card-featured" : "card hover:border-line-strong"}`}
           aria-labelledby={`plan-${p.key}`}
         >
-          {p.featured ? <MouseTrailCanvas cellSize={16} maxAlpha={0.18} decay={0.03} /> : null}
+          {p.featured ? (
+            <MouseTrailCanvas cellSize={16} maxAlpha={0.18} decay={0.03} />
+          ) : (
+            <MouseTrailCanvas cellSize={16} maxAlpha={0.15} decay={0.03} />
+          )}
           <div className="relative z-10 flex flex-1 flex-col">
             <div className="flex items-center justify-between gap-2">
               <p className="eyebrow m-0">{p.eyebrow}</p>

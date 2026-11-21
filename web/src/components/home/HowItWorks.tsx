@@ -1,4 +1,5 @@
 import { Lock, Network, ShieldCheck } from "lucide-react";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 
 /** Три шага «как это работает» + три гарантии. Статический серверный компонент. */
 export function HowItWorks({ ip, example = "claude.ai" }: { ip: string; example?: string }) {
@@ -37,8 +38,9 @@ export function HowItWorks({ ip, example = "claude.ai" }: { ip: string; example?
     <>
       <ol className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">
         {steps.map((s, i) => (
-          <li key={s.title} className="card flex flex-col justify-between hover:border-line-strong">
-            <div>
+          <li key={s.title} className="card relative overflow-hidden flex flex-col justify-between hover:border-line-strong">
+            <MouseTrailCanvas cellSize={16} maxAlpha={0.16} decay={0.03} />
+            <div className="relative z-10">
               <div className="mb-4 flex items-center justify-between">
                 <span aria-hidden className="inline-flex items-center rounded-md border border-accent/25 bg-accent-soft px-2 py-0.5 font-mono text-[12px] font-medium text-accent">
                   0{i + 1}

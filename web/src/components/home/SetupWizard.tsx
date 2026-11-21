@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Globe, Laptop, Monitor, Router, Smartphone, TabletSmartphone, Terminal } from "lucide-react";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 
 export type WizardTabId = "ios" | "android" | "mac" | "win" | "linux" | "router" | "browser";
 export type WizardTab = { id: WizardTabId; label: string; content: ReactNode };
@@ -60,8 +61,9 @@ export function SetupWizard({ tabs, defaultTab }: { tabs: WizardTab[]; defaultTa
   }
 
   return (
-    <div className="card !p-0 overflow-hidden">
-      <div role="tablist" aria-label="Устройство или программа" className="flex gap-1.5 overflow-x-auto border-b border-line bg-panel-elevated/75 p-2.5 [scrollbar-width:thin]">
+    <div className="card relative !p-0 overflow-hidden">
+      <MouseTrailCanvas cellSize={16} maxAlpha={0.14} decay={0.03} />
+      <div role="tablist" aria-label="Устройство или программа" className="relative z-10 flex gap-1.5 overflow-x-auto border-b border-line bg-panel-elevated/75 p-2.5 [scrollbar-width:thin]">
         {tabs.map((t, i) => {
           const Icon = ICONS[t.id];
           const on = t.id === active;
@@ -97,7 +99,7 @@ export function SetupWizard({ tabs, defaultTab }: { tabs: WizardTab[]; defaultTa
           aria-labelledby={`${baseId}-tab-${t.id}`}
           hidden={t.id !== active}
           tabIndex={0}
-          className="p-5 sm:p-7 focus-visible:outline-none"
+          className="relative z-10 p-5 sm:p-7 focus-visible:outline-none"
         >
           {t.content}
         </div>

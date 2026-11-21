@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useId, useRef, useState, type FormEvent } from "react";
 import { CreditCard, LoaderCircle, Lock } from "lucide-react";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 import { formatPrice, usePlans, type Currency } from "@/components/billing/usePlans";
 import { track, utmFromLocation } from "@/components/track";
 import { CHECKOUT_TIMEOUT_MS, PaymentProgress, useResetOnPageRestore } from "@/components/billing/PaymentProgress";
@@ -91,7 +92,9 @@ export function Checkout({ name, supportEmail }: { name: string; supportEmail: s
   return (
     <>
       {busy ? <PaymentProgress phase={status.kind === "redirect" ? "redirect" : "creating"} onCancel={cancel} /> : null}
-      <form onSubmit={onSubmit} noValidate className="card border-accent ring-1 ring-accent" aria-describedby={`${id}-legal`}>
+      <form onSubmit={onSubmit} noValidate className="card relative overflow-hidden border-accent ring-1 ring-accent" aria-describedby={`${id}-legal`}>
+        <MouseTrailCanvas cellSize={16} maxAlpha={0.14} decay={0.03} />
+        <div className="relative z-10">
         <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-start">
           <div>
             <label htmlFor={`${id}-email`} className="block text-sm font-semibold">
@@ -185,6 +188,7 @@ export function Checkout({ name, supportEmail }: { name: string; supportEmail: s
             Войти в кабинет
           </Link>
         </p>
+        </div>
       </form>
     </>
   );

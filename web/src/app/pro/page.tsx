@@ -4,6 +4,7 @@ import { ArrowDown, Gauge, KeyRound, Mail, Sparkles, UserRound, Zap } from "luci
 import { Faq } from "@/components/Faq";
 import { JsonLd } from "@/components/JsonLd";
 import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 import { Badge, Section } from "@/components/Section";
 import { ProPrice } from "@/components/billing/ProPrice";
 import { Checkout } from "@/components/pro/Checkout";
@@ -108,11 +109,14 @@ export default async function ProPage() {
       <Section id="why-pro" eyebrow="Преимущества" title={`Чем ${name} Pro лучше бесплатной версии`}>
         <div className="grid gap-4 md:grid-cols-3">
           {benefits.map((b) => (
-            <div key={b.title} className="card">
-              <b.icon className="h-6 w-6 text-accent" aria-hidden />
-              <p className="eyebrow m-0 mt-3">{b.eyebrow}</p>
-              <h3 className="m-0 mt-1 text-[17px] font-semibold">{b.title}</h3>
-              <p className="m-0 mt-2 text-[15px] text-mute">{b.text}</p>
+            <div key={b.title} className="card relative overflow-hidden hover:border-line-strong">
+              <MouseTrailCanvas cellSize={16} maxAlpha={0.16} decay={0.03} />
+              <div className="relative z-10">
+                <b.icon className="h-6 w-6 text-accent" aria-hidden />
+                <p className="eyebrow m-0 mt-3">{b.eyebrow}</p>
+                <h3 className="m-0 mt-1 text-[17px] font-semibold">{b.title}</h3>
+                <p className="m-0 mt-2 text-[15px] text-mute">{b.text}</p>
+              </div>
             </div>
           ))}
         </div>

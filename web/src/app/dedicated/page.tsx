@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowDown, Building, House, Layers, Lock, Wrench } from "lucide-react";
 import { Faq } from "@/components/Faq";
 import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 import { Badge, Section } from "@/components/Section";
 import { LeadForm } from "@/components/dedicated/LeadForm";
 import { DEDICATED_FAQ } from "@/content/faq";
@@ -48,39 +49,45 @@ export default function DedicatedPage() {
 
       <Section id="scenarios" eyebrow="Сценарии" title="Два главных сценария использования">
         <div className="grid gap-4 md:grid-cols-2">
-          <article className="card">
-            <House className="h-6 w-6 text-accent" aria-hidden />
-            <p className="eyebrow m-0 mt-3">Сценарий 1 · Для дома и всей семьи</p>
-            <h3 className="m-0 mt-1 text-[17px] font-semibold">Один адрес DNS на роутере — и всё работает</h3>
-            <p className="m-0 mt-2 text-[15px] text-mute">Пропишите выделенный IP вашего сервера в настройках домашнего роутера (Keenetic, MikroTik, ASUS, TP-Link) и выпустите профили для телефонов близких:</p>
-            <ul className="m-0 mt-3 grid list-disc gap-2 pl-5 text-[15px]">
-              <li>
-                <strong>Все домашние устройства сразу:</strong> ноутбуки, смартфоны, планшеты, Smart TV и игровые приставки (Xbox без ошибки <code>0x80a40401</code>, PlayStation) без установки VPN на каждое устройство.
-              </li>
-              <li>
-                <strong>Музыка, умный дом, учёба и игры:</strong> Spotify, Supercell (Brawl Stars, Clash Royale), техника Bosch / Siemens (Home Connect) и Dyson, Notion, Coursera, edX и ChatGPT работают у всей семьи.
-              </li>
-              <li>
-                <strong>Российские сервисы не ломаются:</strong> Кинопоиск, Госуслуги, банковские приложения и умный дом продолжают работать напрямую через вашего провайдера.
-              </li>
-            </ul>
+          <article className="card relative overflow-hidden hover:border-line-strong">
+            <MouseTrailCanvas cellSize={16} maxAlpha={0.16} decay={0.03} />
+            <div className="relative z-10">
+              <House className="h-6 w-6 text-accent" aria-hidden />
+              <p className="eyebrow m-0 mt-3">Сценарий 1 · Для дома и всей семьи</p>
+              <h3 className="m-0 mt-1 text-[17px] font-semibold">Один адрес DNS на роутере — и всё работает</h3>
+              <p className="m-0 mt-2 text-[15px] text-mute">Пропишите выделенный IP вашего сервера в настройках домашнего роутера (Keenetic, MikroTik, ASUS, TP-Link) и выпустите профили для телефонов близких:</p>
+              <ul className="m-0 mt-3 grid list-disc gap-2 pl-5 text-[15px]">
+                <li>
+                  <strong>Все домашние устройства сразу:</strong> ноутбуки, смартфоны, планшеты, Smart TV и игровые приставки (Xbox без ошибки <code>0x80a40401</code>, PlayStation) без установки VPN на каждое устройство.
+                </li>
+                <li>
+                  <strong>Музыка, умный дом, учёба и игры:</strong> Spotify, Supercell (Brawl Stars, Clash Royale), техника Bosch / Siemens (Home Connect) и Dyson, Notion, Coursera, edX и ChatGPT работают у всей семьи.
+                </li>
+                <li>
+                  <strong>Российские сервисы не ломаются:</strong> Кинопоиск, Госуслуги, банковские приложения и умный дом продолжают работать напрямую через вашего провайдера.
+                </li>
+              </ul>
+            </div>
           </article>
-          <article className="card">
-            <Building className="h-6 w-6 text-accent" aria-hidden />
-            <p className="eyebrow m-0 mt-3">Сценарий 2 · Для команд и бизнеса (B2B)</p>
-            <h3 className="m-0 mt-1 text-[17px] font-semibold">Корпоративный DNS-прокси для работы и дизайна</h3>
-            <p className="m-0 mt-2 text-[15px] text-mute">Изолированный сервер для компании или продуктовой команды с фиксированным внешним IP-адресом и централизованным управлением:</p>
-            <ul className="m-0 mt-3 grid list-disc gap-2 pl-5 text-[15px]">
-              <li>
-                <strong>Доступ к рабочему стеку:</strong> командные пространства Notion, Miro, Coda, Lucidchart, Whimsical, Adobe, Autodesk, SketchUp, Semrush, ChatGPT Team, Claude, Cursor и JetBrains.
-              </li>
-              <li>
-                <strong>Собственные домены под задачи команды:</strong> добавление любых нужных зарубежных сайтов, документации и SaaS-сервисов через личный кабинет за пару секунд.
-              </li>
-              <li>
-                <strong>Чистый выделенный IP:</strong> на вашем сервере нет посторонних пользователей, поэтому аккаунты не сталкиваются с капчами и ограничениями со стороны платформ.
-              </li>
-            </ul>
+          <article className="card relative overflow-hidden hover:border-line-strong">
+            <MouseTrailCanvas cellSize={16} maxAlpha={0.16} decay={0.03} />
+            <div className="relative z-10">
+              <Building className="h-6 w-6 text-accent" aria-hidden />
+              <p className="eyebrow m-0 mt-3">Сценарий 2 · Для команд и бизнеса (B2B)</p>
+              <h3 className="m-0 mt-1 text-[17px] font-semibold">Корпоративный DNS-прокси для работы и дизайна</h3>
+              <p className="m-0 mt-2 text-[15px] text-mute">Изолированный сервер для компании или продуктовой команды с фиксированным внешним IP-адресом и централизованным управлением:</p>
+              <ul className="m-0 mt-3 grid list-disc gap-2 pl-5 text-[15px]">
+                <li>
+                  <strong>Доступ к рабочему стеку:</strong> командные пространства Notion, Miro, Coda, Lucidchart, Whimsical, Adobe, Autodesk, SketchUp, Semrush, ChatGPT Team, Claude, Cursor и JetBrains.
+                </li>
+                <li>
+                  <strong>Собственные домены под задачи команды:</strong> добавление любых нужных зарубежных сайтов, документации и SaaS-сервисов через личный кабинет за пару секунд.
+                </li>
+                <li>
+                  <strong>Чистый выделенный IP:</strong> на вашем сервере нет посторонних пользователей, поэтому аккаунты не сталкиваются с капчами и ограничениями со стороны платформ.
+                </li>
+              </ul>
+            </div>
           </article>
         </div>
       </Section>
@@ -92,11 +99,14 @@ export default function DedicatedPage() {
             { icon: Lock, eyebrow: "Приватный доступ (ACL)", title: "Только ваши устройства и сети", text: "Сервер отвечает только вашим авторизованным IP/подсетям (дом, офис, корпоративный VPN) и именным профилям DoH / DoT (.mobileconfig). Никто посторонний не сможет использовать ваш канал." },
             { icon: Wrench, eyebrow: "Zero-Maintenance", title: "Обслуживание и обновления на нас", text: `Мы сами мониторим доступность узла 24/7, продлеваем TLS-сертификаты, поддерживаем базовый список из ${counts.free_services + counts.pro_services} сервисов и обновляем системное ПО без разрыва активных сессий.` },
           ].map((f) => (
-            <div key={f.title} className="card">
-              <f.icon className="h-6 w-6 text-accent" aria-hidden />
-              <p className="eyebrow m-0 mt-3">{f.eyebrow}</p>
-              <h3 className="m-0 mt-1 text-[17px] font-semibold">{f.title}</h3>
-              <p className="m-0 mt-2 text-[15px] text-mute">{f.text}</p>
+            <div key={f.title} className="card relative overflow-hidden hover:border-line-strong">
+              <MouseTrailCanvas cellSize={16} maxAlpha={0.16} decay={0.03} />
+              <div className="relative z-10">
+                <f.icon className="h-6 w-6 text-accent" aria-hidden />
+                <p className="eyebrow m-0 mt-3">{f.eyebrow}</p>
+                <h3 className="m-0 mt-1 text-[17px] font-semibold">{f.title}</h3>
+                <p className="m-0 mt-2 text-[15px] text-mute">{f.text}</p>
+              </div>
             </div>
           ))}
         </div>

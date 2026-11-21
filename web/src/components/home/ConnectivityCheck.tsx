@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CircleCheck, CircleX, LoaderCircle, RefreshCw } from "lucide-react";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 
 type ProbeState = "idle" | "running" | "ok" | "fail";
 type Probe = { name: string; host: string; url: string; state: ProbeState; ms: number | null };
@@ -52,8 +53,10 @@ export function ConnectivityCheck() {
   const okCount = probes.filter((p) => p.state === "ok").length;
 
   return (
-    <div className="card">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="card relative overflow-hidden">
+      <MouseTrailCanvas cellSize={16} maxAlpha={0.16} decay={0.03} />
+      <div className="relative z-10">
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="m-0 text-[17px] font-semibold">Проверка из браузера</h3>
           <p className="m-0 mt-1 text-sm text-mute">Запросим иконки пяти сервисов и замерим время ответа. Ничего не отправляется на наш сервер.</p>
@@ -115,6 +118,7 @@ curl -sI https://claude.ai/ | head -1`}</code>
           Если <code>nslookup</code> возвращает другой адрес — настройки DNS не применились. Если адрес верный, но страница не открывается, проверьте, что сеть не блокирует исходящие соединения на порт 443.
         </p>
       </details>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 import { SITE } from "@/content/site";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-24 border-t border-line bg-panel-elevated/70">
-      <div className="wrap grid gap-10 py-14 text-sm text-mute md:grid-cols-[1.2fr_1.3fr_0.9fr]">
+    <footer className="relative mt-24 overflow-hidden border-t border-line bg-panel-elevated/70">
+      <MouseTrailCanvas cellSize={18} maxAlpha={0.14} decay={0.028} />
+      <div className="wrap relative z-10 grid gap-10 py-14 text-sm text-mute md:grid-cols-[1.2fr_1.3fr_0.9fr]">
         <div>
           <p className="m-0 font-semibold tracking-[-0.02em] text-ink">{SITE.name}</p>
           <p className="mt-3 max-w-[36ch] leading-relaxed">
@@ -36,7 +38,7 @@ export function SiteFooter() {
           <a href={`mailto:${SITE.supportEmail}`} className="font-mono text-[13px] text-mute no-underline transition-colors hover:text-accent">{SITE.supportEmail}</a>
         </div>
       </div>
-      <div className="border-t border-line/70">
+      <div className="relative z-10 border-t border-line/70">
         <div className="wrap py-6">
           <p className="m-0 text-xs leading-relaxed text-mute/80">
             Сервис не является средством обхода блокировок Роскомнадзора или Мининформа РБ, работает строго по фиксированному списку
