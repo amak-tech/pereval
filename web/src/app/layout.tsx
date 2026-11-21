@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -7,6 +7,7 @@ import { SITE } from "@/content/site";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter", display: "swap" });
+const jetbrainsMono = JetBrains_Mono({ subsets: ["latin", "cyrillic"], variable: "--font-jetbrains-mono", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.origin),
@@ -34,10 +35,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbfbfa" },
-    { media: "(prefers-color-scheme: dark)", color: "#141413" },
-  ],
+  themeColor: "#f7f9fc",
   width: "device-width",
   initialScale: 1,
 };
@@ -48,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const ymRaw = process.env.YM_COUNTER_ID ?? "114262096";
   const ym = /^\d+$/.test(ymRaw) ? Number(ymRaw) : null;
   return (
-    <html lang="ru" className={inter.variable}>
+    <html lang="ru" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-dvh flex flex-col">
         <a
           href="#main"

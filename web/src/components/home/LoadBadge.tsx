@@ -68,8 +68,8 @@ export function LoadBadge() {
 
   if (live === null) {
     return (
-      <Link href="/stats" className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 text-xs text-mute no-underline hover:text-ink">
-        <Activity className="h-3.5 w-3.5" aria-hidden /> Статистика нагрузки
+      <Link href="/stats" className="inline-flex items-center gap-2 rounded-full border border-line bg-panel/80 px-3.5 py-2 font-mono text-xs text-mute no-underline transition-colors hover:border-line-strong hover:text-ink">
+        <Activity className="h-3.5 w-3.5 text-accent" aria-hidden /> Статистика нагрузки
       </Link>
     );
   }
@@ -104,7 +104,7 @@ export function LoadBadge() {
   return (
     <Link
       href="/stats"
-      className="inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 text-xs text-mute no-underline hover:text-ink"
+      className="inline-flex items-center gap-2.5 rounded-full border border-line bg-panel/80 px-3.5 py-2 font-mono text-xs text-mute no-underline transition-colors hover:border-line-strong hover:text-ink"
       aria-live="polite"
       aria-busy={loading}
     >

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { ProPrice } from "@/components/billing/ProPrice";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 import { Badge } from "@/components/Section";
 import { SITE } from "@/content/site";
 
@@ -60,25 +61,32 @@ export function PlansSection() {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       {plans.map((p) => (
-        <article key={p.key} className={`card flex flex-col ${p.featured ? "border-accent ring-1 ring-accent" : ""}`} aria-labelledby={`plan-${p.key}`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="eyebrow m-0">{p.eyebrow}</p>
-            {p.featured ? <Badge>популярный</Badge> : null}
+        <article
+          key={p.key}
+          className={`relative overflow-hidden flex flex-col ${p.featured ? "card-featured" : "card hover:border-line-strong"}`}
+          aria-labelledby={`plan-${p.key}`}
+        >
+          {p.featured ? <MouseTrailCanvas cellSize={16} maxAlpha={0.18} decay={0.03} /> : null}
+          <div className="relative z-10 flex flex-1 flex-col">
+            <div className="flex items-center justify-between gap-2">
+              <p className="eyebrow m-0">{p.eyebrow}</p>
+              {p.featured ? <Badge>популярный</Badge> : null}
+            </div>
+            <h3 id={`plan-${p.key}`} className="m-0 mt-3 text-[22px] font-semibold tracking-[-0.02em]">
+              {p.title}
+            </h3>
+            <div className="mt-2 min-h-[36px]">{p.price}</div>
+            <p className="m-0 mt-2.5 text-[14.5px] leading-relaxed text-mute">{p.text}</p>
+            <ul className="m-0 mt-5 grid flex-1 list-none gap-2.5 border-t border-line/70 pt-5 p-0 text-[14.5px]">
+              {p.items.map((it) => (
+                <li key={it} className="flex gap-2.5">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+                  <span className="text-ink/90">{it}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6">{p.cta}</div>
           </div>
-          <h3 id={`plan-${p.key}`} className="m-0 mt-2 text-[20px] font-semibold tracking-tight">
-            {p.title}
-          </h3>
-          <div className="mt-2 min-h-[34px]">{p.price}</div>
-          <p className="m-0 mt-2 text-[15px] text-mute">{p.text}</p>
-          <ul className="m-0 mt-4 grid flex-1 list-none gap-2 p-0 text-[15px]">
-            {p.items.map((it) => (
-              <li key={it} className="flex gap-2">
-                <Check className="mt-1 h-4 w-4 shrink-0 text-ok" aria-hidden />
-                <span>{it}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-5">{p.cta}</div>
         </article>
       ))}
     </div>

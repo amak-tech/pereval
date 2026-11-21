@@ -12,20 +12,21 @@ export function Faq({ items, id = "faq", title = "Частые вопросы" }
     })),
   };
   return (
-    <section id={id} className="wrap scroll-mt-20" aria-labelledby={`${id}-h`}>
-      <h2 id={`${id}-h`} className="mb-4 mt-16 text-[clamp(20px,3vw,24px)] font-semibold tracking-tight">
+    <section id={id} className="wrap scroll-mt-24 pt-16 sm:pt-24" aria-labelledby={`${id}-h`}>
+      <p className="eyebrow m-0 mb-3">FAQ</p>
+      <h2 id={`${id}-h`} className="m-0 mb-7 text-[clamp(24px,3.6vw,34px)] font-semibold leading-[1.15] tracking-[-0.03em]">
         {title}
       </h2>
       <div className="grid gap-2.5">
         {items.map((i) => (
-          <details key={i.q} className="group card !p-0">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold [&::-webkit-details-marker]:hidden">
+          <details key={i.q} className="group card !p-0 hover:border-line-strong open:border-line-strong">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-[15.5px] font-medium text-ink [&::-webkit-details-marker]:hidden">
               <span>{i.q}</span>
-              <span aria-hidden className="text-mute transition-transform group-open:rotate-45">
+              <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-line bg-bg font-mono text-sm text-mute transition-all group-hover:border-line-strong group-hover:text-ink group-open:rotate-45 group-open:border-accent/40 group-open:text-accent">
                 +
               </span>
             </summary>
-            <div className="prose-pereval px-5 pb-5 text-mute [&_a]:text-accent" dangerouslySetInnerHTML={{ __html: i.a }} />
+            <div className="prose-pereval border-t border-line/60 px-5 pb-5 pt-4 text-mute [&_a]:text-accent" dangerouslySetInnerHTML={{ __html: i.a }} />
           </details>
         ))}
       </div>

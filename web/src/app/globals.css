@@ -1,57 +1,43 @@
 @import "tailwindcss";
 
 /*
-  Палитра перенесена из старого статического сайта (templates/web/*.html):
-  спокойный светлый фон, тёмная тема по prefers-color-scheme, синий акцент.
-  Все цвета — через токены, чтобы компоненты не знали про конкретные hex.
+  Дизайн-система «Перевал»: современная светлая минималистичная эстетика в духе JetBrains Junie
+  с мотивом дневного горного перевала — чистый светлый фон, тонкие границы,
+  моноширинные акценты и фирменный синий цвет логотипа (#0b5cff).
+  Все цвета — через токены, чтобы компоненты оставались независимыми от конкретных hex.
 */
 :root {
-  --bg: #fbfbfa;
+  --bg: #f7f9fc;
   --panel: #ffffff;
-  --ink: #1a1a19;
-  --mute: #6b6b68;
-  --line: #e6e5e2;
+  --panel-elevated: #f0f4fa;
+  --ink: #0f1524;
+  --mute: #566176;
+  --line: #e1e7f0;
+  --line-strong: #c7d2e3;
   --accent: #0b5cff;
+  --accent-hover: #094bd4;
   --accent-ink: #ffffff;
-  --accent-soft: #eef4ff;
-  --ok: #0f7b3e;
+  --accent-soft: rgb(11 92 255 / 0.09);
+  --ok: #157f4b;
   --ok-bg: #eaf8f0;
-  --warn: #8a5300;
+  --warn: #9a5b00;
   --warn-bg: #fff8e6;
-  --err: #b42318;
-  --err-bg: #fef3f2;
-  --code: #f4f4f2;
+  --err: #c0261b;
+  --err-bg: #fef2f2;
+  --code: #eff3f9;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141413;
-    --panel: #1c1c1a;
-    --ink: #eeeeec;
-    --mute: #a3a29e;
-    --line: #2e2e2b;
-    --accent: #7aa2ff;
-    --accent-ink: #0d1322;
-    --accent-soft: #1d2538;
-    --ok: #4dd488;
-    --ok-bg: #132a1e;
-    --warn: #e0b055;
-    --warn-bg: #2a2318;
-    --err: #f97066;
-    --err-bg: #2c1616;
-    --code: #232320;
-    color-scheme: dark;
-  }
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-panel: var(--panel);
+  --color-panel-elevated: var(--panel-elevated);
   --color-ink: var(--ink);
   --color-mute: var(--mute);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
   --color-ok: var(--ok);
@@ -62,9 +48,9 @@
   --color-err-bg: var(--err-bg);
   --color-code: var(--code);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --radius-card: 12px;
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-card: 14px;
+  --shadow-card: 0 1px 2px rgb(15 21 36 / 0.04), 0 12px 32px -18px rgb(15 21 36 / 0.12);
 }
 
 @layer base {
@@ -74,6 +60,7 @@
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    background: var(--bg);
   }
   body {
     margin: 0;
@@ -83,6 +70,12 @@
     font-size: 16px;
     line-height: 1.65;
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: rgb(11 92 255 / 0.16);
+    color: var(--ink);
   }
   a {
     color: var(--accent);
@@ -92,6 +85,9 @@
   kbd,
   pre {
     font-family: var(--font-mono);
+  }
+  code:not(pre code) {
+    font-size: 0.9em;
   }
   :focus-visible {
     outline: 2px solid var(--accent);
@@ -110,26 +106,40 @@
 
 @layer components {
   .wrap {
-    @apply mx-auto w-full max-w-[1040px] px-4 sm:px-6;
+    @apply mx-auto w-full max-w-[1120px] px-4 sm:px-6 lg:px-8;
+  }
+  /* Атмосферная светлая hero-секция с мягким свечением над линией перевала */
+  .hero-pass {
+    @apply relative overflow-hidden border-b border-line;
+    background:
+      radial-gradient(80% 65% at 50% -12%, rgb(69 133 255 / 0.16), transparent 68%),
+      radial-gradient(45% 45% at 88% 12%, rgb(11 92 255 / 0.08), transparent 72%),
+      linear-gradient(180deg, #ffffff 0%, #f3f7fe 100%);
   }
   .card {
-    @apply rounded-[var(--radius-card)] border border-line bg-panel p-5 sm:p-6;
+    @apply rounded-[var(--radius-card)] border border-line bg-panel p-5 sm:p-6 transition-colors duration-200;
     box-shadow: var(--shadow-card);
   }
+  .card-featured {
+    @apply rounded-[var(--radius-card)] border border-accent/35 p-5 sm:p-6 transition-colors duration-200;
+    background: linear-gradient(180deg, rgb(11 92 255 / 0.055) 0%, var(--panel) 44%);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 20px 44px -24px rgb(11 92 255 / 0.24);
+  }
   .eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.08em] text-accent;
+    @apply inline-flex items-center gap-2 font-mono text-[11.5px] font-medium uppercase tracking-[0.12em] text-accent;
   }
   /* Tailwind v4: @apply умеет только утилиты, поэтому общая часть кнопок — через групповой селектор */
   .btn,
   .btn-primary,
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-[9px] px-5 py-3 text-[15px] font-semibold leading-tight no-underline transition-colors;
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[15px] font-semibold leading-tight no-underline transition-all duration-150;
   }
   .btn-primary {
-    @apply bg-accent text-accent-ink hover:opacity-90;
+    @apply bg-accent text-accent-ink hover:bg-accent-hover active:scale-[0.99];
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.25) inset, 0 8px 22px -10px rgb(11 92 255 / 0.55);
   }
   .btn-secondary {
-    @apply border border-line bg-code text-ink hover:border-accent hover:text-accent;
+    @apply border border-line-strong bg-panel text-ink hover:border-ink/25 hover:bg-panel-elevated active:scale-[0.99];
   }
   /* Индикатор ожидания оплаты (PaymentProgress): неопределённый прогресс */
   .progress-bar {
@@ -147,20 +157,20 @@
     }
   }
   .chip {
-    @apply inline-flex items-center rounded-md bg-code px-2 py-0.5 font-mono text-[12.5px] text-ink;
+    @apply inline-flex items-center rounded-md border border-line bg-code px-2 py-0.5 font-mono text-[12px] text-ink/90;
   }
   .note {
-    @apply rounded-r-xl border-l-[3px] border-warn bg-warn-bg px-4 py-3 text-[15px];
+    @apply rounded-r-xl border border-line border-l-[3px] border-l-warn bg-warn-bg px-4 py-3.5 text-[14.5px] leading-relaxed;
   }
   .prose-pereval h2 {
-    @apply mt-12 mb-3 text-[clamp(19px,3vw,22px)] font-semibold tracking-tight scroll-mt-4;
+    @apply mt-12 mb-3 text-[clamp(19px,3vw,22px)] font-semibold tracking-tight scroll-mt-20;
   }
   .prose-pereval h3 {
     @apply mt-6 mb-2 text-[17px] font-semibold;
   }
   .prose-pereval p,
   .prose-pereval li {
-    @apply text-[16px] leading-relaxed;
+    @apply text-[15.5px] leading-relaxed;
   }
   .prose-pereval ul {
     @apply list-disc pl-5;

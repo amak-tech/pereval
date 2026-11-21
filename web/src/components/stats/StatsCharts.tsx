@@ -11,7 +11,7 @@ import { fmtBytes, fmtNum, fmtTime } from "@/components/stats/format";
  */
 type Tokens = { accent: string; line: string; mute: string; panel: string; ink: string };
 
-const DEFAULT_TOKENS: Tokens = { accent: "#0b5cff", line: "#e6e5e2", mute: "#6b6b68", panel: "#ffffff", ink: "#1a1a19" };
+const DEFAULT_TOKENS: Tokens = { accent: "#0b5cff", line: "#e1e7f0", mute: "#566176", panel: "#ffffff", ink: "#0f1524" };
 
 // Снимок кешируется по строковому ключу: useSyncExternalStore требует стабильную ссылку при неизменных данных.
 let tokenCache: { key: string; value: Tokens } = { key: "", value: DEFAULT_TOKENS };

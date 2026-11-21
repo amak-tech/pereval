@@ -37,22 +37,29 @@ export function HowItWorks({ ip, example = "claude.ai" }: { ip: string; example?
     <>
       <ol className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">
         {steps.map((s, i) => (
-          <li key={s.title} className="card relative pt-7">
-            <span aria-hidden className="absolute -top-3 left-5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-ink">
-              {i + 1}
-            </span>
-            <h3 className="m-0 text-[16px] font-semibold">{s.title}</h3>
-            <p className="m-0 mt-2 text-[15px] text-mute">{s.text}</p>
+          <li key={s.title} className="card flex flex-col justify-between hover:border-line-strong">
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <span aria-hidden className="inline-flex items-center rounded-md border border-accent/25 bg-accent-soft px-2 py-0.5 font-mono text-[12px] font-medium text-accent">
+                  0{i + 1}
+                </span>
+                <span aria-hidden className="h-px flex-1 ml-3 bg-gradient-to-r from-line-strong to-transparent" />
+              </div>
+              <h3 className="m-0 text-[17px] font-semibold tracking-[-0.015em]">{s.title}</h3>
+              <p className="m-0 mt-2.5 text-[15px] leading-relaxed text-mute">{s.text}</p>
+            </div>
           </li>
         ))}
       </ol>
-      <ul className="m-0 mt-5 grid list-none gap-3 p-0 sm:grid-cols-3">
+      <ul className="m-0 mt-4 grid list-none gap-3 p-0 sm:grid-cols-3">
         {facts.map((f) => (
-          <li key={f.title} className="flex gap-3 rounded-lg border border-line bg-bg p-4">
-            <f.icon className="mt-0.5 h-5 w-5 shrink-0 text-accent" aria-hidden />
+          <li key={f.title} className="flex gap-3.5 rounded-[var(--radius-card)] border border-line/90 bg-panel-elevated/60 p-4 sm:p-5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent-soft text-accent">
+              <f.icon className="h-4 w-4" aria-hidden />
+            </span>
             <div>
-              <div className="text-[15px] font-semibold">{f.title}</div>
-              <p className="m-0 mt-1 text-sm text-mute">{f.text}</p>
+              <div className="text-[15px] font-semibold tracking-[-0.01em]">{f.title}</div>
+              <p className="m-0 mt-1 text-sm leading-relaxed text-mute">{f.text}</p>
             </div>
           </li>
         ))}

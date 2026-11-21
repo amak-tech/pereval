@@ -79,7 +79,7 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "П�
             onChange={(e) => setTyped(e.target.value)}
             placeholder="Например: Claude, Cursor, Notion, Miro, Spotify, Xbox"
             autoComplete="off"
-            className="w-full rounded-lg border border-line bg-panel py-2.5 pl-9 pr-3 text-[15px] text-ink placeholder:text-mute focus:border-accent"
+            className="w-full rounded-xl border border-line bg-panel py-2.5 pl-9 pr-3 text-[15px] text-ink placeholder:text-mute transition-colors focus:border-accent"
           />
         </label>
         <div role="group" aria-label="Категории" className="flex flex-wrap gap-1.5">
@@ -132,7 +132,7 @@ export function ServiceCatalog({ categories, proCategories = [], siteName = "П�
               const rest = s.domains.length - domains.length;
               const slug = serviceSlug(s);
               return (
-                <li key={key} className="rounded-[var(--radius-card)] border border-line bg-panel p-4">
+                <li key={key} className="rounded-[var(--radius-card)] border border-line bg-panel p-4 transition-colors hover:border-line-strong">
                   <div className="flex items-center justify-between gap-2">
                     <Link href={`/services/${slug}`} className="font-semibold text-ink no-underline hover:text-accent hover:underline">
                       {s.name}

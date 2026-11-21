@@ -84,7 +84,7 @@ export function PaymentProgress({ phase, onCancel }: { phase: PaymentPhase; onCa
               <span
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] ${
                   s.state === "done"
-                    ? "border-ok bg-ok text-white"
+                    ? "border-ok bg-ok text-accent-ink"
                     : s.state === "active"
                       ? "border-accent bg-accent-soft text-accent"
                       : "border-line text-mute"

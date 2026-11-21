@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowDown, ArrowRight, CheckCircle2, Globe, ShieldCheck, Sparkles, TriangleAlert } from "lucide-react";
 import { Faq } from "@/components/Faq";
 import { JsonLd } from "@/components/JsonLd";
+import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
 import { Badge, Section } from "@/components/Section";
 import { ProPrice } from "@/components/billing/ProPrice";
 import { ConnectivityCheck } from "@/components/home/ConnectivityCheck";
@@ -75,8 +76,9 @@ export default async function ServiceSeoPage({ params }: { params: Promise<{ slu
   return (
     <div>
       {/* Герой */}
-      <section className="border-b border-line bg-panel" aria-labelledby="svc-hero-h">
-        <div className="wrap py-10 sm:py-14">
+      <section className="hero-pass" aria-labelledby="svc-hero-h">
+        <MountainPassBackdrop variant="subtle" />
+        <div className="wrap relative z-10 py-12 sm:py-16">
           <nav aria-label="Хлебные крошки" className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-mute">
             <Link href="/" className="no-underline hover:text-ink hover:underline">
               Главная

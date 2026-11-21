@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { JsonLd } from "@/components/JsonLd";
+import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
 import { Badge, Section } from "@/components/Section";
 import { allDeviceGuides, type DeviceGroup } from "@/content/pseo-devices";
 import { SITE } from "@/content/site";
@@ -57,8 +58,9 @@ export default function SetupIndexPage() {
 
   return (
     <div>
-      <section className="border-b border-line bg-panel" aria-labelledby="setup-idx-h">
-        <div className="wrap py-12 sm:py-16">
+      <section className="hero-pass" aria-labelledby="setup-idx-h">
+        <MountainPassBackdrop variant="subtle" />
+        <div className="wrap relative z-10 py-14 sm:py-20">
           <nav aria-label="Хлебные крошки" className="mb-4 flex items-center gap-1.5 text-sm text-mute">
             <Link href="/" className="no-underline hover:text-ink hover:underline">
               Главная
@@ -67,7 +69,7 @@ export default function SetupIndexPage() {
             <span className="text-ink font-medium">Настройка устройств</span>
           </nav>
           <p className="eyebrow m-0 mb-3">База знаний · {guides.length} инструкций</p>
-          <h1 id="setup-idx-h" className="m-0 max-w-[26ch] text-[clamp(28px,5vw,42px)] font-semibold leading-[1.12] tracking-tight">
+          <h1 id="setup-idx-h" className="m-0 max-w-[24ch] text-[clamp(30px,5vw,46px)] font-semibold leading-[1.08] tracking-[-0.03em]">
             Инструкции по настройке «{SITE.name}» для всех устройств и роутеров
           </h1>
           <p className="mt-4 max-w-[66ch] text-[17px] text-mute">

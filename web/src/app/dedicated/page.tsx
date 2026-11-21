@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowDown, Building, House, Layers, Lock, Wrench } from "lucide-react";
 import { Faq } from "@/components/Faq";
+import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
 import { Badge, Section } from "@/components/Section";
 import { LeadForm } from "@/components/dedicated/LeadForm";
 import { DEDICATED_FAQ } from "@/content/faq";
@@ -21,13 +22,14 @@ export default function DedicatedPage() {
   const { name, counts } = SITE;
   return (
     <div>
-      <section className="border-b border-line bg-panel" aria-labelledby="ded-h">
-        <div className="wrap py-12 sm:py-16">
+      <section className="hero-pass" aria-labelledby="ded-h">
+        <MountainPassBackdrop variant="subtle" />
+        <div className="wrap relative z-10 py-14 sm:py-20">
           <div className="flex flex-wrap gap-2">
             <Badge>Для всей семьи и B2B-команд</Badge>
             <Badge tone="mute">Свой IP · свои домены · веб-кабинет</Badge>
           </div>
-          <h1 id="ded-h" className="m-0 mt-4 max-w-[24ch] text-[clamp(28px,5vw,42px)] font-semibold leading-[1.1] tracking-tight">
+          <h1 id="ded-h" className="m-0 mt-5 max-w-[22ch] text-[clamp(32px,5vw,48px)] font-semibold leading-[1.08] tracking-[-0.03em]">
             {name} Dedicated — ваш собственный DNS-прокси сервер для семьи или компании
           </h1>
           <p className="mt-5 max-w-[66ch] text-[17px] text-mute">

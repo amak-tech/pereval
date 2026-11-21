@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowDown, Gauge, KeyRound, Mail, Sparkles, UserRound, Zap } from "lucide-react";
 import { Faq } from "@/components/Faq";
 import { JsonLd } from "@/components/JsonLd";
+import { MountainPassBackdrop } from "@/components/MountainPassBackdrop";
 import { Badge, Section } from "@/components/Section";
 import { ProPrice } from "@/components/billing/ProPrice";
 import { Checkout } from "@/components/pro/Checkout";
@@ -77,13 +78,14 @@ export default async function ProPage() {
 
   return (
     <div>
-      <section className="border-b border-line bg-panel" aria-labelledby="pro-h">
-        <div className="wrap py-12 sm:py-16">
+      <section className="hero-pass" aria-labelledby="pro-h">
+        <MountainPassBackdrop variant="subtle" />
+        <div className="wrap relative z-10 py-14 sm:py-20">
           <div className="flex flex-wrap gap-2">
             <Badge>Подписка · для себя</Badge>
             <Badge tone="mute">Оплата картой РФ, СБП или зарубежной картой</Badge>
           </div>
-          <h1 id="pro-h" className="m-0 mt-4 max-w-[24ch] text-[clamp(28px,5vw,42px)] font-semibold leading-[1.1] tracking-tight">
+          <h1 id="pro-h" className="m-0 mt-5 max-w-[22ch] text-[clamp(32px,5vw,48px)] font-semibold leading-[1.08] tracking-[-0.03em]">
             {name} Pro — полный каталог и быстрые серверы без вечерних тормозов
           </h1>
           <p className="mt-5 max-w-[66ch] text-[17px] text-mute">

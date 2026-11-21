@@ -3,6 +3,8 @@ import Link from "next/link";
 import { ArrowDown, ExternalLink, Send } from "lucide-react";
 import { Faq } from "@/components/Faq";
 import { JsonLd } from "@/components/JsonLd";
+import { MountainPassBackdrop, PassRouteCard } from "@/components/MountainPassBackdrop";
+import { MouseTrailCanvas } from "@/components/MouseTrailCanvas";
 import { Badge, Section } from "@/components/Section";
 import { ConnectivityCheck } from "@/components/home/ConnectivityCheck";
 import { HowItWorks } from "@/components/home/HowItWorks";
@@ -58,28 +60,36 @@ export default function HomePage() {
   return (
     <div className="pb-20 md:pb-0">
       {/* Герой */}
-      <section className="border-b border-line bg-panel" aria-labelledby="hero-h">
-        <div className="wrap py-12 sm:py-16">
-          <p className="eyebrow m-0 mb-3">Smart DNS · без VPN · бесплатно</p>
-          <h1 id="hero-h" className="m-0 max-w-[22ch] text-[clamp(30px,5.5vw,46px)] font-semibold leading-[1.1] tracking-tight">
-            ChatGPT, Claude, Gemini и инструменты разработки — без VPN
-          </h1>
-          <p className="mt-5 max-w-[66ch] text-[17px] text-mute">
-            Если ChatGPT отвечает «not available in your country», Claude не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не в блокировках. {name} — DNS-сервер, который направляет через зарубежный узел только {counts.free_services} сервисов из списка, а всё остальное оставляет как есть: без VPN-клиента, расширений и настройки каждого приложения.
-          </p>
-          <div id="hero-cta" className="mt-7 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <a href="#setup" className="btn-primary text-[16px]">
-              Выбрать устройство <ArrowDown className="h-4 w-4" aria-hidden />
-            </a>
-            <LoadBadge />
+      <section className="hero-pass" aria-labelledby="hero-h">
+        <MountainPassBackdrop variant="hero" />
+        <div className="wrap relative z-10 py-14 sm:py-20 lg:py-24">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-12">
+            <div>
+              <p className="eyebrow m-0 mb-4">Smart DNS · без VPN · бесплатно</p>
+              <h1 id="hero-h" className="m-0 max-w-[19ch] text-[clamp(34px,5.2vw,54px)] font-semibold leading-[1.06] tracking-[-0.035em]">
+                ChatGPT, Claude, Gemini и инструменты разработки — без VPN
+              </h1>
+              <p className="mt-6 max-w-[58ch] text-[16.5px] leading-relaxed text-mute">
+                Если ChatGPT отвечает «not available in your country», Claude не открывается, а Gemini просит сменить регион — дело в вашем IP-адресе, а не в блокировках. {name} — DNS-сервер, который направляет через зарубежный узел только {counts.free_services} сервисов из списка, а всё остальное оставляет как есть: без VPN-клиента, расширений и настройки каждого приложения.
+              </p>
+              <div id="hero-cta" className="mt-8 flex flex-col items-start gap-3.5 sm:flex-row sm:items-center">
+                <a href="#setup" className="btn-primary text-[15.5px]">
+                  Выбрать устройство <ArrowDown className="h-4 w-4" aria-hidden />
+                </a>
+                <LoadBadge />
+              </div>
+              <ul className="m-0 mt-9 flex list-none flex-wrap gap-2 p-0" aria-label="Ключевые свойства">
+                {["Ничего не устанавливать", "Сквозное шифрование TLS", `${counts.free_services} сервисов · ${counts.free_domains} доменов`, "Российские сайты — напрямую", "Без аккаунта и регистрации"].map((t) => (
+                  <li key={t}>
+                    <Badge tone="mute">{t}</Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="w-full max-w-[440px] lg:max-w-none">
+              <PassRouteCard dnsHost={free.dot_host} dnsIp={free.dns_ip} serviceCount={counts.free_services} />
+            </div>
           </div>
-          <ul className="m-0 mt-8 flex list-none flex-wrap gap-2 p-0" aria-label="Ключевые свойства">
-            {["Ничего не устанавливать", "Сквозное шифрование TLS", `${counts.free_services} сервисов · ${counts.free_domains} доменов`, "Российские сайты — напрямую", "Без аккаунта и регистрации"].map((t) => (
-              <li key={t}>
-                <Badge tone="mute">{t}</Badge>
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 
@@ -115,17 +125,20 @@ export default function HomePage() {
       </Section>
 
       <Section id="request" eyebrow="Не нашли сервис?" title="Предложите домен — добавим за пару минут">
-        <div className="card flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <p className="m-0 max-w-[60ch] text-[15px] text-mute">
-            Если зарубежный сайт или приложение закрывает доступ по региону, но его ещё нет в списке — напишите в Telegram-чат или создайте Issue на GitHub. Укажите название сервиса и основной домен (а если знаете — домены API или статики).
-          </p>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <a href={SITE.telegram} target="_blank" rel="noopener" className="btn-primary">
-              <Send className="h-4 w-4" aria-hidden /> Написать в Telegram
-            </a>
-            <a href={`${SITE.githubIssues}/new`} target="_blank" rel="noopener" className="btn-secondary">
-              <ExternalLink className="h-4 w-4" aria-hidden /> Issue на GitHub
-            </a>
+        <div className="card relative overflow-hidden">
+          <MouseTrailCanvas cellSize={16} maxAlpha={0.2} decay={0.03} />
+          <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <p className="m-0 max-w-[60ch] text-[15px] text-mute">
+              Если зарубежный сайт или приложение закрывает доступ по региону, но его ещё нет в списке — напишите в Telegram-чат или создайте Issue на GitHub. Укажите название сервиса и основной домен (а если знаете — домены API или статики).
+            </p>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <a href={SITE.telegram} target="_blank" rel="noopener" className="btn-primary">
+                <Send className="h-4 w-4" aria-hidden /> Написать в Telegram
+              </a>
+              <a href={`${SITE.githubIssues}/new`} target="_blank" rel="noopener" className="btn-secondary">
+                <ExternalLink className="h-4 w-4" aria-hidden /> Issue на GitHub
+              </a>
+            </div>
           </div>
         </div>
       </Section>

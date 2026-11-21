@@ -61,7 +61,7 @@ export function SetupWizard({ tabs, defaultTab }: { tabs: WizardTab[]; defaultTa
 
   return (
     <div className="card !p-0 overflow-hidden">
-      <div role="tablist" aria-label="Устройство или программа" className="flex gap-1 overflow-x-auto border-b border-line bg-bg p-2 [scrollbar-width:thin]">
+      <div role="tablist" aria-label="Устройство или программа" className="flex gap-1.5 overflow-x-auto border-b border-line bg-panel-elevated/75 p-2.5 [scrollbar-width:thin]">
         {tabs.map((t, i) => {
           const Icon = ICONS[t.id];
           const on = t.id === active;
@@ -79,8 +79,8 @@ export function SetupWizard({ tabs, defaultTab }: { tabs: WizardTab[]; defaultTa
               tabIndex={on ? 0 : -1}
               onClick={() => select(t.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                on ? "bg-panel text-accent shadow-[var(--shadow-card)] ring-1 ring-line" : "text-mute hover:text-ink"
+              className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${
+                on ? "bg-accent-soft text-accent ring-1 ring-accent/30" : "text-mute hover:bg-ink/[0.04] hover:text-ink"
               }`}
             >
               <Icon className="h-4 w-4" aria-hidden />
@@ -97,7 +97,7 @@ export function SetupWizard({ tabs, defaultTab }: { tabs: WizardTab[]; defaultTa
           aria-labelledby={`${baseId}-tab-${t.id}`}
           hidden={t.id !== active}
           tabIndex={0}
-          className="p-5 sm:p-6 focus-visible:outline-none"
+          className="p-5 sm:p-7 focus-visible:outline-none"
         >
           {t.content}
         </div>
