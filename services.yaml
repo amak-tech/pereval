@@ -921,11 +921,30 @@ pro:
             - adobe.net
             - astockcdn.net
             - behance.net
+        - name: Canva / Affinity
+          slug: canva
+          note: "Графический редактор Canva официально закрыл доступ с российских IP-адресов (HTTP 403); вместе с Canva в каталог входят Affinity Studio и инструменты Kaleido AI (remove.bg, unscreen, designify)."
+          domains:
+            - canva.com
+            - canva-apps.com
+            - canva.dev
+            - affinity.studio
+            - kaleido.ai
+            - remove.bg
+            - unscreen.com
+            - designify.com
         - name: Coda
           slug: coda
           note: "Рабочие пространства, документы и API Coda возвращают ошибку HTTP 403 Forbidden при подключении с российских и белорусских IP-адресов."
           domains:
             - coda.io
+        - name: Basecamp / 37signals
+          slug: basecamp
+          note: "Сервис управления проектами Basecamp перенаправляет подключения с IP-адресов РФ и РБ на страницу санкционных ограничений (basecamp.com/sanctions)."
+          domains:
+            - basecamp.com
+            - basecampapi.com
+            - 37signals.com
         - name: Whimsical
           slug: whimsical
           note: "Сервис диаграмм, вайрфреймов и командных досок Whimsical закрывает доступ для IP-адресов РФ и РБ с кодом HTTP 451 («not available in your region»)."
@@ -962,6 +981,17 @@ pro:
           domains:
             - sketchup.com
             - trimble.com
+        - name: Chaos / Enscape
+          slug: chaos
+          note: "Личный кабинет лицензий Chaos (V-Ray, Corona — my.chaos.com, ssooauth.chaos.com) и портал Enscape (enscape3d.com) блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
+          domains:
+            - chaos.com
+            - enscape3d.com
+        - name: Parsec
+          slug: parsec
+          note: "Сервер раздачи клиентов и автообновлений Parsec (builds.parsec.app) блокирует запросы с IP-адресов региона (HTTP 403); сам видеопоток P2P по UDP идёт напрямую."
+          domains:
+            - parsec.app
         - name: Coursera                     # закрыт для РФ (обрыв TLS), в РБ работает
           note: "Платформа обрывает TLS-соединение при прямом подключении с российских IP-адресов; из Беларуси курсы открываются напрямую."
           domains:
@@ -1031,42 +1061,177 @@ pro:
             # на PS4/PS5 обязаны резолвиться и идти напрямую с домашнего роутера пользователя мимо SNI-прокси.
             - stun.playstation.net
             - stun.ww.np.cn.s0.playstation.net
+    - id: auto
+      name: Автомобили, диагностика и СТО
+      pool: default
+      services:
+        - name: Tesla (App, Service, EPC & Toolbox)
+          slug: tesla
+          note: "Авторизация мобильного приложения Tesla (auth.tesla.com), сервисные мануалы service.tesla.com, каталог запчастей epc.tesla.com и облачная диагностика Toolbox 3 отклоняют запросы с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - tesla.com
+            - teslamotors.com
+            - tesla.services
+            - auth.tesla.com
+            - service.tesla.com
+            - epc.tesla.com
+            - toolbox.tesla.com
+            - owner-api.teslamotors.com
+        - name: Volkswagen Group ID & myAudi
+          slug: vag-id
+          note: "Единый сервис авторизации концерна VAG (identity.vwgroup.io для Volkswagen, Audi, Škoda и ODIS GRP) блокирует вход на уровне Azure Application Gateway (HTTP 403), а облачные порталы myAudi возвращают CloudFront Country Block (HTTP 403)."
+          domains:
+            - vwgroup.io
+            - identity.vwgroup.io
+            - my.audi.com
+            - audi.de
+            - audiusa.com
+        - name: Porsche (My Porsche & PCSS)
+          slug: porsche
+          note: "Клиентский портал Porsche и дилерская система технической информации и диагностики PCSS (pcss-tsi.porsche.com) отклоняют подключения с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - porsche.com
+            - identity.porsche.com
+            - login.porsche.com
+            - my.porsche.com
+            - pcss-tsi.porsche.com
+        - name: Ford / Lincoln (FordPass & Motorcraft)
+          slug: ford
+          note: "Порталы владельцев Ford и Lincoln, облако телематики FordPass (autonomic.ai) и сервисный ресурс Motorcraft (загрузка заводских файлов As-Built по VIN для FORScan и FDRS) блокируют запросы из РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - ford.com
+            - fordpass.com
+            - owner.ford.com
+            - lincoln.com
+            - autonomic.ai
+            - api.autonomic.ai
+            - motorcraft.com
+            - motorcraftservice.com
+        - name: Jaguar Land Rover TOPIx
+          slug: jlr-topix
+          note: "Официальный дилерский портал диагностики, электросхем и онлайн-программирования блоков Jaguar Land Rover TOPIx (topix.jlrext.com) закрыт страновым фильтром Amazon CloudFront (HTTP 403 Country Block)."
+          domains:
+            - jlrext.com
+            - topix.jlrext.com
+            - topix.landrover.jlrext.com
+            - topix.jaguar.jlrext.com
+        - name: Volvo Cars
+          slug: volvo-cars
+          note: "Глобальный портал владельцев, руководств и программных обновлений Volvo Cars блокирует прямые подключения с российских и белорусских IP-адресов на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - volvocars.com
+        - name: Rivian
+          slug: rivian
+          note: "Веб-сервисы, личный кабинет и документация владельца электромобилей Rivian закрыты для подключений из РФ и РБ страновым фильтром Amazon CloudFront (HTTP 403 Country Block)."
+          domains:
+            - rivian.com
+        - name: PlugShare
+          slug: plugshare
+          note: "Глобальная карта электрозарядных станций PlugShare и её мобильный API (api.plugshare.com) блокируют запросы с IP-адресов РФ и РБ правилами Cloudflare WAF (HTTP 403)."
+          domains:
+            - plugshare.com
+            - api.plugshare.com
+        - name: ALLDATA
+          slug: alldata
+          note: "Профессиональная ремонтная база для СТО ALLDATA Repair и сервис ALLDATAdiy (дилерские мануалы, электросхемы, распиновки ЭБУ и TSB) отклоняют подключения из РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - alldata.com
+            - my.alldata.com
+            - alldatadiy.com
+        - name: "Bosch Aftermarket / ESI[tronic]"
+          slug: bosch-aftermarket
+          note: "Технические порталы Bosch Mobility Aftermarket и инфраструктура диагностического комплекса ESI[tronic] блокируют запросы из РФ и РБ на уровне Azure Application Gateway (HTTP 403); единая авторизация Bosch SingleKey ID (singlekey-id.com) также работает в подписке Pro автоматически."
+          domains:
+            - boschaftermarket.com
+            - boschdiagnostics.com
+            - bosch-mobility.com
+            - boschcarservice.com
+        - name: Schaeffler REPXPERT (LuK, INA, FAG)
+          slug: repxpert
+          note: "Технический портал для автосервисов Schaeffler REPXPERT (заводские мануалы и моменты затяжки по сцеплениям LuK, ГРМ INA и ступицам FAG) блокирует запросы с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - repxpert.com
+            - repxpert.de
+            - schaeffler.com
+            - schaeffler.de
+        - name: ZF Aftermarket (Lemförder, Sachs, TRW)
+          slug: zf-aftermarket
+          note: "Порталы ZF и ZF Aftermarket (документация по обслуживанию АКПП ZF 6HP/8HP/9HP и каталоги Lemförder, Sachs, TRW) отклоняют запросы с IP-адресов региона на уровне Azure Front Door (HTTP 403 Request blocked)."
+          domains:
+            - zf.com
+            - aftermarket.zf.com
+        - name: Mahle Aftermarket
+          slug: mahle
+          note: "Технический портал Mahle и сервисные ресурсы Mahle Aftermarket блокируют подключения с российских и белорусских IP-адресов межсетевым экраном FortiWeb Geo-IP (HTTP 403 / 500 Blocked)."
+          domains:
+            - mahle-aftermarket.com
+            - mahle.com
+        - name: Cummins QuickServe
+          slug: cummins-quickserve
+          note: "Сервисный портал Cummins QuickServe Online (каталоги деталей, электросхемы и мануалы по серийному номеру дизельного двигателя ESN) отклоняет подключения из РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
+          domains:
+            - cummins.com
+            - quickserve.cummins.com
+            - qsol.cummins.com
+        - name: Caterpillar SIS 2.0 & Parts
+          slug: cat-sis
+          note: "Сервисная информационная система Caterpillar SIS 2.0 (sis2.cat.com) и каталог запчастей parts.cat.com блокируют подключения с IP-адресов РФ и РБ на уровне Azure Front Door и Akamai (HTTP 403)."
+          domains:
+            - cat.com
+            - parts.cat.com
+            - sis2.cat.com
+        - name: TecDoc (TecAlliance)
+          slug: tecdoc
+          note: "Онлайн-каталог автозапчастей и кросс-номеров TecDoc (web.tecalliance.net) и единый вход TecAlliance ID официально отключили доступ для пользователей из России и Беларуси."
+          domains:
+            - tecalliance.net
+            - web.tecalliance.net
+            - login.tecalliance.net
+        - name: Carfax & AutoCheck
+          slug: carfax
+          note: "Сервисы проверки истории автомобилей по VIN из США и Европы Carfax и Experian AutoCheck блокируют запросы с IP-адресов РФ и РБ на уровне CloudFront, Akamai и Imperva (HTTP 403)."
+          domains:
+            - carfax.com
+            - carfax.eu
+            - carfaxonline.com
+            - autocheck.com
+        - name: IAAI (Insurance Auto Auctions)
+          slug: iaai
+          note: "Американский страховой автоаукцион IAAI блокирует просмотр лотов и авторизацию с IP-адресов региона защитой Imperva Incapsula (HTTP 403)."
+          domains:
+            - iaai.com
+            - login.iaai.com
+        - name: Copart
+          slug: copart
+          note: "Международный страховой автоаукцион Copart и торговый терминал g2auction.copart.com отклоняют подключения с IP-адресов РФ и РБ защитой Imperva Incapsula (HTTP 403)."
+          domains:
+            - copart.com
+            - g2auction.copart.com
+        - name: mobile.de
+          slug: mobile-de
+          note: "Крупнейшая площадка подбора автомобилей в Германии и ЕС mobile.de ограничивает доступ к поиску объявлений и личному кабинету с IP-адресов региона (HTTP 403)."
+          domains:
+            - mobile.de
+            - suchen.mobile.de
+            - login.mobile.de
+        - name: "7zap"
+          slug: "7zap"
+          note: "Онлайн-каталог оригинальных OEM-автозапчастей и взрыв-схем по VIN 7zap блокирует подключения с российских и белорусских IP-адресов правилами Cloudflare WAF (HTTP 403)."
+          domains:
+            - "7zap.com"
+        - name: FCP Euro & Pelican Parts
+          slug: fcp-euro
+          note: "Каталоги запчастей и иллюстрированные базы DIY-руководств по ремонту европейских авто FCP Euro и Pelican Parts блокируют доступ из РФ и РБ на уровне Akamai (HTTP 403) и Cloudflare (Error 1009 Country Banned)."
+          domains:
+            - fcpeuro.com
+            - pelicanparts.com
   admin_services:
     # Сервисы для предварительного тестирования администратором (только в Pro):
     # резолвятся через прокси только для пользователей с email из ADMIN_EMAIL / ADMIN_EMAILS,
     # не отображаются на сайте и не учитываются в статистике (трафик nginx и счётчики DNS).
     # Либо пометьте сервис внутри pro.categories полем `admin_only: true`.
-    - name: Canva / Affinity
-      slug: canva
-      pool: default
-      note: "Графический редактор Canva официально закрыл доступ с российских IP-адресов (HTTP 403); вместе с Canva проверяются Affinity и инструменты Kaleido AI (remove.bg, unscreen, designify)."
-      domains:
-        - canva.com
-        - canva-apps.com
-        - canva.dev
-        - affinity.studio
-        - kaleido.ai
-        - remove.bg
-        - unscreen.com
-        - designify.com
-    - name: Chaos / Enscape
-      slug: chaos
-      pool: default
-      note: "Личный кабинет лицензий Chaos (V-Ray, Corona — my.chaos.com, ssooauth.chaos.com) и портал Enscape (enscape3d.com) блокируют запросы с IP-адресов РФ и РБ (HTTP 403)."
-      domains:
-        - chaos.com
-        - enscape3d.com
-    - name: Basecamp / 37signals
-      slug: basecamp
-      pool: default
-      note: "Сервис управления проектами Basecamp перенаправляет подключения с IP-адресов РФ и РБ на страницу санкционных ограничений (basecamp.com/sanctions)."
-      domains:
-        - basecamp.com
-        - basecampapi.com
-        - 37signals.com
-    - name: Parsec
-      slug: parsec
-      pool: default
-      note: "Сервер раздачи клиентов и автообновлений Parsec (builds.parsec.app) блокирует запросы с IP-адресов региона (HTTP 403); сам видеопоток P2P по UDP идёт напрямую."
-      domains:
-        - parsec.app
+    # Пример:
+    # - name: Example Test Service
+    #   pool: default
+    #   domains:
+    #     - example-test.org

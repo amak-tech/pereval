@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Briefcase, Clapperboard, Gamepad2, Sparkles } from "lucide-react";
+import { Briefcase, Car, Clapperboard, Gamepad2, Sparkles } from "lucide-react";
 import { poolLabel, serviceSlug, type CatalogCategory } from "@/lib/catalog";
 
 const ICONS: Record<string, typeof Sparkles> = {
   media: Clapperboard,
   work: Briefcase,
   games: Gamepad2,
+  auto: Car,
 };
 
 /** Карточки Pro-категорий: сервисы как чипы со ссылками на подробные страницы, пул как «локация». */
