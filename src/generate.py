@@ -208,6 +208,7 @@ class Service:
         self.note = note
         self.admin_only = bool(admin_only)
         self.domains = []
+        self.exclude_domains = []
 
 
 class Category:
@@ -251,6 +252,11 @@ class Doc:
             for s in c.services:
                 for d in s.domains:
                     yield d, c, s
+
+    def excluded_domains(self, categories=None):
+        """Отсортированный список уникальных exclude_domains для выбранных категорий."""
+        cats = categories if categories is not None else self.categories
+        return sorted({d for c in cats for s in c.services for d in s.exclude_domains})
 
     def all_categories(self):
         return list(self.categories) + list(self.pro.categories)
@@ -481,6 +487,12 @@ def _parse_service(sraw, swhere, default_admin_only=False):
     )
     svc.domains = _domains(_need(sraw, "domains", "сервис «%s»" % sname, list),
                            "сервис «%s»" % sname)
+    excl_raw = sraw.get("exclude_domains")
+    if excl_raw is not None:
+        if not isinstance(excl_raw, list):
+            raise ParseError("сервис «%s»: поле «exclude_domains» должно быть списком, а не %s"
+                             % (sname, type(excl_raw).__name__))
+        svc.exclude_domains = _domains(excl_raw, "сервис «%s» / exclude_domains" % sname)
     return svc
 
 
@@ -710,6 +722,18 @@ def _validate_service_list(services, cat_name, pools, label, errors, warnings, s
                 errors.append("домен %s указан дважды: «%s» и «%s»" % (d, seen[d], svc_loc))
             else:
                 seen[d] = svc_loc
+        seen_excl = set()
+        for ex in s.exclude_domains:
+            if not DOMAIN_RE.match(ex):
+                errors.append("некорректный домен в exclude_domains «%s» (%s)" % (ex, svc_loc))
+            elif IPISH_RE.match(ex):
+                warnings.append("«%s» в exclude_domains похож на IP-адрес, а не на домен (%s)" % (ex, svc_loc))
+            if ex in seen_excl:
+                errors.append("домен %s указан дважды в exclude_domains (%s)" % (ex, svc_loc))
+            seen_excl.add(ex)
+            if not any(ex.endswith("." + d) for d in s.domains):
+                errors.append("exclude_domains «%s» (%s) должен быть поддоменом одного из доменов сервиса"
+                              % (ex, svc_loc))
 
 
 def _validate_categories(categories, pools, label, errors, warnings, seen, seen_slugs=None,
@@ -795,6 +819,10 @@ def validate(doc, primary_ip=None):
     for d in sorted(set(seen) & pt):
         errors.append("домен %s есть и в каталоге, и в passthrough — уберите его из одного из списков" % d)
 
+    all_excl = set(doc.excluded_domains(doc.all_pro_routing_categories()))
+    for d in sorted(set(seen) & all_excl):
+        errors.append("домен %s одновременно указан в domains («%s») и в exclude_domains" % (d, seen[d]))
+
     dis = {d: g.name for g in doc.disabled for d in g.domains}
     for d in sorted(set(seen) & set(dis)):
         warnings.append("домен %s активен, но также перечислен в disabled «%s» — эта строка ни на что не влияет"
@@ -834,6 +862,8 @@ def conf_body(doc, ip):
             out.append("# --- %s [pool: %s] ---" % (s.name, pool))
             for d in s.domains:
                 out.append("address=/%s/%s" % (d, node_ip))
+            for ex in s.exclude_domains:
+                out.append("server=/%s/#" % ex)
         out.append("")
     return "\n".join(out)
 
@@ -856,9 +886,15 @@ def conf_disabled(doc, ip):
     return "\n".join(out)
 
 
-def map_entries(categories, value):
-    """Ключи для map в nginx: только активные домены, по одному на строку."""
-    width = max((len(d) for c in categories for s in c.services for d in s.domains), default=0) + 2
+def map_entries(categories, value, exclude_value=None):
+    """Ключи для map в nginx: активные домены (и опциональные исключения поддоменов), по одному на строку."""
+    all_lens = [
+        len(d)
+        for c in categories
+        for s in c.services
+        for d in (list(s.domains) + (list(s.exclude_domains) if exclude_value is not None else []))
+    ]
+    width = max(all_lens, default=0) + 2
     out = []
     for i, c in enumerate(categories, 1):
         out.append("# %d. %s" % (i, c.name))
@@ -866,11 +902,14 @@ def map_entries(categories, value):
             out.append("#   %s [pool: %s]" % (svc.name, effective_pool(c, svc)))
             for d in svc.domains:
                 out.append("%-*s %s;" % (width, "." + d, value))
+            if exclude_value is not None:
+                for ex in svc.exclude_domains:
+                    out.append("%-*s %s;" % (width, "." + ex, exclude_value))
         out.append("")
     return "\n".join(out)
 
 
-def map_entries_for_pool(categories, value, pool_name):
+def map_entries_for_pool(categories, value, pool_name, exclude_value=None):
     """То же, но только домены, чей сервис маршрутизируется в указанный пул."""
     subset = []
     for c in categories:
@@ -879,7 +918,7 @@ def map_entries_for_pool(categories, value, pool_name):
             cc = Category(c.id, c.name, pool=c.pool, tier=c.tier)
             cc.services = services
             subset.append(cc)
-    return map_entries(subset, value)
+    return map_entries(subset, value, exclude_value=exclude_value)
 
 
 def domain_pools(categories):
@@ -977,7 +1016,7 @@ def free_policy_map_json(doc, primary_ip):
                 ("service_count", len(c.services)), ("domain_count", c.count),
             ]) for c in cats
         ]),
-        ("passthrough", sorted(set(doc.passthrough.domains))),
+        ("passthrough", sorted(set(doc.passthrough.domains) | set(doc.excluded_domains(cats)))),
         ("domains", domains),
     ])
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -1023,7 +1062,9 @@ def pro_policy_map_json(doc):
                 ("service_count", len(c.services)), ("domain_count", c.count),
             ]) for c in pub_cats
         ]),
-        ("passthrough", sorted(set(doc.passthrough.domains))),
+        ("passthrough", sorted(
+            set(doc.passthrough.domains) | set(doc.excluded_domains(doc.all_pro_routing_categories()))
+        )),
         ("domains", domains),
     ])
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -1045,6 +1086,8 @@ def services_json(doc, primary_ip):
         if s.note:
             d["note"] = s.note
         d["domains"] = list(s.domains)
+        if s.exclude_domains:
+            d["exclude_domains"] = list(s.exclude_domains)
         return d
 
     def cat_dict(c):
@@ -1230,8 +1273,8 @@ def build_values(doc, ip, source):
         "disabled": conf_disabled(doc, ip),
         "passthrough_note": wrap_comment(doc.passthrough.note),
         "passthrough": "\n".join("# passthrough: %s" % d for d in sorted(set(doc.passthrough.domains))),
-        "sni_entries": map_entries(doc.categories, "$ssl_preread_server_name:443"),
-        "host_entries": map_entries(doc.categories, "$host"),
+        "sni_entries": map_entries(doc.categories, "$ssl_preread_server_name:443", exclude_value="127.0.0.1:9"),
+        "host_entries": map_entries(doc.categories, "$host", exclude_value='""'),
         "workers_stream_body": poolrouting.render_stream_workers(
             pools, by_pool if doc.active_workers(ip) else {}, dpools, weights=doc.nodes.weights()),
         "workers_http_body": poolrouting.render_http_workers(
@@ -1251,8 +1294,8 @@ def pro_values(doc, base):
         "total": str(sum(c.count for c in cats)),
         "category_count": str(len(cats)),
         "service_count": str(sum(len(c.services) for c in cats)),
-        "sni_entries": map_entries(cats, "$ssl_preread_server_name:443"),
-        "host_entries": map_entries(cats, "$host"),
+        "sni_entries": map_entries(cats, "$ssl_preread_server_name:443", exclude_value="127.0.0.1:9"),
+        "host_entries": map_entries(cats, "$host", exclude_value='""'),
         "pro_worker_ips": " ".join(pro_workers_ips),
         "pro_worker_ips_nft": ", ".join(pro_workers_ips),
         "trusted_probe_ips_nft": ", ".join(ipx for ipx in [doc.pro.dns_ip, doc.pro.cp_ip, doc.nodes.primary] if ipx),
@@ -1275,10 +1318,11 @@ def strict_pool_maps(doc, cluster, categories, prefix):
             continue
         out.append(("%snginx-sni-allow.%s.map" % (prefix, pname),
                     "# allowlist только для пула «%s»\n\n" % pname
-                    + map_entries_for_pool(categories, "$ssl_preread_server_name:443", pname)))
+                    + map_entries_for_pool(categories, "$ssl_preread_server_name:443", pname,
+                                           exclude_value="127.0.0.1:9")))
         out.append(("%snginx-host-allow.%s.map" % (prefix, pname),
                     "# allowlist только для пула «%s»\n\n" % pname
-                    + map_entries_for_pool(categories, "$host", pname)))
+                    + map_entries_for_pool(categories, "$host", pname, exclude_value='""')))
     return out
 
 

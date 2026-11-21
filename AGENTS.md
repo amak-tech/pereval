@@ -103,7 +103,7 @@ build/                 выход generate.py (gitignored)
 - `free.domain` (`free.pereval.top`) и `free.legacy_domains` (`pereval.portbuddy.tech`): все имена попадают в `server_name`, в SNI-map (→ 8443); legacy-имена вне зоны сайта добавляются в SAN единого сертификата (`cert_domains`).
 - `nodes`: `primary`, `include_primary_in_dns`, `probe_sni`, `pools` (`{name: {note, fallback, strict_allowlist}}`), `workers` (`ip, name, weight, pools[], ssh_*`).
 - `dnsmasq_options`: строки опций dnsmasq для Free.
-- `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`). Поддомены в DNS/SNI покрываются автоматически, но конкретные поддомены допустимо указывать явно — они нужны для работы через `/etc/hosts` (`src/update_hosts.py`).
+- `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`, `exclude_domains?[]`). Поддомены в DNS/SNI покрываются автоматически, но конкретные поддомены допустимо указывать явно — они нужны для работы через `/etc/hosts` (`src/update_hosts.py`). `exclude_domains` исключает служебные UDP/STUN/P2P-поддомены из проксирования в `pro_dns.py`, `dnsmasq` и `nginx`, не подмешивая их в витрину российских сайтов `passthrough`.
 - `disabled[]`, `passthrough`: как раньше (закомментированные домены; российские домены, которые нельзя проксировать).
 - `pro`: `domain`, `dns_ip`, `cp_ip`, `pools`, `workers`, `categories[]` (тот же формат, tier=pro), опционально `admin_services[]` (или `admin_only: true` у сервиса в `pro.categories`) — сервисы Pro только для админов (`ADMIN_EMAIL`/`ADMIN_EMAILS`), скрытые с сайта и исключённые из статистики. Адреса из `203.0.113.0/24` считаются заглушками (предупреждение).
 

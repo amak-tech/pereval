@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_IP = "153.80.200.170"
 START_MARKER = "# >>> PEREVAL START"
@@ -35,8 +36,16 @@ COMMON_SUBDOMAINS = (
 )
 
 
-def load_domains(services_path: Path, dnsmasq_path: Path) -> list[str]:
-    """Load domain list from services.yaml (with fallback if PyYAML is unavailable under sudo)."""
+def _is_excluded(host: str, excluded: set[str]) -> bool:
+    h = host.strip().rstrip(".").lower()
+    if not h or not excluded:
+        return False
+    labels = h.split(".")
+    return any(".".join(labels[i:]) in excluded for i in range(len(labels) - 1))
+
+
+def load_domains(services_path: Path, dnsmasq_path: Path) -> tuple[list[str], set[str]]:
+    """Load domain list and excluded subdomains from services.yaml (with fallback if PyYAML is unavailable)."""
     if services_path.is_file():
         try:
             import yaml  # type: ignore
@@ -49,57 +58,78 @@ def load_domains(services_path: Path, dnsmasq_path: Path) -> list[str]:
                 for d in svc.get("domains", [])
                 if d
             ]
+            excluded = {
+                str(d).strip().lower()
+                for cat in data.get("categories", [])
+                for svc in cat.get("services", [])
+                for d in (svc.get("exclude_domains") or [])
+                if d
+            }
             if domains:
-                return domains
+                return domains, excluded
         except ImportError:
             pass
 
     if dnsmasq_path.is_file():
         domains = []
+        excluded: set[str] = set()
         for line in dnsmasq_path.read_text(encoding="utf-8").splitlines():
-            m = re.match(r"^address=/([^/]+)/", line.strip())
+            s = line.strip()
+            m = re.match(r"^address=/([^/]+)/", s)
             if m:
                 domains.append(m.group(1).lower())
+                continue
+            mx = re.match(r"^server=/([^/]+)/#$", s)
+            if mx:
+                excluded.add(mx.group(1).lower())
         if domains:
-            return domains
+            return domains, excluded
 
     if services_path.is_file():
-        # Minimal YAML fallback parser for services.yaml categories -> services -> domains
+        # Minimal YAML fallback parser for services.yaml categories -> services -> domains / exclude_domains
         domains = []
+        excluded = set()
         in_categories = False
-        in_domains = False
+        list_mode = ""
         for raw_line in services_path.read_text(encoding="utf-8").splitlines():
             line = raw_line.split("#", 1)[0].rstrip()
             if not line.strip():
                 continue
             if not line.startswith(" "):
                 in_categories = line.startswith("categories:")
-                in_domains = False
+                list_mode = ""
                 continue
             if not in_categories:
                 continue
             stripped = line.lstrip()
             if stripped.startswith("domains:"):
-                in_domains = True
+                list_mode = "domains"
                 continue
-            if stripped.startswith("- ") and in_domains:
+            if stripped.startswith("exclude_domains:"):
+                list_mode = "exclude"
+                continue
+            if stripped.startswith("- ") and list_mode:
                 val = stripped[2:].strip()
                 if val and ":" not in val:
-                    domains.append(val.lower())
+                    if list_mode == "domains":
+                        domains.append(val.lower())
+                    else:
+                        excluded.add(val.lower())
             elif not stripped.startswith("- "):
-                in_domains = False
+                list_mode = ""
         if domains:
-            return domains
+            return domains, excluded
 
     sys.exit(f"Error: Could not load domains from {services_path} or {dnsmasq_path}")
 
 
-def build_hosts_block(domains: list[str], ip: str) -> str:
+def build_hosts_block(domains: list[str], ip: str, excluded: Optional[set[str]] = None) -> str:
+    excl = excluded or set()
     seen: set[str] = set()
     ordered_hosts: list[str] = []
 
     def add_host(h: str) -> None:
-        if h not in seen:
+        if h not in seen and not _is_excluded(h, excl):
             seen.add(h)
             ordered_hosts.append(h)
 
@@ -181,8 +211,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.dry_run:
-        domains = load_domains(args.services, default_dnsmasq)
-        print(build_hosts_block(domains, args.ip))
+        domains, excluded = load_domains(args.services, default_dnsmasq)
+        print(build_hosts_block(domains, args.ip, excluded))
         return
 
     if os.geteuid() != 0 and args.hosts_file == Path("/etc/hosts"):
@@ -203,8 +233,8 @@ def main() -> None:
         print(f"Removed Pereval entries from {args.hosts_file} and flushed macOS DNS cache.")
         return
 
-    domains = load_domains(args.services, default_dnsmasq)
-    block = build_hosts_block(domains, args.ip)
+    domains, excluded = load_domains(args.services, default_dnsmasq)
+    block = build_hosts_block(domains, args.ip, excluded)
     updated = cleaned + "\n" + block + "\n"
     args.hosts_file.write_text(updated, encoding="utf-8")
     flush_dns_cache()

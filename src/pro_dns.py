@@ -760,8 +760,11 @@ class ProDnsServer:
             if not self.pro_domain:
                 self.pro_domain = self.policy_map.domain
             self.probe_sni = self.policy_map.probe_sni or self.pro_domain
+            if self.cache is not None:
+                self.cache.clear()
             self.recompute_routing()
-            log("policy map reloaded: %d domains, %d workers" % (len(self.policy_map.domains), len(self.policy_map.workers)))
+            log("policy map reloaded: %d domains, %d passthrough, %d workers" % (
+                len(self.policy_map.domains), len(self.policy_map.passthrough), len(self.policy_map.workers)))
         except Exception as exc:
             log("warning: policy map reload failed, keeping previous: %s" % exc)
 

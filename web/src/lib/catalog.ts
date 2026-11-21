@@ -8,6 +8,7 @@ export type CatalogService = {
   pool: string;
   note?: string;
   domains: string[];
+  exclude_domains?: string[];
 };
 export type CatalogCategory = {
   id: string;

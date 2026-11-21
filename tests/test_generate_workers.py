@@ -91,6 +91,63 @@ class WorkerSecretEnvTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertFalse(any("уже покрыт" in w for w in warnings), warnings)
 
+    def test_exclude_domains_rendered_in_policy_maps_dnsmasq_nginx_without_polluting_site_passthrough(self):
+        doc = generate.parse(str(ROOT / "services.yaml"))
+        errors, _ = generate.validate(doc, primary_ip="153.80.200.170")
+        self.assertEqual(errors, [])
+
+        # Динамический инвариант по реальному services.yaml:
+        # все exclude_domains сервисов входят в passthrough карт DNS, но НЕ в витрину российских сайтов services.json
+        pro_excl = set(doc.excluded_domains(doc.all_pro_routing_categories()))
+        pro_pm = json.loads(generate.pro_policy_map_json(doc))
+        site_cat = json.loads(generate.services_json(doc, "153.80.200.170"))
+        self.assertTrue(pro_excl.issubset(set(pro_pm["passthrough"])))
+        self.assertTrue(pro_excl.isdisjoint(set(site_cat["passthrough"]["domains"])))
+
+        # Синтетический сервис: проверяем dnsmasq, nginx allow-map, update_hosts и валидацию
+        synth = generate.Doc()
+        synth.meta["name"] = "Test"
+        synth.meta["origin"] = "https://pereval.top"
+        synth.free.domain = "free.pereval.top"
+        synth.nodes.primary = "153.80.200.170"
+        synth.nodes.workers = [generate.WorkerNode("198.51.100.10", "w1", pools=["default"])]
+        synth.passthrough.note = "ru"
+        synth.passthrough.domains = ["gosuslugi.ru"]
+        cat = generate.Category("games", "Games", pool="default", tier="free")
+        svc = generate.Service("Console Net", slug="console-net")
+        svc.domains = ["console.example"]
+        svc.exclude_domains = ["stun.console.example"]
+        cat.services = [svc]
+        synth.categories = [cat]
+
+        errs, _ = generate.validate(synth, primary_ip="153.80.200.170")
+        self.assertEqual(errs, [])
+        vals = generate.build_values(synth, "153.80.200.170", "services.yaml")
+        self.assertIn("address=/console.example/198.51.100.10", vals["body"])
+        self.assertIn("server=/stun.console.example/#", vals["body"])
+        self.assertIn(".console.example", vals["sni_entries"])
+        self.assertRegex(vals["sni_entries"], r"\.stun\.console\.example\s+127\.0\.0\.1:9;")
+        self.assertRegex(vals["host_entries"], r'\.stun\.console\.example\s+"";')
+        free_pm = json.loads(generate.free_policy_map_json(synth, "153.80.200.170"))
+        self.assertEqual(free_pm["passthrough"], ["gosuslugi.ru", "stun.console.example"])
+
+        import update_hosts  # noqa: E402
+        hosts_block = update_hosts.build_hosts_block(
+            ["console.example", "ru.np.stun.console.example"], "198.51.100.10", {"stun.console.example"}
+        )
+        self.assertIn("www.console.example", hosts_block)
+        self.assertNotIn("stun.console.example", hosts_block)
+
+        # Ошибка валидации, если exclude_domains не является поддоменом сервиса или дублирует domains
+        svc.exclude_domains = ["unrelated.example"]
+        errs_unrel, _ = generate.validate(synth, primary_ip="153.80.200.170")
+        self.assertTrue(any("поддоменом одного из доменов сервиса" in e for e in errs_unrel), errs_unrel)
+
+        svc.domains = ["console.example", "stun.console.example"]
+        svc.exclude_domains = ["stun.console.example"]
+        errs_dup, _ = generate.validate(synth, primary_ip="153.80.200.170")
+        self.assertTrue(any("одновременно указан в domains" in e for e in errs_dup), errs_dup)
+
 
 if __name__ == "__main__":
     unittest.main()

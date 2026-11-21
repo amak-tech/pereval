@@ -917,6 +917,47 @@ class FreeTierAndQuotaTests(unittest.TestCase):
                 await up.stop()
         asyncio.run(run())
 
+    def test_excluded_subdomain_bypasses_parent_service_proxy_and_reload_clears_cache(self):
+        async def run():
+            up = await tu.FakeUpstream().start()
+            pm = dict(
+                POLICY_MAP,
+                passthrough=["gosuslugi.ru", "stun.console.example"],
+                domains=dict(
+                    POLICY_MAP["domains"],
+                    **{"console.example": {"service": "Console", "category_id": "work", "tier": "pro", "pool": "default"}},
+                ),
+            )
+            pm_path = _write_json(Path(self.tmp) / "pro-pm.json", pm)
+            pf_path = _write_json(Path(self.tmp) / "pol.json", POLICY)
+            args = pro_dns.parse_args([
+                "--no-cp", "--policy-map", pm_path, "--policy-file", pf_path,
+                "--policy-cache", "", "--health-out", "", "--health-interval", "3600",
+                "--listen-ip", "", "--doh-listen", "", "--upstream", "127.0.0.1:%d" % up.port,
+            ])
+            srv = pro_dns.build_server(args)
+            await srv.upstream.start()
+            try:
+                ident = srv.identify_ip("198.51.100.7")
+                # Обычные поддомены родителя проксируются через воркер, AAAA режется в NODATA
+                r_api = await srv.resolve(tu.make_query("api.console.example", 1), ident, "udp")
+                self.assertEqual(tu.a_answers(r_api), [W1])
+                r_api_aaaa = await srv.resolve(tu.make_query("api.console.example", 28), ident, "udp")
+                self.assertEqual((tu.parse_header(r_api_aaaa)["rcode"], tu.parse_header(r_api_aaaa)["an"]), (0, 0))
+
+                # Исключённый STUN-поддомен родителя форвардится напрямую в upstream (включая поддомены 4-го уровня)
+                r_stun = await srv.resolve(tu.make_query("ru.np.stun.console.example", 1), ident, "udp")
+                self.assertEqual(tu.a_answers(r_stun), [tu.UPSTREAM_A])
+                self.assertGreaterEqual(len(srv.cache), 1)
+
+                # При reload_policy_map кэш ответов очищается и подхватывается новый список исключений
+                srv.reload_policy_map()
+                self.assertEqual(len(srv.cache), 0)
+            finally:
+                srv.upstream.close()
+                await up.stop()
+        asyncio.run(run())
+
 
 async def _call(fn, *a):
     return fn(*a)

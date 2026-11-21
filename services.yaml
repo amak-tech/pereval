@@ -1009,6 +1009,11 @@ pro:
             - playstation.com
             - playstation.net
             - sonyentertainmentnetwork.com
+          exclude_domains:
+            # STUN-серверы Sony (UDP 3478–3479) для определения типа NAT в «Проверить соединение с Интернетом»
+            # на PS4/PS5 обязаны резолвиться и идти напрямую с домашнего роутера пользователя мимо SNI-прокси.
+            - stun.playstation.net
+            - stun.ww.np.cn.s0.playstation.net
   admin_services:
     # Сервисы для предварительного тестирования администратором (только в Pro):
     # резолвятся через прокси только для пользователей с email из ADMIN_EMAIL / ADMIN_EMAILS,
