@@ -125,7 +125,7 @@ export function MountainPassBackdrop({
         <svg
           viewBox="0 0 1440 420"
           preserveAspectRatio="xMidYMax slice"
-          className={`absolute inset-x-0 bottom-0 w-full ${isHero ? "h-[300px] sm:h-[380px] opacity-95" : "h-[200px] sm:h-[240px] opacity-70"}`}
+          className={`absolute inset-x-0 bottom-0 w-full overflow-visible ${isHero ? "h-[300px] sm:h-[380px] opacity-95" : "h-[200px] sm:h-[240px] opacity-70"}`}
         >
           <defs>
             <linearGradient id={`pass-fill-${uid}`} x1="0" y1="0" x2="0" y2="1">
