@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { TouchSplashCanvas } from "@/components/TouchSplashCanvas";
 import { SITE } from "@/content/site";
 import "./globals.css";
 
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
         <SiteFooter />
+        <TouchSplashCanvas />
         {ga || gtm ? (
           <>
             {/* Google Tag Manager (контейнер) + Google Analytics 4 (gtag). Общий dataLayer. */}
