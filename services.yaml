@@ -728,6 +728,23 @@ categories:
         note: "Каталог электронных компонентов и даташитов Mouser Electronics отклоняет подключения с IP-адресов РФ и РБ на уровне Akamai (HTTP 403 Access Denied)."
         domains:
           - mouser.com
+      - name: OBDeleven
+        slug: obdeleven
+        note: "Разработчик автосканеров и приложений диагностики OBDeleven (VAG, BMW, Toyota) официально отключил работу облачных серверов, авторизацию и разблокировку SFD для IP-адресов РФ и РБ."
+        domains:
+          - obdeleven.com
+          - identity.obdeleven.com
+          - login.obdeleven.com
+          - parse.obdeleven.com
+          - storage.obdeleven.com
+          - mobile-api-gateway.obdeleven.com
+          - sfd.obdeleven.com
+          - fault-description-api.obdeleven.com
+          - historical-fault-reports.obdeleven.com
+          - wizard-summarizer.obdeleven.com
+          - support.obdeleven.com
+          - forum.obdeleven.com
+          - voltasit.com
 disabled:
   - name: Общая инфраструктура Google и Firebase
     note: >-

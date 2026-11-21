@@ -359,6 +359,17 @@ const OVERRIDES: Record<string, ServiceOverride> = {
     recommendedDevices: ["windows-11", "linux", "macos", "browsers", "corporate-vpn"],
     priority: 0.74,
   },
+  obdeleven: {
+    shortName: "OBDeleven",
+    title: `OBDeleven без VPN в России и Беларуси — диагностика VAG, BMW и Toyota | ${SITE.name}`,
+    description: `Как подключить автосканер и приложение OBDeleven в России и Беларуси без VPN: бесплатный Smart DNS ${SITE.name} восстанавливает вход, кодирование, One-Click Apps и SFD.`,
+    h1: "Как пользоваться автосканером OBDeleven в России и Беларуси без VPN",
+    errorBadge: "Геоблок облака РФ и РБ",
+    lead: "Разработчик Bluetooth-сканеров OBDeleven (Voltas IT) закрыл доступ к облачным серверам авторизации, базам блоков управления, One-Click Apps и разблокировке SFD для IP-адресов России и Беларуси. Настройте бесплатный Smart DNS на смартфоне один раз — приложение OBDeleven стабильно подключается к серверу в машине по мобильной сети без запуска VPN.",
+    caveat: "Для диагностики в автомобиле через мобильный интернет пропишите бесплатный зашифрованный DNS прямо на телефоне («Частный DNS» free.pereval.top на Android или профиль конфигурации на iPhone) — домашний роутер в поездке не задействован, а навигатор, музыка и банковские приложения продолжат работать напрямую.",
+    recommendedDevices: ["android", "iphone", "keenetic", "windows-11", "macos"],
+    priority: 0.8,
+  },
   notion: {
     shortName: "Notion",
     title: `Как открыть Notion в России без VPN в 2026 году (ошибка 403) — ${SITE.name} Pro`,
