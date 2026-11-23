@@ -8,12 +8,14 @@ on:
       - "services.yaml"
       - "src/generate.py"
       - "src/poolrouting.py"
+      - "src/disable-ssh-password.sh"
       - ".github/workflows/web.yml"
   pull_request:
     paths:
       - "web/**"
       - "services.yaml"
       - "src/generate.py"
+      - "src/disable-ssh-password.sh"
   workflow_dispatch:
     inputs:
       deploy:
@@ -141,6 +143,8 @@ jobs:
           printf '%s\n' "$CP_SSH_KEY" > "$KEY"; chmod 600 "$KEY"
           SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes $CP_SSH_USER@$CP_HOST"
           $SSH 'mkdir -p /opt/pereval/deploy/nginx'
+          # отключаем SSH-аутентификацию по паролю на CP, если она включена
+          $SSH 'if [ "$(id -u)" -eq 0 ]; then bash -s; else sudo -n bash -s; fi' < src/disable-ssh-password.sh
           # образ в GHCR приватный: логинимся на сервере токеном этого запуска (живёт только на время job)
           printf '%s' "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           scp -i "$KEY" -o StrictHostKeyChecking=accept-new -r web/compose.yaml web/deploy "$CP_SSH_USER@$CP_HOST:/opt/pereval/"

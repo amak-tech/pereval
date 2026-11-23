@@ -73,6 +73,7 @@ PRO_WORKER_FILES=(
 DNSMASQ_CONF="$BUILD_DIR/dnsmasq-geoblock.conf"
 CLUSTER_NODES="$BUILD_DIR/cluster-nodes.json"
 PRO_NODES="$BUILD_DIR/pro-nodes.json"
+SSH_HARDEN_SCRIPT="$SRC_DIR/disable-ssh-password.sh"
 SOURCE_YAML="services.yaml"
 
 SSH_PORT=22
@@ -259,6 +260,7 @@ missing=()
 for f in "${LOCAL_FILES[@]}"; do
 	[[ -f $f ]] || missing+=("$f")
 done
+[[ -f $SSH_HARDEN_SCRIPT ]] || missing+=("$SSH_HARDEN_SCRIPT")
 if ((${#missing[@]})); then
 	die "не хватает файлов: ${missing[*]}
     соберите их: python3 $SRC_DIR/generate.py $SOURCE_YAML $SERVER_IP"
@@ -1462,6 +1464,7 @@ DRYPRE
 		else
 			info "автоустановка при отсутствии: tar nginx libnginx-mod-stream dnsmasq python3 openssl dnsutils iproute2 ca-certificates bmon"
 		fi
+		info "SSH: отключение аутентификации по паролю, если включена ($SSH_HARDEN_SCRIPT)"
 		if ((is_pro)); then
 			if [[ $node_role == "pro-dns" ]]; then
 				for f in "${PRO_DNS_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-dns ($PRO_DOMAIN)"; done
@@ -1617,6 +1620,9 @@ PRE
 	ssh "${ssh_opts[@]}" "$target" "rm -rf '$stage'" 2>/dev/null || true
 
 	if ((apply_rc == 0)); then
+		step "Проверяю SSH на сервере $node_ip (отключение входа по паролю)"
+		ssh "${ssh_opts[@]}" "$target" "$sudo_cmd bash -s" < "$SSH_HARDEN_SCRIPT" \
+			|| die "не удалось отключить аутентификацию по паролю SSH на $node_ip"
 		step "Узел $node_ip ($node_role: $node_name) успешно обновлён"
 	else
 		die "развёртывание на $node_ip ($node_role) не удалось, конфиги откачены на предыдущие"
