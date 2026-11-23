@@ -16,7 +16,7 @@ export const SITE = {
   supportEmail: "support@pereval.top",
   /** Уведомления о нарушениях принимает команда Port Buddy — отдельный ящик, не связанный со старым доменом сайта. */
   abuseEmail: "abuse@portbuddy.dev",
-  /** Профиль Apple (DNS-over-TLS) для бесплатной версии — маршрут src/app/dns.mobileconfig. */
+  /** Профиль Apple (DNS-over-HTTPS) для бесплатной версии — маршрут src/app/dns.mobileconfig. */
   appleProfilePath: "/dns.mobileconfig",
   /** Дата редакции правовых документов (ISO). */
   legalUpdated: "2026-11-17",

@@ -65,6 +65,9 @@ NODATA_QTYPES = frozenset((dnscommon.QTYPE_AAAA, dnscommon.QTYPE_HTTPS, dnscommo
 DEFAULT_QPS_LIMIT = 50
 RATE_BURST_FACTOR = 2.0          # ёмкость token bucket = qps_limit * фактор
 ACL_REPORT_INTERVAL = 600        # повторно сообщать IP подписчика не чаще раза в 10 минут
+ACL_FRESH_TTL = 3600.0           # после этого окна (меньше 2ч TTL в CP) снова ждём синхронизацию ACL
+ACL_SYNC_TIMEOUT = 0.5           # макс. ожидание подтверждения нового Pro IP в CP перед выдачей A-записи
+ACL_SYNC_GRACE = 0.05            # короткая пауза после 200 от CP на доставку ACL до воркеров
 ACTIVITY_FLUSH_INTERVAL = 5.0
 RECENT_WINDOW = 300              # «активные токены» в метриках — за последние 5 минут
 POLICY_API = "/api/internal/v1/policy"
@@ -416,12 +419,16 @@ class ActivityTracker:
     """Копит ACL-события и активность по (token, user_id, ip_hash) для POST в CP."""
 
     def __init__(self, salt_seed: str, max_ips_per_day: int = 60,
-                 acl_interval: float = ACL_REPORT_INTERVAL, max_entries: int = 50000):
+                 acl_interval: float = ACL_REPORT_INTERVAL, max_entries: int = 50000,
+                 acl_fresh_ttl: float = ACL_FRESH_TTL):
         self.salt_seed = salt_seed
         self.max_ips_per_day = max(1, int(max_ips_per_day))
         self.acl_interval = acl_interval
+        self.acl_fresh_ttl = acl_fresh_ttl
         self.max_entries = max_entries
         self.known_ips = {}        # (key, ip) -> last_reported_ts
+        self.acl_confirmed = {}    # (key, ip) -> last_confirmed_by_cp_ts
+        self.acl_waiters = {}      # (key, ip) -> asyncio.Event (ожидание доставки нового IP в CP)
         self.pending_acl = OrderedDict()  # (key, ip) -> {"ip","token","user_id"}
         self.activity = {}         # (token|None, user_id, ip_hash) -> [queries, first, last]
         self.token_ips = {}        # token -> set(ip_hash) за сутки UTC
@@ -452,15 +459,17 @@ class ActivityTracker:
             self.alerted_counts.clear()
 
     def record(self, ident: Identity, now: float = None, count_activity: bool = True):
-        """Учитывает один запрос известного подписчика."""
+        """Учитывает один запрос известного подписчика.
+        Возвращает asyncio.Event, если новый/просроченный IP ещё ждёт подтверждения ACL в CP."""
         if not ident.known:
-            return
+            return None
         now = now_ts() if now is None else now
         self._rotate_day(now)
         user = ident.user
         ip = ident.client_ip or ""
         token = ident.token
         ip_hash = dnscommon.hash_ip(ip, self.salt_seed, self.day) if ip else ""
+        acl_wait_ev = None
 
         # ACL: только режим proxy — воркеры открывают порты 80/443 этому IP
         if user["mode"] == "proxy" and ip:
@@ -471,9 +480,17 @@ class ActivityTracker:
                 if k not in self.pending_acl:
                     self.pending_acl[k] = {"ip": ip, "token": token, "user_id": user["user_id"]}
                     self._notify_acl()
+            confirmed_ts = self.acl_confirmed.get(k)
+            needs_sync = confirmed_ts is None or (now - confirmed_ts >= self.acl_fresh_ttl)
+            if self.acl_event is not None and needs_sync and (k in self.pending_acl or k in self.acl_waiters):
+                ev = self.acl_waiters.get(k)
+                if ev is None:
+                    ev = asyncio.Event()
+                    self.acl_waiters[k] = ev
+                acl_wait_ev = ev
 
         if not count_activity:
-            return
+            return acl_wait_ev
 
         # Активность: без IP, только хэш
         ak = (token, user["user_id"], ip_hash)
@@ -481,7 +498,7 @@ class ActivityTracker:
         if ent is None:
             if len(self.activity) >= self.max_entries:
                 self.dropped += 1
-                return
+                return acl_wait_ev
             self.activity[ak] = [1, int(now), int(now)]
         else:
             ent[0] += 1
@@ -499,12 +516,29 @@ class ActivityTracker:
                         "type": "too_many_ips", "token": token,
                         "user_id": user["user_id"], "count": cnt,
                     }
+        return acl_wait_ev
+
+    def mark_acl_flushed(self, payload: dict, now: float = None):
+        """Отмечает ACL-записи из успешно отправленного payload как принятые CP и будит ожидающих."""
+        now = now_ts() if now is None else now
+        for ent in payload.get("acl") or []:
+            k = (ent.get("token") or ent.get("ip"), ent.get("ip"))
+            self.acl_confirmed[k] = now
+            ev = self.acl_waiters.pop(k, None)
+            if ev is not None:
+                ev.set()
 
     def prune_known_ips(self, now: float = None, ttl: float = 86400.0) -> int:
         now = now_ts() if now is None else now
         stale = [k for k, ts in self.known_ips.items() if now - ts > ttl]
         for k in stale:
             del self.known_ips[k]
+        for k in [k for k, ts in self.acl_confirmed.items() if now - ts > ttl]:
+            del self.acl_confirmed[k]
+        for k in [k for k in self.acl_waiters if k not in self.pending_acl and k not in self.known_ips]:
+            ev = self.acl_waiters.pop(k, None)
+            if ev is not None:
+                ev.set()
         return len(stale)
 
     def has_pending(self) -> bool:
@@ -652,6 +686,7 @@ class ProDnsServer:
             "unknown_identity", "deny_mode", "plain_mode", "proxy_mode",
             "upstream_errors", "dot_no_token", "doh_forbidden", "truncated_udp",
             "over_quota", "policy_updates", "policy_errors", "activity_posts", "activity_post_errors",
+            "acl_sync_waits", "acl_sync_timeouts",
         ))
         self.recent_idents = {}  # key -> last_seen (для метрики активных токенов)
 
@@ -809,6 +844,13 @@ class ProDnsServer:
             return poolrouting.client_subnet_key(ident.client_ip)
         return service_name or poolrouting.DEFAULT_POOL
 
+    def _rate_limit_key(self, ident: Identity) -> str:
+        """Ключ rate-limit: для Free — конкретный IP (/32), чтобы CGNAT в одной /24 не мешали друг другу;
+        для Pro — ключ личности (токен или привязанный IP)."""
+        if self.tier == "free" and ident.client_ip:
+            return str(ident.client_ip)
+        return str(ident.key)
+
     # ------------------------------------------------------------- решения
 
     def decide(self, q: dnscommon.Question, ident: Identity, now: float = None):
@@ -820,7 +862,7 @@ class ProDnsServer:
         mode = ident.mode
         if mode == "deny":
             return D_REFUSED, "deny"
-        if not self.limiter.allow(ident.key, ident.user["qps_limit"], now):
+        if not self.limiter.allow(self._rate_limit_key(ident), ident.user["qps_limit"], now):
             return D_RATELIMIT, None
         if mode == "plain":
             return D_FORWARD, "plain"
@@ -894,11 +936,24 @@ class ProDnsServer:
         if action in (D_REFUSED, D_RATELIMIT):
             return dnscommon.build_refused(wire)
         # дальше запрос легитимен — учитываем активность (в Pro; admin_only-сервисы не пишем в статистику запросов)
+        acl_wait_ev = None
         if self.tier == "pro":
             _, matched_info = self.policy_map.match(q.qname)
             is_admin_svc = bool(matched_info and matched_info.get("admin_only"))
-            self.tracker.record(ident, now, count_activity=not is_admin_svc)
+            acl_wait_ev = self.tracker.record(ident, now, count_activity=not is_admin_svc)
         if action == D_SYNTH_A:
+            if (
+                acl_wait_ev is not None
+                and self.cp is not None
+                and self.args.acl_sync_timeout > 0
+            ):
+                self.counters["acl_sync_waits"] += 1
+                try:
+                    await asyncio.wait_for(acl_wait_ev.wait(), timeout=self.args.acl_sync_timeout)
+                    if self.args.acl_sync_grace > 0:
+                        await asyncio.sleep(self.args.acl_sync_grace)
+                except asyncio.TimeoutError:
+                    self.counters["acl_sync_timeouts"] += 1
             return dnscommon.build_response(
                 wire, [dnscommon.a_record(q.qname, detail, self.args.answer_ttl)]
             )
@@ -1288,6 +1343,7 @@ class ProDnsServer:
             log("activity post error: %s: %s" % (type(exc).__name__, exc))
         if status == 200:
             self.counters["activity_posts"] += 1
+            self.tracker.mark_acl_flushed(payload)
         else:
             self.counters["activity_post_errors"] += 1
             if status is not None:
@@ -1533,8 +1589,12 @@ def parse_args(argv=None):
     g.add_argument("--udp-pool", type=int, default=16, help="размер пула UDP-сокетов к upstream (по умолчанию 16)")
     g.add_argument("--cache-size", type=int, default=50000, help="размер in-memory TTL-кеша DNS-ответов (по умолчанию 50000)")
     g.add_argument("--answer-ttl", type=int, default=60, help="TTL синтезированных A-записей (по умолчанию 60)")
+    g.add_argument("--acl-sync-timeout", type=float, default=ACL_SYNC_TIMEOUT,
+                   help="макс. ожидание (с) подтверждения нового Pro IP в CP до выдачи A-записи (0 — выкл)")
+    g.add_argument("--acl-sync-grace", type=float, default=ACL_SYNC_GRACE,
+                   help="пауза (с) после подтверждения CP на доставку ACL до воркеров (0 — выкл)")
     g.add_argument("--default-qps", type=int, default=DEFAULT_QPS_LIMIT,
-                   help="лимит запросов в секунду на токен/подсеть (по умолчанию 50)")
+                   help="лимит запросов в секунду на токен (Pro) или IP (Free) (по умолчанию 50)")
     g.add_argument("--max-clients", type=int, default=None,
                    help="дефолтный порог активных клиентов на ноду (переопределяется из policy-map)")
     g.add_argument("--quota-ttl", type=float, default=300.0,

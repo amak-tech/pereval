@@ -68,7 +68,7 @@ const GUIDES: DeviceGuideData[] = [
     shortName: "iPhone и iPad",
     group: "personal",
     groupLabel: "Смартфоны и компьютеры",
-    protocolBadge: "Профиль DNS-over-TLS (.mobileconfig)",
+    protocolBadge: "Профиль DNS-over-HTTPS (.mobileconfig)",
     tierNote: "free_and_pro",
     title: `Настройка Smart DNS на iPhone и iPad без VPN (профиль iOS) — ${SITE.name}`,
     description: `Пошаговая установка зашифрованного DNS ${SITE.name} на iPhone и iPad за 30 секунд: готовый профиль .mobileconfig для ChatGPT, Claude, Gemini, Notion, Spotify и Brawl Stars без VPN.`,
@@ -103,7 +103,7 @@ const GUIDES: DeviceGuideData[] = [
           </Step>
           <Step title="Убедитесь, что профиль активен">
             <p className="m-0">
-              Перейдите в <strong>«Настройки» → «Основные» → «VPN и управление устройством» → «DNS»</strong> и проверьте, что галочка стоит напротив <strong>{SITE.name} DNS</strong>. Начиная с этого момента Safari и все установленные приложения используют зашифрованный DNS-over-TLS.
+              Перейдите в <strong>«Настройки» → «Основные» → «VPN и управление устройством» → «DNS»</strong> и проверьте, что галочка стоит напротив <strong>{SITE.name} DNS</strong>. Начиная с этого момента Safari и все установленные приложения используют зашифрованный DNS-over-HTTPS.
             </p>
           </Step>
         </Steps>
@@ -329,7 +329,7 @@ Clear-DnsClientCache
         <Steps>
           <Step title="Скачайте профиль конфигурации macOS">
             <p className="m-0">
-              Нажмите кнопку ниже, чтобы скачать готовый профиль DNS-over-TLS (если браузер сохранил файл с расширением <code>.xml</code> или <code>.txt</code>, переименуйте его так, чтобы он оканчивался на <code>.mobileconfig</code>):
+              Нажмите кнопку ниже, чтобы скачать готовый профиль DNS-over-HTTPS (если браузер сохранил файл с расширением <code>.xml</code> или <code>.txt</code>, переименуйте его так, чтобы он оканчивался на <code>.mobileconfig</code>):
             </p>
             <div className="flex flex-wrap gap-2.5 pt-1">
               <a className="btn-primary" href={SITE.appleProfilePath} download={`${FREE_DOT}.mobileconfig`}>

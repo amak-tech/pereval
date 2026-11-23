@@ -58,6 +58,13 @@ ${opts.dns.serverAddresses.map((a) => `          <string>${esc(a)}</string>`).jo
       <dict>
 ${dnsSettings}
       </dict>
+      <key>OnDemandRules</key>
+      <array>
+        <dict>
+          <key>Action</key>
+          <string>Connect</string>
+        </dict>
+      </array>
       <key>PayloadDescription</key>
       <string>${esc(`Настраивает зашифрованный DNS через ${opts.name}`)}</string>
       <key>PayloadDisplayName</key>

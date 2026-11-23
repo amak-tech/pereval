@@ -958,6 +958,132 @@ class FreeTierAndQuotaTests(unittest.TestCase):
                 await up.stop()
         asyncio.run(run())
 
+    def test_free_tier_rate_limit_is_per_ip_not_per_subnet(self):
+        pm = dict(
+            POLICY_MAP,
+            tier="free",
+            domain="free.test",
+            primary="127.0.0.1",
+            workers=[
+                {"ip": W1, "name": "w1", "pools": ["default", "ai"]},
+                {"ip": W2, "name": "w2", "pools": ["default", "ai"]},
+            ],
+        )
+        pm_path = _write_json(Path(self.tmp) / "free-rl-pm.json", pm)
+        args = pro_dns.parse_args([
+            "--tier", "free", "--policy-map", pm_path, "--policy-cache", "",
+            "--health-out", "", "--health-interval", "3600", "--listen-ip", "",
+            "--doh-listen", "", "--default-qps", "2",
+        ])
+        srv = pro_dns.build_server(args)
+        t = 1_700_000_000.0
+        q = dnscommon.parse_question(tu.make_query("claude.ai", 1))
+        c1 = srv.identify_ip("198.51.100.10")
+        c2 = srv.identify_ip("198.51.100.11")
+        # Обе личности в одной /24 подсети (sticky-ключ общий), но rate-limit раздельный по /32 IP
+        self.assertEqual(c1.key, "198.51.100.0/24")
+        self.assertEqual(c2.key, "198.51.100.0/24")
+
+        # qps_limit=2, burst x2 = 4: исчерпываем бакет для .10
+        r1 = [srv.decide(q, c1, now=t) for _ in range(5)]
+        self.assertEqual([a for a, _ in r1[:4]], [pro_dns.D_SYNTH_A] * 4)
+        self.assertEqual(r1[4][0], pro_dns.D_RATELIMIT)
+
+        # Клиент .11 из той же /24 не затронут и получает тот же sticky-воркер
+        act2, ip2 = srv.decide(q, c2, now=t)
+        self.assertEqual(act2, pro_dns.D_SYNTH_A)
+        self.assertEqual(ip2, r1[0][1])
+
+    def test_pro_new_ip_waits_for_acl_sync_before_synth_a(self):
+        async def run():
+            posts = []
+            fail_posts = {"flag": False}
+
+            async def handle_cp(reader, writer):
+                try:
+                    raw = b""
+                    while b"\r\n\r\n" not in raw:
+                        chunk = await asyncio.wait_for(reader.read(4096), timeout=2.0)
+                        if not chunk:
+                            return
+                        raw += chunk
+                    head, rest = raw.split(b"\r\n\r\n", 1)
+                    lines = head.decode("latin1").split("\r\n")
+                    method, path, _ = lines[0].split(" ", 2)
+                    clen = 0
+                    for ln in lines[1:]:
+                        if ln.lower().startswith("content-length:"):
+                            clen = int(ln.split(":", 1)[1].strip())
+                    while len(rest) < clen:
+                        rest += await asyncio.wait_for(reader.read(4096), timeout=2.0)
+                    if path.startswith("/api/internal/v1/policy"):
+                        body = json.dumps(POLICY).encode("utf-8")
+                        writer.write(b"HTTP/1.1 304 Not Modified\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                        await writer.drain()
+                    elif path == "/api/internal/v1/dns/activity":
+                        posts.append(json.loads(rest[:clen].decode("utf-8")))
+                        if fail_posts["flag"]:
+                            writer.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                        else:
+                            await asyncio.sleep(0.05)
+                            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                        await writer.drain()
+                finally:
+                    writer.close()
+
+            cp_port = tu.free_port()
+            cp_srv = await asyncio.start_server(handle_cp, "127.0.0.1", cp_port)
+            up = await tu.FakeUpstream().start()
+            pm_path = _write_json(Path(self.tmp) / "acl-sync-pm.json", POLICY_MAP)
+            pf_path = _write_json(Path(self.tmp) / "acl-sync-pol.json", POLICY)
+            args = pro_dns.parse_args([
+                "--tier", "pro",
+                "--policy-map", pm_path,
+                "--policy-cache", pf_path,
+                "--cp-origin", "http://127.0.0.1:%d" % cp_port,
+                "--node-secret", "sec",
+                "--health-out", "",
+                "--health-interval", "3600",
+                "--listen-ip", "",
+                "--doh-listen", "",
+                "--upstream", "127.0.0.1:%d" % up.port,
+                "--acl-sync-timeout", "0.4",
+                "--acl-sync-grace", "0.01",
+            ])
+            srv = pro_dns.build_server(args)
+            await srv.start()
+            try:
+                # 1. Первый запрос с нового IP ждёт подтверждения ACL в CP до выдачи A-записи
+                ident1 = srv.identify_token(TOK_PROXY, "198.51.100.77")
+                resp1 = await srv.resolve(tu.make_query("claude.ai", 1), ident1, "doh")
+                self.assertIn(tu.a_answers(resp1)[0], (W1, W2, W3))
+                self.assertEqual(srv.counters["acl_sync_waits"], 1)
+                self.assertEqual(srv.counters["acl_sync_timeouts"], 0)
+                self.assertTrue(any(
+                    any(e["ip"] == "198.51.100.77" for e in p.get("acl", []))
+                    for p in posts
+                ))
+
+                # 2. Повторный запрос с уже подтверждённого IP проходит без ожидания
+                resp2 = await srv.resolve(tu.make_query("chatgpt.com", 1), ident1, "doh")
+                self.assertIn(tu.a_answers(resp2)[0], (W1, W2, W3))
+                self.assertEqual(srv.counters["acl_sync_waits"], 1)
+
+                # 3. При ошибке CP (502) новый IP не зависает, а отдаёт A-запись по таймауту
+                fail_posts["flag"] = True
+                srv.args.acl_sync_timeout = 0.1
+                ident2 = srv.identify_token(TOK_PROXY, "198.51.100.88")
+                resp3 = await srv.resolve(tu.make_query("claude.ai", 1), ident2, "doh")
+                self.assertIn(tu.a_answers(resp3)[0], (W1, W2, W3))
+                self.assertEqual(srv.counters["acl_sync_waits"], 2)
+                self.assertEqual(srv.counters["acl_sync_timeouts"], 1)
+            finally:
+                await srv.shutdown()
+                await up.stop()
+                cp_srv.close()
+                await cp_srv.wait_closed()
+        asyncio.run(run())
+
 
 async def _call(fn, *a):
     return fn(*a)
