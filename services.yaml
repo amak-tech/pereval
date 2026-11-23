@@ -853,6 +853,11 @@ pro:
   dns_ip: 85.209.148.147                   # VPS pro-dns
   cp_ip: 91.149.179.184                    # VPS pereval.top (control plane) — для nftables на воркерах
   max_clients: 200                         # порог активных клиентов за 5 минут по умолчанию для нод Pro
+  regions:
+    eu:
+      name: Европа
+    us:
+      name: США
   pools:
     default:
       note: Общий пул Pro.
@@ -871,9 +876,15 @@ pro:
     # PRO_WORKER_AI_1_SECRET), а если она пуста — из общего PRO_WORKER_SECRET. Переменные пробрасывает deploy.yml.
     - ip: 141.11.197.239                   # VPS pro-worker-default-1 — общий пул (+ media и временно ai через тот же воркер)
       name: pro-worker-default-1
+      region: eu
       pools: [ default, media ]
     - ip: 141.11.197.214                   # VPS pro-worker-ai-1 — в карантине: 151.247.25.133 и 141.11.197.239 Google считает RU, Gemini отдаёт «регион недоступен»
       name: pro-worker-ai-1
+      region: eu
+      pools: [ ai ]
+    - ip: 45.91.138.24                     # VPS pro-worker-ai-us-1 — США, пул ai
+      name: pro-worker-ai-us-1
+      region: us
       pools: [ ai ]
   categories:
     # Каталог Pro намеренно короткий: только сервисы, геоблок которых подтверждён пробами

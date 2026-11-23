@@ -191,6 +191,9 @@ export function AccountDashboard() {
       {/* IP и DDNS */}
       <BoundIpsCard data={data} busy={busy} run={run} />
 
+      {/* Регион проксирования */}
+      {data.regions.length > 0 ? <RegionCard data={data} busy={busy} run={run} /> : null}
+
       {/* Категории */}
       <section className="card" aria-labelledby="cat-h">
         <h2 id="cat-h" className="m-0 text-lg font-semibold">
@@ -258,6 +261,91 @@ export function AccountDashboard() {
         </div>
       </section>
     </div>
+  );
+}
+
+function poolShortLabel(pool: string): string {
+  switch (pool) {
+    case "ai":
+      return "ИИ-пул";
+    case "media":
+      return "Медиа-пул";
+    case "default":
+      return "Общий пул";
+    default:
+      return pool;
+  }
+}
+
+function RegionCard({ data, busy, run }: { data: Summary; busy: string | null; run: (k: string, fn: () => Promise<void>) => Promise<void> }) {
+  const saving = busy === "region";
+  const select = (region: string | null) => {
+    if (saving || data.preferredRegion === region) return;
+    void run("region", () => api("/api/account/region", { method: "PUT", body: JSON.stringify({ region }) }));
+  };
+
+  return (
+    <section className="card" aria-labelledby="reg-h">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="reg-h" className="m-0 inline-flex items-center gap-2 text-lg font-semibold">
+          <Globe className="h-5 w-5 text-accent" aria-hidden /> Регион проксирования
+        </h2>
+        {saving ? <span className="text-xs text-mute">Сохраняем…</span> : null}
+      </div>
+      <p className="mt-1 text-sm text-mute">
+        Выберите предпочтительный регион серверов. Если в выбранном регионе нет серверов для какого-то пула или они временно недоступны, запросы автоматически пойдут через
+        доступный регион. После переключения DNS-кеш устройства может обновляться до 60 секунд.
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Регион проксирования">
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition ${
+            data.preferredRegion === null ? "border-accent bg-accent-soft/40" : "border-line bg-bg"
+          }`}
+        >
+          <input
+            type="radio"
+            name="preferred-region"
+            className="mt-1 h-4 w-4 accent-[var(--accent)]"
+            checked={data.preferredRegion === null}
+            disabled={saving}
+            onChange={() => select(null)}
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">Авто</span>
+            <span className="block text-xs text-mute">Автобалансировка между всеми доступными серверами</span>
+          </span>
+        </label>
+        {data.regions.map((r) => {
+          const checked = data.preferredRegion === r.code;
+          const poolsText = r.pools.map(poolShortLabel).join(", ");
+          return (
+            <label
+              key={r.code}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition ${
+                checked ? "border-accent bg-accent-soft/40" : "border-line bg-bg"
+              }`}
+            >
+              <input
+                type="radio"
+                name="preferred-region"
+                className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                checked={checked}
+                disabled={saving}
+                onChange={() => select(r.code)}
+              />
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-semibold">
+                  {r.name}
+                  <span className="font-mono text-[11px] font-normal uppercase text-mute">{r.code}</span>
+                </span>
+                <span className="block text-xs text-mute">{poolsText}</span>
+                {r.note ? <span className="mt-0.5 block text-xs text-mute">{r.note}</span> : null}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

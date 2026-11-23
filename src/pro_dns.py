@@ -140,6 +140,7 @@ class PolicyMap:
             except (TypeError, ValueError):
                 self.max_clients = None
         self.pools = poolrouting.normalize_pools(data.get("pools") or {})
+        self.regions = dict(data.get("regions") or {}) if isinstance(data.get("regions"), dict) else {}
         self.workers = [
             dict(w) for w in (data.get("workers") or [])
             if isinstance(w, dict) and w.get("ip")
@@ -229,10 +230,16 @@ class Policy:
             qps = int(raw.get("qps_limit") or default_qps)
         except (TypeError, ValueError):
             qps = default_qps
+        pref_reg = raw.get("preferred_region")
+        if isinstance(pref_reg, str):
+            pref_reg = pref_reg.strip().lower() or None
+        else:
+            pref_reg = None
         return {
             "user_id": str(raw.get("user_id") or ""),
             "mode": mode,
             "disabled_categories": frozenset(str(c) for c in disabled),
+            "preferred_region": pref_reg,
             "qps_limit": max(1, qps),
             "is_admin": bool(raw.get("is_admin", False)),
         }
@@ -266,6 +273,8 @@ class Policy:
                 "disabled_categories": sorted(u["disabled_categories"]),
                 "qps_limit": u["qps_limit"],
             }
+            if u.get("preferred_region"):
+                d["preferred_region"] = u["preferred_region"]
             if u.get("is_admin"):
                 d["is_admin"] = True
             return d
@@ -725,12 +734,16 @@ class ProDnsServer:
         workers = self.workers()
         self.all_worker_ips = []
         self.weights = {}
+        self.worker_regions = {}
         self.node_limits = {}
         for w in workers:
             ip = str(w.get("ip"))
             if ip not in self.all_worker_ips:
                 self.all_worker_ips.append(ip)
             self.weights[ip] = max(1, int(w.get("weight") or 1))
+            reg = w.get("region")
+            if isinstance(reg, str) and reg.strip():
+                self.worker_regions[ip] = reg.strip().lower()
             for pname in self.policy_map.pools:
                 self.node_limits[(pname, ip)] = poolrouting.resolve_node_max_clients(
                     ip, pname, self.policy_map.pools, workers,
@@ -880,6 +893,7 @@ class ProDnsServer:
             return D_FORWARD, "disabled"
         if q.qtype == dnscommon.QTYPE_A or q.qtype in NODATA_QTYPES:
             sticky_key = self._sticky_client_key(ident, info["service"])
+            preferred_region = ident.user.get("preferred_region") if self.tier == "pro" else None
             ip = poolrouting.pick_for_client(
                 sticky_key,
                 info["pool"],
@@ -890,6 +904,8 @@ class ProDnsServer:
                 node_limits=self.node_limits,
                 quota_tracker=self.quota_tracker,
                 now=now,
+                preferred_region=preferred_region,
+                worker_regions=self.worker_regions,
             )
             if ip is None:
                 if self.all_worker_ips or self.last_resort_ips:

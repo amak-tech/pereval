@@ -198,6 +198,7 @@ export const userPolicy = pgTable("user_policy", {
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   disabledCategories: text("disabled_categories").array().notNull().default([]),
+  preferredRegion: text("preferred_region"),
   updatedAt: ts("updated_at").notNull().defaultNow(),
 });
 

@@ -148,6 +148,64 @@ class WorkerSecretEnvTests(unittest.TestCase):
         errs_dup, _ = generate.validate(synth, primary_ip="153.80.200.170")
         self.assertTrue(any("одновременно указан в domains" in e for e in errs_dup), errs_dup)
 
+    def test_pro_regions_parsed_and_exported(self):
+        doc = generate.parse(str(ROOT / "services.yaml"))
+        errors, _ = generate.validate(doc, primary_ip="153.80.200.170")
+        self.assertEqual(errors, [])
+
+        for raw_json in (
+            generate.pro_nodes_json(doc),
+            generate.pro_policy_map_json(doc),
+        ):
+            payload = json.loads(raw_json)
+            self.assertIn("regions", payload)
+            self.assertEqual(payload["regions"]["eu"]["name"], "Европа")
+            self.assertEqual(payload["regions"]["us"]["name"], "США")
+            by_name = {w["name"]: w for w in payload["workers"]}
+            self.assertEqual(by_name["pro-worker-default-1"]["region"], "eu")
+            self.assertEqual(by_name["pro-worker-ai-1"]["region"], "eu")
+            self.assertEqual(by_name["pro-worker-ai-us-1"]["region"], "us")
+            self.assertEqual(by_name["pro-worker-ai-us-1"]["ip"], "45.91.138.24")
+
+        site = json.loads(generate.services_json(doc, "153.80.200.170"))
+        self.assertIn("regions", site["pro"])
+        self.assertEqual(site["pro"]["regions"]["us"]["name"], "США")
+        site_workers = {w["name"]: w for w in site["pro"]["workers"]}
+        self.assertEqual(site_workers["pro-worker-ai-us-1"]["region"], "us")
+
+    def test_worker_as_dict_region_optional(self):
+        w_no = generate.WorkerNode("1.2.3.4", "w1")
+        self.assertNotIn("region", w_no.as_dict())
+        self.assertNotIn("region", w_no.as_dict(with_ssh=False))
+        w_reg = generate.WorkerNode("1.2.3.4", "w1", region="us")
+        self.assertEqual(w_reg.as_dict()["region"], "us")
+        self.assertEqual(w_reg.as_dict(with_ssh=False)["region"], "us")
+
+    def test_validate_regions_errors(self):
+        # Воркер указывает region без объявленной секции regions
+        c1 = generate.Cluster()
+        c1.workers.append(generate.WorkerNode("198.51.100.1", "w1", region="us"))
+        errs, warns = [], []
+        generate._validate_cluster(c1, "pro", set(), errs, warns)
+        self.assertTrue(any("секция regions не объявлена" in e for e in errs), errs)
+
+        # Воркер ссылается на неизвестный регион
+        c2 = generate.Cluster()
+        c2.regions["eu"] = generate.Region("eu", "Европа")
+        c2.workers.append(generate.WorkerNode("198.51.100.1", "w1", region="jp"))
+        errs, warns = [], []
+        generate._validate_cluster(c2, "pro", set(), errs, warns)
+        self.assertTrue(any("неизвестный регион" in e for e in errs), errs)
+
+        # Невалидный код региона и пустое название
+        c3 = generate.Cluster()
+        c3.regions["BAD-CODE!"] = generate.Region("BAD-CODE!", "")
+        c3.workers.append(generate.WorkerNode("198.51.100.1", "w1"))
+        errs, warns = [], []
+        generate._validate_cluster(c3, "pro", set(), errs, warns)
+        self.assertTrue(any("код региона" in e for e in errs), errs)
+        self.assertTrue(any("название (name)" in e for e in errs), errs)
+
 
 if __name__ == "__main__":
     unittest.main()

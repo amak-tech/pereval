@@ -329,6 +329,54 @@ def _node_limit(node_ip, pool_name, pools, node_limits):
     return None
 
 
+def iter_pool_candidate_tiers(
+    pool_name,
+    pools,
+    healthy_by_pool,
+    last_resort=None,
+    preferred_region=None,
+    worker_regions=None,
+):
+    """Возвращает упорядоченные непустые тиры кандидатов (pool_name, [ip, ...]).
+
+    Политика fallback — «пул важнее региона»:
+      pool/region -> pool/other -> fallback_pool/region -> fallback_pool/other -> ...
+    Если во всей цепочке пулов нет ни одной живой ноды, применяет ту же разбивку к last_resort.
+    При preferred_region=None каждый пул даёт один тир со всеми его здоровыми воркерами.
+    """
+    healthy_by_pool = healthy_by_pool if isinstance(healthy_by_pool, dict) else {}
+    pref = str(preferred_region or "").strip().lower() or None
+    wreg = worker_regions if isinstance(worker_regions, dict) else {}
+
+    def _split(ips):
+        if not pref or not wreg:
+            return [ips]
+        matched = [ip for ip in ips if wreg.get(ip) == pref]
+        others = [ip for ip in ips if wreg.get(ip) != pref]
+        out = []
+        if matched:
+            out.append(matched)
+        if others:
+            out.append(others)
+        return out
+
+    tiers = []
+    for pname in pool_chain(pool_name, pools):
+        ips = list(healthy_by_pool.get(pname) or [])
+        if not ips:
+            continue
+        for group in _split(ips):
+            tiers.append((pname, group))
+    if tiers:
+        return tiers
+
+    cands = list(last_resort or [])
+    if not cands:
+        return []
+    base_pool = pool_name or DEFAULT_POOL
+    return [(base_pool, group) for group in _split(cands)]
+
+
 def pick_for_client(
     client_key: str,
     pool_name: str,
@@ -339,33 +387,35 @@ def pick_for_client(
     node_limits: dict = None,
     quota_tracker: ClientQuotaTracker = None,
     now: float = None,
+    preferred_region: str = None,
+    worker_regions: dict = None,
 ):
-    """Выбирает IP ноды пула для пользователя с учётом sticky-сессии, весов и квоты max_clients.
+    """Выбирает IP ноды пула для пользователя с учётом региона, sticky-сессии, весов и квоты max_clients.
 
-    1. Обходит цепочку пулов pool_chain(pool_name, pools).
-    2. Внутри пула упорядочивает живые ноды по взвешенному HRW от ключа '<pool>\\x00<client_key>'.
+    1. Строит упорядоченные тиры через iter_pool_candidate_tiers() («пул важнее региона»).
+    2. Внутри тира упорядочивает ноды по взвешенному HRW от ключа '<pool>\\x00<client_key>'.
     3. Если quota_tracker задан:
-       - если клиент уже активен на одной из здоровых нод пула — продлевает сессию и возвращает её;
-       - иначе выбирает первую ноду пула со свободным слотом (< max_clients);
-       - если все ноды текущего пула заполнены, переходит к fallback-пулу;
-       - если все ноды во всей цепочке пулов заполнены, возвращает None (откат в plain DNS).
-    4. Если во всей цепочке пулов нет ни одной живой ноды, использует last_resort.
+       - если клиент уже активен на одной из нод тира — продлевает сессию и возвращает её;
+       - иначе выбирает первую ноду тира со свободным слотом (< max_clients);
+       - если все ноды тира заполнены, переходит к следующему тиру (другой регион пула -> fallback-пул);
+       - если все ноды во всех тирах заполнены, возвращает None (откат в plain DNS).
     """
     ck = str(client_key or "").strip() or DEFAULT_POOL
-    healthy_by_pool = healthy_by_pool if isinstance(healthy_by_pool, dict) else {}
-    saw_healthy = False
-
-    for pname in pool_chain(pool_name, pools):
-        ips = list(healthy_by_pool.get(pname) or [])
-        if not ips:
-            continue
-        saw_healthy = True
+    tiers = iter_pool_candidate_tiers(
+        pool_name,
+        pools,
+        healthy_by_pool,
+        last_resort=last_resort,
+        preferred_region=preferred_region,
+        worker_regions=worker_regions,
+    )
+    for pname, ips in tiers:
         hrw_key = "%s\x00%s" % (pname, ck)
         ordered = rendezvous_order(hrw_key, ips, weights=weights)
         if quota_tracker is None:
             return ordered[0] if ordered else None
 
-        # Сначала сохраняем привязку, если у клиента уже есть активная сессия в этом пуле
+        # Сначала сохраняем привязку, если у клиента уже есть активная сессия в этом тире
         for ip in ordered:
             if quota_tracker.has_active(ip, ck, now=now):
                 quota_tracker.touch(ip, ck, now=now)
@@ -378,26 +428,6 @@ def pick_for_client(
                 quota_tracker.touch(ip, ck, now=now)
                 return ip
 
-    if saw_healthy:
-        # Живые ноды есть, но все слоты max_clients исчерпаны -> сигнал отката в plain DNS
-        return None
-
-    cands = list(last_resort or [])
-    if not cands:
-        return None
-    hrw_key = "%s\x00%s" % (pool_name or DEFAULT_POOL, ck)
-    ordered = rendezvous_order(hrw_key, cands, weights=weights)
-    if quota_tracker is None:
-        return ordered[0]
-    for ip in ordered:
-        if quota_tracker.has_active(ip, ck, now=now):
-            quota_tracker.touch(ip, ck, now=now)
-            return ip
-    for ip in ordered:
-        limit = _node_limit(ip, pool_name or DEFAULT_POOL, pools, node_limits)
-        if quota_tracker.can_admit(ip, ck, limit, now=now):
-            quota_tracker.touch(ip, ck, now=now)
-            return ip
     return None
 
 

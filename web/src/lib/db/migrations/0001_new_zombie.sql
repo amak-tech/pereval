@@ -1,0 +1,1 @@
+ALTER TABLE "user_policy" ADD COLUMN "preferred_region" text;

@@ -263,5 +263,103 @@ class BuildConsistencyTests(unittest.TestCase):
         self.assertTrue(all(c["tier"] in ("free", "pro") for c in pro["categories"]))
 
 
+class RegionalRoutingTests(unittest.TestCase):
+    def test_iter_pool_candidate_tiers_pool_over_region(self):
+        pools = poolrouting.normalize_pools({
+            "default": {},
+            "ai": {"fallback": "default"},
+        })
+        healthy = {
+            "ai": ["10.0.0.1", "10.0.0.2"],
+            "default": ["10.0.0.3", "10.0.0.4"],
+        }
+        wreg = {
+            "10.0.0.1": "eu",
+            "10.0.0.2": "us",
+            "10.0.0.3": "eu",
+            "10.0.0.4": "us",
+        }
+        # Авто (без preferred_region): по одному тиру на пул
+        self.assertEqual(
+            poolrouting.iter_pool_candidate_tiers("ai", pools, healthy, preferred_region=None, worker_regions=wreg),
+            [("ai", ["10.0.0.1", "10.0.0.2"]), ("default", ["10.0.0.3", "10.0.0.4"])],
+        )
+        # Выбран us: ai/us -> ai/eu -> default/us -> default/eu (пул важнее региона)
+        self.assertEqual(
+            poolrouting.iter_pool_candidate_tiers("ai", pools, healthy, preferred_region="us", worker_regions=wreg),
+            [("ai", ["10.0.0.2"]), ("ai", ["10.0.0.1"]), ("default", ["10.0.0.4"]), ("default", ["10.0.0.3"])],
+        )
+        # Если в default только eu, запрос в default с preferred_region=us даёт default/eu
+        healthy_no_us_def = {"ai": ["10.0.0.1", "10.0.0.2"], "default": ["10.0.0.3"]}
+        self.assertEqual(
+            poolrouting.iter_pool_candidate_tiers(
+                "default", pools, healthy_no_us_def, preferred_region="us", worker_regions=wreg
+            ),
+            [("default", ["10.0.0.3"])],
+        )
+        # Неизвестный регион -> прозрачный откат на все здоровые воркеры пула
+        self.assertEqual(
+            poolrouting.iter_pool_candidate_tiers("ai", pools, healthy, preferred_region="jp", worker_regions=wreg),
+            [("ai", ["10.0.0.1", "10.0.0.2"]), ("default", ["10.0.0.3", "10.0.0.4"])],
+        )
+        # Пустой healthy -> last_resort с разбивкой по региону
+        self.assertEqual(
+            poolrouting.iter_pool_candidate_tiers(
+                "ai", pools, {}, last_resort=["10.0.0.1", "10.0.0.2"], preferred_region="us", worker_regions=wreg
+            ),
+            [("ai", ["10.0.0.2"]), ("ai", ["10.0.0.1"])],
+        )
+
+    def test_pick_for_client_region_quota_overflow_and_switch(self):
+        pools = poolrouting.normalize_pools({
+            "default": {"max_clients": 2},
+            "ai": {"fallback": "default", "max_clients": 1},
+        })
+        healthy = {
+            "ai": ["10.0.0.1", "10.0.0.2"],
+            "default": ["10.0.0.3"],
+        }
+        wreg = {"10.0.0.1": "eu", "10.0.0.2": "us", "10.0.0.3": "eu"}
+        tracker = poolrouting.ClientQuotaTracker(ttl_sec=300.0)
+
+        # 1-й US-клиент получает ai/us
+        ip1 = poolrouting.pick_for_client(
+            "u1", "ai", pools, healthy, quota_tracker=tracker, now=100.0,
+            preferred_region="us", worker_regions=wreg,
+        )
+        self.assertEqual(ip1, "10.0.0.2")
+
+        # 2-й US-клиент: ai/us заполнен (max_clients=1) -> fallback на ai/eu (тот же пул)
+        ip2 = poolrouting.pick_for_client(
+            "u2", "ai", pools, healthy, quota_tracker=tracker, now=100.0,
+            preferred_region="us", worker_regions=wreg,
+        )
+        self.assertEqual(ip2, "10.0.0.1")
+
+        # 3-й US-клиент: весь пул ai заполнен -> fallback на default/eu
+        ip3 = poolrouting.pick_for_client(
+            "u3", "ai", pools, healthy, quota_tracker=tracker, now=100.0,
+            preferred_region="us", worker_regions=wreg,
+        )
+        self.assertEqual(ip3, "10.0.0.3")
+
+        # При смене региона с eu на us клиент сразу переходит на ai/us, если там есть слот
+        tracker2 = poolrouting.ClientQuotaTracker(ttl_sec=300.0)
+        self.assertEqual(
+            poolrouting.pick_for_client(
+                "u-switch", "ai", pools, healthy, quota_tracker=tracker2, now=100.0,
+                preferred_region="eu", worker_regions=wreg,
+            ),
+            "10.0.0.1",
+        )
+        self.assertEqual(
+            poolrouting.pick_for_client(
+                "u-switch", "ai", pools, healthy, quota_tracker=tracker2, now=105.0,
+                preferred_region="us", worker_regions=wreg,
+            ),
+            "10.0.0.2",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

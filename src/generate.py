@@ -112,9 +112,25 @@ class Pool:
         return d
 
 
+class Region:
+    def __init__(self, code, name, note=""):
+        self.code = code
+        self.name = name
+        self.note = note
+
+    def as_dict(self):
+        d = OrderedDict([
+            ("name", self.name),
+        ])
+        if self.note:
+            d["note"] = self.note
+        return d
+
+
 class WorkerNode:
     def __init__(self, ip, name="", weight=1, pools=None, ssh_user=None, ssh_user_env=None,
-                 ssh_key=None, ssh_key_env=None, ssh_port=None, secret_env=None, max_clients=None):
+                 ssh_key=None, ssh_key_env=None, ssh_port=None, secret_env=None, max_clients=None,
+                 region=None):
         self.ip = ip
         self.name = name
         self.weight = weight
@@ -129,6 +145,7 @@ class WorkerNode:
         # а если её нет — общий PRO_WORKER_SECRET.
         self.secret_env = secret_env
         self.max_clients = max_clients
+        self.region = region
 
     def default_secret_env(self, idx=1):
         """Имя env-переменной секрета по умолчанию: pro-worker-ai-1 -> PRO_WORKER_AI_1_SECRET."""
@@ -146,6 +163,8 @@ class WorkerNode:
         ])
         if self.max_clients is not None:
             d["max_clients"] = self.max_clients
+        if self.region is not None:
+            d["region"] = self.region
         if with_ssh:
             d["ssh_user"] = self.ssh_user
             d["ssh_user_env"] = self.ssh_user_env
@@ -161,6 +180,7 @@ class Cluster:
 
     def __init__(self):
         self.pools = OrderedDict([(poolrouting.DEFAULT_POOL, Pool(poolrouting.DEFAULT_POOL))])
+        self.regions = OrderedDict()
         self.workers = []
         self.max_clients = None
 
@@ -435,6 +455,20 @@ def _parse_pools(raw, where, cluster):
         cluster.pools[poolrouting.DEFAULT_POOL] = Pool(poolrouting.DEFAULT_POOL)
 
 
+def _parse_regions(raw, where, cluster):
+    if raw is None:
+        return
+    if not isinstance(raw, dict):
+        raise ParseError("%s: regions должен быть словарём {код: {name: ...}}" % where)
+    for code, rraw in raw.items():
+        rcode = str(code).strip().lower()
+        if not isinstance(rraw, dict):
+            raise ParseError("%s: regions.%s должен быть словарём" % (where, rcode))
+        rname = _need(rraw, "name", "%s: regions.%s" % (where, rcode), str).strip()
+        rnote = str(rraw.get("note") or "").strip()
+        cluster.regions[rcode] = Region(rcode, rname, note=rnote)
+
+
 def _parse_workers(raw, where, cluster):
     if raw is None:
         return
@@ -455,6 +489,7 @@ def _parse_workers(raw, where, cluster):
                 wpools = [wpools]
             elif not isinstance(wpools, list):
                 raise ParseError("%s: pools должен быть списком имён пулов" % wwhere)
+            wregion = _opt_str(wraw, "region", wwhere)
             cluster.workers.append(WorkerNode(
                 ip=wip, name=wname, weight=wweight,
                 pools=[str(p).strip() for p in wpools if str(p).strip()],
@@ -465,6 +500,7 @@ def _parse_workers(raw, where, cluster):
                 ssh_port=_opt_int(wraw, "ssh_port", wwhere, default=None),
                 secret_env=_opt_str(wraw, "secret_env", wwhere),
                 max_clients=_opt_int(wraw, "max_clients", wwhere, default=None),
+                region=wregion.lower() if wregion else None,
             ))
         else:
             raise ParseError("%s: ожидался словарь или строка с IP" % wwhere)
@@ -591,6 +627,7 @@ def parse(path):
         doc.pro.cp_ip = _opt_str(pro_raw, "cp_ip", where)
         doc.pro.max_clients = _opt_int(pro_raw, "max_clients", where, default=None)
         _parse_pools(pro_raw.get("pools"), where, doc.pro)
+        _parse_regions(pro_raw.get("regions"), where, doc.pro)
         _parse_workers(_need(pro_raw, "workers", where, list), where, doc.pro)
         doc.pro.categories = _parse_categories(pro_raw.get("categories"), where, "pro")
         admin_svcs_raw = pro_raw.get("admin_services")
@@ -627,6 +664,12 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
     if cluster.max_clients is not None and cluster.max_clients < 1:
         errors.append("%s: max_clients должен быть >= 1" % label)
     pools = cluster.pools
+    regions = getattr(cluster, "regions", None) or {}
+    for rcode, reg in regions.items():
+        if not SLUG_RE.match(rcode):
+            errors.append("%s: код региона «%s» должен соответствовать %s" % (label, rcode, SLUG_RE.pattern))
+        if not reg.name:
+            errors.append("%s: у региона «%s» не указано название (name)" % (label, rcode))
     seen_worker_ips = set()
     for w in cluster.workers:
         try:
@@ -650,6 +693,13 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
         for pname in w.pools:
             if pname not in pools:
                 errors.append("%s: воркер «%s» ссылается на неизвестный пул «%s»" % (label, w.name, pname))
+        if w.region is not None:
+            if not regions:
+                errors.append("%s: воркер «%s» указывает region=«%s», но секция regions не объявлена"
+                              % (label, w.name, w.region))
+            elif w.region not in regions:
+                errors.append("%s: воркер «%s» ссылается на неизвестный регион «%s»"
+                              % (label, w.name, w.region))
         if w.ssh_port is not None and not (1 <= w.ssh_port <= 65535):
             errors.append("%s: некорректный ssh_port у воркера «%s»: %s" % (label, w.name, w.ssh_port))
         for fname, fval in (("ssh_user_env", w.ssh_user_env), ("ssh_key_env", w.ssh_key_env),
@@ -981,6 +1031,7 @@ def pro_nodes_json(doc):
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
         ("max_clients", doc.pro.max_clients),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.pro.pools.items())),
+        ("regions", OrderedDict((c, r.as_dict()) for c, r in doc.pro.regions.items())),
         ("workers", [w.as_dict(idx) for idx, w in enumerate(doc.pro.workers, 1)]),
     ])
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -1054,6 +1105,7 @@ def pro_policy_map_json(doc):
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
         ("max_clients", doc.pro.max_clients),
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.pro.pools.items())),
+        ("regions", OrderedDict((c, r.as_dict()) for c, r in doc.pro.regions.items())),
         ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.pro.workers, 1)]),
         ("categories", [
             OrderedDict([
@@ -1109,6 +1161,7 @@ def services_json(doc, primary_ip):
             ("dot_host_template", "{token}.%s" % doc.pro.domain),
             ("max_clients", doc.pro.max_clients),
             ("pools", pools_dict(doc.pro)),
+            ("regions", OrderedDict((c, r.as_dict()) for c, r in doc.pro.regions.items())),
             ("workers", [w.as_dict(idx, with_ssh=False) for idx, w in enumerate(doc.pro.workers, 1)]),
         ])
     payload = OrderedDict([

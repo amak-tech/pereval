@@ -1089,5 +1089,98 @@ async def _call(fn, *a):
     return fn(*a)
 
 
+class ProRegionRoutingTests(unittest.TestCase):
+    def setUp(self):
+        _quiet()
+
+    def test_region_routing_fallback_and_quota(self):
+        import tempfile
+        w_def_eu = "203.0.113.41"
+        w_ai_eu = "203.0.113.42"
+        w_ai_us = "203.0.113.43"
+        pm = {
+            "domain": PRO_DOMAIN,
+            "dns_ip": "127.0.0.1",
+            "probe_sni": "claude.ai",
+            "pools": {
+                "default": {"max_clients": 5},
+                "ai": {"fallback": "default", "max_clients": 1},
+            },
+            "regions": {"eu": {"name": "Европа"}, "us": {"name": "США"}},
+            "workers": [
+                {"ip": w_def_eu, "name": "pro-worker-default-1", "region": "eu", "pools": ["default"]},
+                {"ip": w_ai_eu, "name": "pro-worker-ai-1", "region": "eu", "pools": ["ai"]},
+                {"ip": w_ai_us, "name": "pro-worker-ai-us-1", "region": "us", "pools": ["ai"]},
+            ],
+            "categories": [
+                {"id": "ai", "name": "AI", "tier": "free", "pool": "ai"},
+                {"id": "work", "name": "Work", "tier": "pro", "pool": "default"},
+            ],
+            "domains": {
+                "claude.ai": {"service": "Anthropic / Claude", "category_id": "ai", "tier": "free", "pool": "ai"},
+                "notion.so": {"service": "Notion", "category_id": "work", "tier": "pro", "pool": "default"},
+            },
+        }
+        tok_us1 = "ususeroneususerone22"
+        tok_us2 = "ususertwoususertwo23"
+        tok_eu = "euusereuusereuuser24"
+        tok_auto = "autouserautouserau25"
+        pol = {
+            "version": 12,
+            "generated_at": "2026-11-23T12:00:00Z",
+            "tokens": {
+                tok_us1: {"user_id": "u-us-1", "mode": "proxy", "disabled_categories": [], "preferred_region": "us"},
+                tok_us2: {"user_id": "u-us-2", "mode": "proxy", "disabled_categories": [], "preferred_region": "us"},
+                tok_eu: {"user_id": "u-eu-1", "mode": "proxy", "disabled_categories": [], "preferred_region": "eu"},
+                tok_auto: {"user_id": "u-auto", "mode": "proxy", "disabled_categories": []},
+            },
+            "ips": {},
+            "workers": None,
+        }
+        # Round-trip Policy.from_dict -> to_dict сохраняет preferred_region
+        parsed = pro_dns.Policy.from_dict(pol, source="file")
+        dumped = parsed.to_dict()
+        self.assertEqual(dumped["tokens"][tok_us1]["preferred_region"], "us")
+        self.assertNotIn("preferred_region", dumped["tokens"][tok_auto])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            srv = make_server(tmp, policy=pol, policy_map=pm)
+            t = 1_700_000_000.0
+            q_ai = dnscommon.parse_question(tu.make_query("claude.ai", 1))
+            q_def = dnscommon.parse_question(tu.make_query("notion.so", 1))
+
+            id_us1 = srv.identify_token(tok_us1, "198.51.100.1")
+            id_us2 = srv.identify_token(tok_us2, "198.51.100.2")
+            id_eu = srv.identify_token(tok_eu, "198.51.100.3")
+            id_auto = srv.identify_token(tok_auto, "198.51.100.4")
+
+            # US-пользователь: ai -> w_ai_us, default -> w_def_eu
+            self.assertEqual(srv.decide(q_ai, id_us1, now=t), (pro_dns.D_SYNTH_A, w_ai_us))
+            self.assertEqual(srv.decide(q_def, id_us1, now=t), (pro_dns.D_SYNTH_A, w_def_eu))
+
+            # Второй US-пользователь: w_ai_us достиг max_clients=1 -> fallback на w_ai_eu (тот же пул)
+            self.assertEqual(srv.decide(q_ai, id_us2, now=t), (pro_dns.D_SYNTH_A, w_ai_eu))
+
+            # EU-пользователь: w_ai_eu тоже заполнен -> fallback на w_def_eu
+            self.assertEqual(srv.decide(q_ai, id_eu, now=t), (pro_dns.D_SYNTH_A, w_def_eu))
+            self.assertEqual(srv.decide(q_def, id_eu, now=t), (pro_dns.D_SYNTH_A, w_def_eu))
+
+            # Сбросим квоту (окно > 300с) и проверим падение US-ноды
+            t2 = t + 400.0
+            self.assertEqual(srv.decide(q_ai, id_auto, now=t2)[0], pro_dns.D_SYNTH_A)
+            self.assertIn(srv.decide(q_ai, id_auto, now=t2)[1], (w_ai_eu, w_ai_us))
+
+            # Помечаем w_ai_us нездоровой
+            t3 = t2 + 400.0
+            srv.health.states[w_ai_us] = {"healthy": False, "fails": 3, "passes": 0}
+            srv.recompute_routing()
+            self.assertEqual(srv.decide(q_ai, id_us1, now=t3), (pro_dns.D_SYNTH_A, w_ai_eu))
+
+            # Помечаем и w_ai_eu нездоровой -> откат на default/eu
+            srv.health.states[w_ai_eu] = {"healthy": False, "fails": 3, "passes": 0}
+            srv.recompute_routing()
+            self.assertEqual(srv.decide(q_ai, id_us1, now=t3), (pro_dns.D_SYNTH_A, w_def_eu))
+
+
 if __name__ == "__main__":
     unittest.main()

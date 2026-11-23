@@ -15,6 +15,7 @@ export type PolicyEntry = {
   user_id: string;
   mode: DnsMode;
   disabled_categories: string[];
+  preferred_region?: string | null;
   qps_limit?: number;
   is_admin?: boolean;
 };
@@ -46,6 +47,7 @@ export type UserAccessState = {
   status: SubscriptionStatus | null;
   periodEnd: Date | null;
   disabled: string[];
+  preferredRegion: string | null;
 };
 
 /** Лучшая (определяющая доступ) подписка для каждого пользователя. */
@@ -62,16 +64,18 @@ export async function userAccessStates(now: Date = new Date()): Promise<Map<stri
     if (rank > 0 || (rank === 0 && s.updatedAt.getTime() > prev.updatedAt.getTime())) best.set(s.userId, s);
   }
   const policies = await db().select().from(schema.userPolicy);
-  const disabledBy = new Map(policies.map((p) => [p.userId, p.disabledCategories]));
+  const policyBy = new Map(policies.map((p) => [p.userId, p]));
   const grace = env().GRACE_DAYS;
   const out = new Map<string, UserAccessState>();
   for (const [userId, s] of best) {
+    const up = policyBy.get(userId);
     out.set(userId, {
       userId,
       status: s.status,
       periodEnd: s.periodEnd,
       mode: dnsMode(s.status, s.periodEnd, grace, now),
-      disabled: disabledBy.get(userId) ?? [],
+      disabled: up?.disabledCategories ?? [],
+      preferredRegion: up?.preferredRegion ?? null,
     });
   }
   // пользователи с токенами/IP, но без подписки (например, созданные админом) — plain
@@ -80,7 +84,7 @@ export async function userAccessStates(now: Date = new Date()): Promise<Map<stri
 
 export function buildPolicyEntry(
   userId: string,
-  states: ReadonlyMap<string, Pick<UserAccessState, "mode" | "disabled">>,
+  states: ReadonlyMap<string, Pick<UserAccessState, "mode" | "disabled"> & { preferredRegion?: string | null }>,
   adminUserIds: ReadonlySet<string>,
 ): PolicyEntry {
   const st = states.get(userId);
@@ -90,6 +94,7 @@ export function buildPolicyEntry(
     disabled_categories: st?.disabled ?? [],
     qps_limit: 50,
   };
+  if (st?.preferredRegion) entry.preferred_region = st.preferredRegion;
   if (adminUserIds.has(userId)) entry.is_admin = true;
   return entry;
 }

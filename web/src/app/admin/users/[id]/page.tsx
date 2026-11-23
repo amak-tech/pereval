@@ -20,6 +20,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
   const proDomain = catalog.pro?.domain ?? "pro.pereval.top";
   const activeToken = d.tokens.find((t) => !t.revokedAt) ?? null;
   const catName = new Map(catalog.categories.map((c) => [c.id, c.name]));
+  const regionName = new Map(Object.entries(catalog.pro?.regions ?? {}).map(([k, v]) => [k, v.name]));
   const hasActive = d.subscriptions.some((s) => s.status === "active" || s.status === "past_due" || s.status === "cancelled");
 
   return (
@@ -150,6 +151,16 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
                   </Badge>
                 ))
               : "нет"}
+          </p>
+          <p className="m-0 mt-1 text-xs text-mute">
+            Регион проксирования:{" "}
+            {d.preferredRegion ? (
+              <Badge tone="accent">
+                {regionName.get(d.preferredRegion) ?? d.preferredRegion} ({d.preferredRegion})
+              </Badge>
+            ) : (
+              "Авто"
+            )}
           </p>
         </Card>
 

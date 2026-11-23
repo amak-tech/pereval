@@ -18,7 +18,9 @@ export type CatalogCategory = {
   services: CatalogService[];
 };
 export type PoolInfo = { note: string; fallback: string | null; strict_allowlist: boolean; max_clients?: number | null };
-export type WorkerInfo = { ip: string; name: string; weight: number; pools: string[]; max_clients?: number | null };
+export type RegionInfo = { name: string; note?: string };
+export type WorkerInfo = { ip: string; name: string; weight: number; pools: string[]; max_clients?: number | null; region?: string };
+export type ProRegionOption = { code: string; name: string; note?: string; pools: string[] };
 
 export type Catalog = {
   /** cert_domains — имена единого wildcard-сертификата инфраструктуры */
@@ -40,6 +42,7 @@ export type Catalog = {
     dot_host_template: string;
     max_clients?: number | null;
     pools: Record<string, PoolInfo>;
+    regions?: Record<string, RegionInfo>;
     workers: WorkerInfo[];
   } | null;
   categories: CatalogCategory[];
@@ -71,6 +74,35 @@ export function categoryById(id: string): CatalogCategory | undefined {
 
 export function allCategoryIds(): string[] {
   return catalog.categories.map((c) => c.id);
+}
+
+/** Регионы Pro, в которых есть хотя бы один воркер, со списком покрываемых пулов. */
+export function availableProRegions(pro: Catalog["pro"] = catalog.pro): ProRegionOption[] {
+  if (!pro) return [];
+  const regions = pro.regions ?? {};
+  const workers = pro.workers ?? [];
+  const poolOrder = Object.keys(pro.pools ?? {});
+  const out: ProRegionOption[] = [];
+  for (const [code, info] of Object.entries(regions)) {
+    const poolSet = new Set<string>();
+    for (const w of workers) {
+      if (w.region === code) {
+        for (const p of w.pools) poolSet.add(p);
+      }
+    }
+    if (poolSet.size === 0) continue;
+    const pools = [
+      ...poolOrder.filter((p) => poolSet.has(p)),
+      ...[...poolSet].filter((p) => !poolOrder.includes(p)),
+    ];
+    out.push({
+      code,
+      name: info.name,
+      ...(info.note ? { note: info.note } : {}),
+      pools,
+    });
+  }
+  return out;
 }
 
 /** Человекочитаемое имя пула («локация») для UI. */

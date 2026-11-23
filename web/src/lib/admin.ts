@@ -283,6 +283,7 @@ export type UserDetail = {
   boundIps: (typeof schema.boundIps.$inferSelect)[];
   ddnsKey: { createdAt: Date; lastUsedAt: Date | null } | null;
   disabledCategories: string[];
+  preferredRegion: string | null;
   activity: { day: string; devices: number; queries: number }[];
   aclDynamic: { ip: string; expiresAt: Date }[];
   webhooks: (typeof schema.webhookEvents.$inferSelect)[];
@@ -343,6 +344,7 @@ export async function userDetail(userId: string, now: Date = new Date()): Promis
     boundIps,
     ddnsKey: ddnsKey ?? null,
     disabledCategories: policy?.disabledCategories ?? [],
+    preferredRegion: policy?.preferredRegion ?? null,
     activity,
     aclDynamic: aclDynamic.map((a) => ({ ip: String(a.ip), expiresAt: a.expiresAt })),
     webhooks,

@@ -2,7 +2,7 @@ import { and, desc, eq, gt, isNull, sql as dsql } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { env } from "@/lib/env";
 import { HttpError } from "@/lib/http";
-import { catalog, allCategoryIds } from "@/lib/catalog";
+import { catalog, allCategoryIds, availableProRegions, type ProRegionOption } from "@/lib/catalog";
 import { accessUntil, dnsMode } from "@/lib/subscription";
 import { bumpPolicyVersion } from "@/lib/policy";
 import { bumpAclVersion } from "@/lib/acl";
@@ -34,6 +34,8 @@ export type AccountSummary = {
   lastDnsIpHash: string | null;
   ddns: { login: string; hasKey: boolean; updateUrl: string };
   categories: { id: string; name: string; tier: string; pool: string; enabled: boolean; serviceCount: number }[];
+  preferredRegion: string | null;
+  regions: ProRegionOption[];
   activity: { devices24h: number; queries24h: number; lastSeen: string | null };
 };
 
@@ -68,6 +70,9 @@ export async function accountSummary(userId: string, email: string, detectedIp: 
 
   const proDomain = catalog.pro?.domain ?? e.PRO_DOMAIN;
   const dnsIp = catalog.pro?.dns_ip ?? e.PRO_DNS_IP;
+  const regions = availableProRegions();
+  const validRegions = new Set(regions.map((r) => r.code));
+  const preferredRegion = policy?.preferredRegion && validRegions.has(policy.preferredRegion) ? policy.preferredRegion : null;
   return {
     email,
     subscription: {
@@ -109,6 +114,8 @@ export async function accountSummary(userId: string, email: string, detectedIp: 
       enabled: !disabled.has(c.id),
       serviceCount: c.services.length,
     })),
+    preferredRegion,
+    regions,
     activity: { devices24h: act?.devices ?? 0, queries24h: act?.queries ?? 0, lastSeen: act?.last ? new Date(act.last).toISOString() : null },
   };
 }
@@ -185,6 +192,25 @@ export async function setDisabledCategories(userId: string, disabled: string[]):
     .values({ userId, disabledCategories: clean, updatedAt: new Date() })
     .onConflictDoUpdate({ target: schema.userPolicy.userId, set: { disabledCategories: clean, updatedAt: new Date() } });
   await bumpPolicyVersion("categories");
+  return clean;
+}
+
+export async function setPreferredRegion(userId: string, region: string | null): Promise<string | null> {
+  let clean: string | null = null;
+  if (region !== null) {
+    const code = region.trim().toLowerCase();
+    const known = new Set(availableProRegions().map((r) => r.code));
+    if (!known.has(code)) {
+      throw new HttpError(400, "Неизвестный или недоступный регион.", "bad_region");
+    }
+    clean = code;
+  }
+  const now = new Date();
+  await db()
+    .insert(schema.userPolicy)
+    .values({ userId, disabledCategories: [], preferredRegion: clean, updatedAt: now })
+    .onConflictDoUpdate({ target: schema.userPolicy.userId, set: { preferredRegion: clean, updatedAt: now } });
+  await bumpPolicyVersion("region");
   return clean;
 }
 
