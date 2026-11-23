@@ -88,6 +88,10 @@ nodes:
       name: free-worker-ai-3
       pools: [ ai ]
 
+    - ip: 151.247.25.223
+      name: free-worker-ai-4
+      pools: [ ai ]
+
 dnsmasq_options:
   - listen-address=0.0.0.0
   - port=53
