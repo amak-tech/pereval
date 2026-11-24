@@ -14,10 +14,16 @@ export default async function AdminOverviewPage() {
   const o = await adminOverview(now);
   const staleNodes = o.nodes.filter((n) => n.stale);
   const overloadedNodes = (o.nodewatch?.nodes ?? []).filter((n) => n.overloaded);
+  const blockedNodes = (o.blockwatch?.nodes ?? []).filter((n) => n.status === "blocked" || n.status === "degraded" || n.status === "skewed" || n.status === "down");
   const failedSupercell = (o.supercellwatch?.upstreams ?? []).filter((u) => !u.ok);
   const supercellCollisions = o.supercellwatch?.collisions ?? [];
   const problems: { text: string; href: string }[] = [];
   if (staleNodes.length) problems.push({ text: `Ноды без связи >10 мин: ${staleNodes.map((n) => n.name).join(", ")}`, href: "/admin/infra" });
+  if (blockedNodes.length)
+    problems.push({
+      text: `Возможная блокировка / недоступность нод из РФ: ${blockedNodes.map((n) => `${n.name} (${n.ip}: ${n.status})`).join(", ")}`,
+      href: "/admin/infra",
+    });
   if (overloadedNodes.length)
     problems.push({
       text: `Перегрузка нод (клиентов ≥ порога): ${overloadedNodes.map((n) => `${n.name} (${n.onlineUsers5m}/${n.maxClients})`).join(", ")}`,

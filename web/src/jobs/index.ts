@@ -9,6 +9,7 @@ import { refreshDdnsHosts } from "@/lib/ddns";
 import { reconcileSubscriptions } from "@/lib/billing";
 import { checkCertificate } from "@/jobs/certwatch";
 import { checkNodesLoad } from "@/jobs/nodewatch";
+import { checkNodesBlocking } from "@/jobs/blockwatch";
 import { checkSupercellUpstreams } from "@/jobs/supercellwatch";
 import { sendDailyDigest } from "@/jobs/digest";
 import { cleanupRetention } from "@/jobs/retention";
@@ -20,6 +21,7 @@ const jobs: Job[] = [
   { name: "acl-expire", everyMs: 30_000, run: () => expireDynamicAcl(), last: 0, running: false },
   { name: "ddns", everyMs: 60_000, run: () => refreshDdnsHosts(), last: 0, running: false },
   { name: "nodewatch", everyMs: 60_000, run: () => checkNodesLoad(), last: 0, running: false },
+  { name: "blockwatch", everyMs: 30 * 60_000, run: () => checkNodesBlocking(), last: 0, running: false },
   { name: "reconcile", everyMs: 6 * 3_600_000, run: () => reconcileSubscriptions(), last: 0, running: false },
   { name: "certwatch", everyMs: 12 * 3_600_000, run: () => checkCertificate(), last: 0, running: false },
   { name: "supercellwatch", everyMs: 12 * 3_600_000, run: () => checkSupercellUpstreams(), last: 0, running: false },

@@ -29,6 +29,7 @@ const schema = z.object({
   MAX_BOUND_IPS: z.coerce.number().int().min(1).max(20).default(3),
   NODE_MAX_CLIENTS: z.coerce.number().int().min(1).max(100_000).default(150),
   NODE_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(360),
+  BLOCK_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(360),
 
   LAVA_API_KEY: z.string().default(""),
   LAVA_BASE_URL: z.string().url().default("https://gate.lava.top"),

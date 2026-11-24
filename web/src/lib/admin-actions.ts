@@ -22,6 +22,7 @@ export const adminActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("node.enabled"), id, enabled: z.boolean() }),
   z.object({ action: z.literal("node.delete"), id }),
   z.object({ action: z.literal("nodes.push"), what: z.enum(["policy", "acl"]) }),
+  z.object({ action: z.literal("blockwatch.check") }),
   z.object({ action: z.literal("settings.node_max_clients"), maxClients: z.coerce.number().int().min(1).max(100_000) }),
   z.object({ action: z.literal("mail.retry"), id }),
   z.object({ action: z.literal("mail.delete"), id }),
@@ -85,6 +86,13 @@ export async function runAdminAction(who: admin.Admin, input: AdminAction): Prom
     case "nodes.push": {
       const v = await admin.pushToNodes(who, input.what);
       return { message: `Версия ${input.what} поднята до ${v}; ноды получат снапшот в течение секунды.` };
+    }
+    case "blockwatch.check": {
+      const r = await admin.runBlockWatchCheck(who);
+      const issues = r.blocked + r.degraded + r.skewed + r.down;
+      return {
+        message: `Проверено нод: ${r.checked}. Проблем: ${issues} (blocked: ${r.blocked}, degraded: ${r.degraded}, skewed: ${r.skewed}, down: ${r.down})${r.alerted.length ? `; алерты: ${r.alerted.join(", ")}` : ""}.`,
+      };
     }
     case "settings.node_max_clients": {
       const r = await admin.setNodeMaxClients(who, input.maxClients);

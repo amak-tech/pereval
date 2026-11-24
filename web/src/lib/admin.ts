@@ -20,6 +20,7 @@ import {
   NODE_MAX_CLIENTS_SETTING_KEY,
   type NodeWatchReport,
 } from "@/jobs/nodewatch";
+import { checkNodesBlocking, getBlockWatchStatus, type BlockWatchReport } from "@/jobs/blockwatch";
 import { getSupercellWatchStatus, type SupercellWatchReport } from "@/jobs/supercellwatch";
 import type { NodeKind, SubscriptionStatus } from "@/lib/db/schema";
 import { NODE_KINDS } from "@/lib/admin-constants";
@@ -94,6 +95,7 @@ export type AdminOverview = {
   webhooks: { errors7d: number; total7d: number };
   nodes: { id: string; name: string; kind: string; ip: string | null; enabled: boolean; lastSeenAt: Date | null; stale: boolean }[];
   nodewatch: NodeWatchReport | null;
+  blockwatch: BlockWatchReport | null;
   supercellwatch: SupercellWatchReport | null;
   cert: { daysLeft: number | null; notAfter: Date | null; names: string[] } | null;
   versions: { policy: number; acl: number };
@@ -109,7 +111,7 @@ export async function adminOverview(now: Date = new Date()): Promise<AdminOvervi
   const monthAgo = new Date(now.getTime() - 30 * 86_400_000);
   const count = dsql<number>`count(*)::int`;
 
-  const [[total], [new24h], [new7d], subsRows, states, [dns], revenue, [leads], mail, [wh], nodes, nodewatch, supercellwatch, cert, policyV, aclV, [acl], audit] = await Promise.all([
+  const [[total], [new24h], [new7d], subsRows, states, [dns], revenue, [leads], mail, [wh], nodes, nodewatch, blockwatch, supercellwatch, cert, policyV, aclV, [acl], audit] = await Promise.all([
     db().select({ n: count }).from(schema.users),
     db().select({ n: count }).from(schema.usersMeta).where(gt(schema.usersMeta.createdAt, dayAgo)),
     db().select({ n: count }).from(schema.usersMeta).where(gt(schema.usersMeta.createdAt, weekAgo)),
@@ -140,6 +142,7 @@ export async function adminOverview(now: Date = new Date()): Promise<AdminOvervi
       .where(gt(schema.webhookEvents.receivedAt, weekAgo)),
     db().select().from(schema.nodes).orderBy(asc(schema.nodes.kind), asc(schema.nodes.name)),
     getNodeWatchStatus().catch(() => null),
+    getBlockWatchStatus().catch(() => null),
     getSupercellWatchStatus().catch(() => null),
     loadPublishedCert().catch(() => null),
     policyVersion(),
@@ -170,6 +173,7 @@ export async function adminOverview(now: Date = new Date()): Promise<AdminOvervi
       stale: n.enabled && (!n.lastSeenAt || now.getTime() - n.lastSeenAt.getTime() > NODE_STALE_MS),
     })),
     nodewatch,
+    blockwatch,
     supercellwatch,
     cert: cert ? { daysLeft: daysLeft(cert.notAfter, now), notAfter: cert.notAfter, names: cert.names } : null,
     versions: { policy: policyV, acl: aclV },
@@ -526,7 +530,13 @@ export async function pushToNodes(admin: Admin, what: "policy" | "acl"): Promise
   return v;
 }
 
-export { getDefaultNodeMaxClients, getNodeWatchStatus, getSupercellWatchStatus };
+export { getDefaultNodeMaxClients, getNodeWatchStatus, getBlockWatchStatus, getSupercellWatchStatus };
+
+export async function runBlockWatchCheck(admin: Admin) {
+  const res = await checkNodesBlocking();
+  await audit(admin, "admin.blockwatch_check", res);
+  return res;
+}
 
 export async function setNodeMaxClients(admin: Admin, maxClients: number): Promise<{ maxClients: number }> {
   const n = Math.floor(maxClients);

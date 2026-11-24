@@ -13,6 +13,7 @@
  *   webhook replay <id>           переиграть сохранённый вебхук
  *   cert names | cert status      имена единого сертификата (для deploy/issue-cert.sh) | что лежит на CP и что отдают хосты
  *   supercell status | check      последний сохранённый отчёт supercellwatch | выполнить проверку апстримов Supercell :9339
+ *   blockwatch status | check [ip...]  последний отчёт blockwatch | проверить доступность нод из РФ (или указанные IP без БД)
  *   policy | acl                  показать текущий снапшот
  */
 import { desc, eq } from "drizzle-orm";
@@ -116,6 +117,32 @@ async function main(argv: string[]): Promise<number> {
       for (const u of st.upstreams) console.log(sw.formatSupercellUpstreamLine(u));
       return 0;
     }
+    case "blockwatch": {
+      const [sub, ...ips] = rest;
+      const bw = await import("@/jobs/blockwatch");
+      if (sub === "check" && ips.length > 0) {
+        const entries = await bw.probeAdhocIps(ips);
+        for (const e of entries) console.log(bw.formatBlockWatchLine(e));
+        const hasProblem = entries.some((e) => e.status === "blocked" || e.status === "degraded" || e.status === "down");
+        return hasProblem ? 2 : 0;
+      }
+      if (sub === "check") {
+        const res = await bw.checkNodesBlocking();
+        console.log(
+          `проверено: ${res.checked}, blocked: ${res.blocked}, degraded: ${res.degraded}, skewed: ${res.skewed}, down: ${res.down}, алерты: ${res.alerted.join(", ") || "нет"}`,
+        );
+      } else if (sub !== "status") {
+        throw new Error("blockwatch status | blockwatch check [ip...]");
+      }
+      const st = await bw.getBlockWatchStatus();
+      if (!st) {
+        console.log("blockwatch ещё не запускался (выполните: pnpm admin blockwatch check)");
+        return 0;
+      }
+      console.log(`проверка: ${st.checkedAt}; RU-узлы: ${st.ruNodes.join(", ")}`);
+      for (const n of st.nodes) console.log(bw.formatBlockWatchLine(n));
+      return 0;
+    }
     case "webhook": {
       const [sub, id] = rest;
       if (sub !== "replay" || !id) throw new Error("webhook replay <id>");
@@ -130,14 +157,14 @@ async function main(argv: string[]): Promise<number> {
       console.log(JSON.stringify(await buildAclSnapshot(), null, 2));
       return 0;
     default:
-      console.log("команды: users | subs | grant <email> <days> | revoke <email> | node add <name> <kind> [ip] | node list | resend-link <email> | webhook replay <id> | cert names|status | supercell status|check | policy | acl");
+      console.log("команды: users | subs | grant <email> <days> | revoke <email> | node add <name> <kind> [ip] | node list | resend-link <email> | webhook replay <id> | cert names|status | supercell status|check | blockwatch status|check [ip...] | policy | acl");
       return cmd ? 1 : 0;
   }
 }
 
 main(process.argv.slice(2))
   .then(async (code) => {
-    await sql().end({ timeout: 2 });
+    await sql().end({ timeout: 2 }).catch(() => undefined);
     process.exit(code);
   })
   .catch(async (err) => {

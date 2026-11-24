@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { requireAdminPage } from "@/lib/admin-auth";
-import { getDefaultNodeMaxClients, getNodeWatchStatus, getSupercellWatchStatus, listNodes, NODE_STALE_MS } from "@/lib/admin";
+import { getBlockWatchStatus, getDefaultNodeMaxClients, getNodeWatchStatus, getSupercellWatchStatus, listNodes, NODE_STALE_MS } from "@/lib/admin";
 import { collectMonitoredTargets } from "@/jobs/nodewatch";
+import { collectBlockWatchTargets, formatRuNodesShort } from "@/jobs/blockwatch";
 import { SUPERCELL_UPSTREAMS } from "@/jobs/supercellwatch";
 import { policyVersion } from "@/lib/policy";
 import { aclVersion, buildAclSnapshot } from "@/lib/acl";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminInfraPage() {
   await requireAdminPage();
   const now = new Date();
-  const [nodes, policyV, aclV, acl, cert, defaultMaxClients, nodewatch, supercellwatch] = await Promise.all([
+  const [nodes, policyV, aclV, acl, cert, defaultMaxClients, nodewatch, blockwatch, supercellwatch] = await Promise.all([
     listNodes(),
     policyVersion(),
     aclVersion(),
@@ -26,6 +27,7 @@ export default async function AdminInfraPage() {
     certStatus(now),
     getDefaultNodeMaxClients(),
     getNodeWatchStatus(),
+    getBlockWatchStatus(),
     getSupercellWatchStatus(),
   ]);
   const e = env();
@@ -39,6 +41,19 @@ export default async function AdminInfraPage() {
       activeConnections: null,
       overloaded: false,
       reachable: false,
+      checkedAt: "",
+      alertedAt: null,
+    }));
+  const blockRows =
+    blockwatch?.nodes ??
+    collectBlockWatchTargets().map((t) => ({
+      ...t,
+      cpReachable: true,
+      ruProbe: null,
+      trafficSkew: null,
+      status: "unknown" as const,
+      reason: "",
+      consecutiveBad: 0,
       checkedAt: "",
       alertedAt: null,
     }));
@@ -135,6 +150,71 @@ export default async function AdminInfraPage() {
         <div className="mt-4">
           <NodeMaxClientsForm defaultMaxClients={defaultMaxClients} />
         </div>
+      </Card>
+
+      <Card
+        title="Доступность из РФ и блокировки (blockwatch)"
+        actions={<ActionButton action={{ action: "blockwatch.check" }}>Проверить сейчас</ActionButton>}
+      >
+        <p className="m-0 mb-3 text-xs text-mute">
+          Задача <code>blockwatch</code> раз в 30 минут проверяет TCP <code>:443</code> всех DNS-нод и Free-воркеров с российских узлов <code>check-host.net</code> и отслеживает перекос трафика внутри пулов (в том числе для Pro-воркеров с nftables). Кулдаун алертов: {e.BLOCK_ALERT_COOLDOWN_MINUTES} мин.
+          {blockwatch?.checkedAt ? ` Последняя проверка: ${fmtDt(new Date(blockwatch.checkedAt))}.` : " Опрос ещё не выполнялся."}
+        </p>
+        <Table head={["Нода", "Кластер / Пулы", "IP", "RU-пробы (:443)", "Перекос пула", "Статус"]} empty="Ноды не найдены в каталоге.">
+          {blockRows.map((row) => (
+            <tr key={`${row.tier}:${row.kind}:${row.ip}`}>
+              <td className="font-semibold">{row.name}</td>
+              <td>
+                <Badge tone={row.tier === "pro" ? "accent" : "mute"}>{row.tier === "pro" ? "Pro" : "Free"}</Badge>{" "}
+                <span className="text-xs text-mute">{row.pools.join(", ")}</span>
+              </td>
+              <td>
+                <Mono>{row.ip}</Mono>
+              </td>
+              <td className="font-mono text-xs">
+                {!row.checkedAt ? "—" : row.probeTcp443 ? formatRuNodesShort(row.ruProbe) : <span className="text-mute">nftables (закрыт)</span>}
+              </td>
+              <td className="font-mono text-xs">
+                {row.trafficSkew ? (
+                  <span className={row.trafficSkew.skewed ? "font-semibold text-err" : ""}>
+                    {row.trafficSkew.onlineUsers5m}/{row.trafficSkew.baseline} ({Math.round(row.trafficSkew.ratio * 100)}%)
+                  </span>
+                ) : (
+                  <span className="text-mute">—</span>
+                )}
+              </td>
+              <td>
+                {!row.checkedAt ? (
+                  <span className="text-mute">ожидание опроса</span>
+                ) : row.status === "ok" ? (
+                  <span title={row.reason}>
+                    <Badge tone="ok">доступна</Badge>
+                  </span>
+                ) : row.status === "blocked" ? (
+                  <span title={row.reason}>
+                    <Badge tone="warn">заблокирована</Badge>
+                  </span>
+                ) : row.status === "degraded" ? (
+                  <span title={row.reason}>
+                    <Badge tone="warn">частично</Badge>
+                  </span>
+                ) : row.status === "skewed" ? (
+                  <span title={row.reason}>
+                    <Badge tone="warn">перекос</Badge>
+                  </span>
+                ) : row.status === "down" ? (
+                  <span title={row.reason}>
+                    <Badge tone="warn">недоступна</Badge>
+                  </span>
+                ) : (
+                  <span title={row.reason}>
+                    <Badge tone="mute">н/д</Badge>
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
       </Card>
 
       <Card title="Рукопожатия Supercell (:9339, supercellwatch)">
