@@ -117,11 +117,11 @@
       linear-gradient(180deg, #ffffff 0%, #f3f7fe 100%);
   }
   .card {
-    @apply rounded-[var(--radius-card)] border border-line bg-panel p-5 sm:p-6 transition-colors duration-200;
+    @apply min-w-0 rounded-[var(--radius-card)] border border-line bg-panel p-4 sm:p-6 transition-colors duration-200;
     box-shadow: var(--shadow-card);
   }
   .card-featured {
-    @apply rounded-[var(--radius-card)] border border-accent/35 p-5 sm:p-6 transition-colors duration-200;
+    @apply min-w-0 rounded-[var(--radius-card)] border border-accent/35 p-4 sm:p-6 transition-colors duration-200;
     background: linear-gradient(180deg, rgb(11 92 255 / 0.055) 0%, var(--panel) 44%);
     box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 20px 44px -24px rgb(11 92 255 / 0.24);
   }
@@ -157,7 +157,7 @@
     }
   }
   .chip {
-    @apply inline-flex items-center rounded-md border border-line bg-code px-2 py-0.5 font-mono text-[12px] text-ink/90;
+    @apply inline-flex max-w-full items-center break-all rounded-md border border-line bg-code px-2 py-0.5 font-mono text-[12px] text-ink/90;
   }
   .note {
     @apply rounded-r-xl border border-line border-l-[3px] border-l-warn bg-warn-bg px-4 py-3.5 text-[14.5px] leading-relaxed;

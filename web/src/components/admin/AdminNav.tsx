@@ -17,14 +17,14 @@ export function AdminNav() {
   const pathname = usePathname();
   const active = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
   return (
-    <nav className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0" aria-label="Разделы админ-панели">
-      <ul className="m-0 flex list-none gap-1 p-0">
+    <nav className="-mx-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0" aria-label="Разделы админ-панели">
+      <ul className="m-0 flex w-max min-w-full list-none gap-1 px-4 py-0.5 sm:w-auto sm:flex-wrap sm:px-0">
         {ADMIN_NAV.map((n) => (
           <li key={n.href} className="shrink-0">
             <Link
               href={n.href}
               aria-current={active(n.href) ? "page" : undefined}
-              className={`block rounded-full px-3 py-1.5 text-sm no-underline transition-colors ${active(n.href) ? "bg-accent-soft font-semibold text-accent" : "text-mute hover:text-ink"}`}
+              className={`block rounded-full px-3 py-1.5 text-sm whitespace-nowrap no-underline transition-colors ${active(n.href) ? "bg-accent-soft font-semibold text-accent" : "text-mute hover:text-ink"}`}
             >
               {n.label}
             </Link>

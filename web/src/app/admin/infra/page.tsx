@@ -89,7 +89,7 @@ export default async function AdminInfraPage() {
               </td>
               <td>{n.kind}</td>
               <td>
-                <Mono>{n.ip ?? "—"}</Mono>
+                <Mono nowrap>{n.ip ?? "—"}</Mono>
               </td>
               <td className={stale(n) ? "text-err" : n.enabled ? "text-ok" : "text-mute"}>
                 {ago(n.lastSeenAt, now)}
@@ -127,7 +127,7 @@ export default async function AdminInfraPage() {
                 <span className="text-xs text-mute">{row.pools.join(", ")}</span>
               </td>
               <td>
-                <Mono>{row.ip}</Mono>
+                <Mono nowrap>{row.ip}</Mono>
               </td>
               <td className={row.overloaded ? "font-semibold text-err" : ""}>
                 {row.onlineUsers5m !== null ? fmtN(row.onlineUsers5m) : "—"} / {fmtN(row.maxClients)}
@@ -169,7 +169,7 @@ export default async function AdminInfraPage() {
                 <span className="text-xs text-mute">{row.pools.join(", ")}</span>
               </td>
               <td>
-                <Mono>{row.ip}</Mono>
+                <Mono nowrap>{row.ip}</Mono>
               </td>
               <td className="font-mono text-xs">
                 {!row.checkedAt ? "—" : row.probeTcp443 ? formatRuNodesShort(row.ruProbe) : <span className="text-mute">nftables (закрыт)</span>}
@@ -242,8 +242,8 @@ export default async function AdminInfraPage() {
           ).map((u) => (
             <tr key={u.id}>
               <td className="font-semibold">{u.name}</td>
-              <td>
-                <Mono>
+              <td className="max-md:col-span-2">
+                <Mono className="md:whitespace-nowrap">
                   {u.host}:{u.port}
                 </Mono>
               </td>
@@ -267,10 +267,10 @@ export default async function AdminInfraPage() {
       </Card>
 
       <Card title="Единый сертификат">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Stat label="Эталон" value={cert.source === "cp" ? "файл на CP" : cert.source === "tls" ? "TLS сайта" : "не найден"} hint={cert.source === "cp" ? e.CERT_DIR : undefined} tone={cert.source ? undefined : "err"} />
           <Stat label="Осталось дней" value={cert.daysLeft ?? "?"} hint={cert.notAfter ? `до ${fmtD(cert.notAfter)}` : undefined} tone={certTone} />
-          <Stat label="Имена" value={<span className="text-sm">{cert.names.join(", ") || "?"}</span>} />
+          <Stat label="Имена" value={<span className="text-sm">{cert.names.join(", ") || "?"}</span>} className="col-span-2 sm:col-span-1" />
         </div>
         <div className="mt-3">
           <Table head={["Хост", "Отдаёт до", "Дней", "Совпадает с эталоном"]}>
@@ -284,13 +284,13 @@ export default async function AdminInfraPage() {
             ))}
           </Table>
         </div>
-        <p className="m-0 mt-3 text-xs text-mute">
+        <p className="m-0 mt-3 break-words text-xs text-mute">
           Продление вручную на CP: <code className="chip">{renewCommand()}</code>; TXT-записи: {acmeTxtRecords().join("; ")}. Ноды заберут сертификат по таймеру в течение часа.
         </p>
       </Card>
 
       <Card title="Окружение control plane">
-        <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+        <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           {[
             ["PUBLIC_ORIGIN", e.PUBLIC_ORIGIN],
             ["Free DNS", `${catalog.free.domain} → ${e.FREE_DNS_IP}`],
@@ -301,9 +301,9 @@ export default async function AdminInfraPage() {
             ["SMTP", `${e.SMTP_HOST}:${e.SMTP_PORT} (${e.SMTP_USERNAME ? "с авторизацией" : "без логина"}) от ${e.MAIL_FROM}`],
             ["Админы", [...new Set(`${e.ADMIN_EMAILS},${e.ADMIN_EMAIL}`.split(",").map((s) => s.trim()).filter(Boolean))].join(", ")],
           ].map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-3 border-b border-line py-1">
-              <dt className="text-mute">{k}</dt>
-              <dd className="m-0 text-right font-semibold">{v}</dd>
+            <div key={k} className="flex flex-col gap-0.5 border-b border-line py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 sm:py-1.5">
+              <dt className="shrink-0 text-xs text-mute sm:text-sm">{k}</dt>
+              <dd className="m-0 min-w-0 break-words font-semibold sm:text-right">{v}</dd>
             </div>
           ))}
         </dl>

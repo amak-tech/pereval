@@ -110,7 +110,7 @@ export function AccountDashboard() {
   const proxyOn = st.mode === "proxy";
 
   return (
-    <div className="mt-6 grid gap-6">
+    <div className="mt-6 grid min-w-0 grid-cols-1 gap-6">
       {renewPhase ? <PaymentProgress phase={renewPhase} onCancel={cancelRenew} /> : null}
       {notice ? (
         <div className="rounded-xl border border-warn bg-warn-bg px-4 py-3 text-warn" role="status">
@@ -488,7 +488,7 @@ function BoundIpsCard({ data, busy, run }: { data: Summary; busy: string | null;
               value={host}
               onChange={(e) => setHost(e.target.value)}
               placeholder="home.duckdns.org"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-sm"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-base sm:text-sm"
               aria-label="DDNS-имя"
             />
             <button type="submit" className="btn-secondary !px-3" disabled={busy === "ip"}>

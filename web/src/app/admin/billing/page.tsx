@@ -38,24 +38,24 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
           </>
         }
       >
-        <dl className="m-0 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-          <div className="flex justify-between gap-3 border-b border-line py-1">
-            <dt className="text-mute">Режим</dt>
-            <dd className="m-0 font-semibold">{isMock() ? "LAVA_MOCK (эмуляция)" : e.LAVA_API_KEY ? "боевой" : "API-ключ не задан"}</dd>
+        <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+          <div className="flex flex-col gap-0.5 border-b border-line py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 sm:py-1.5">
+            <dt className="shrink-0 text-xs text-mute sm:text-sm">Режим</dt>
+            <dd className="m-0 min-w-0 break-words font-semibold sm:text-right">{isMock() ? "LAVA_MOCK (эмуляция)" : e.LAVA_API_KEY ? "боевой" : "API-ключ не задан"}</dd>
           </div>
-          <div className="flex justify-between gap-3 border-b border-line py-1">
-            <dt className="text-mute">Цены Pro (кеш {fmtDt(plans.fetchedAt)})</dt>
-            <dd className="m-0 font-semibold">{Object.entries(plans.pro).map(([c, a]) => `${a} ${c}`).join(" · ") || "нет"}</dd>
+          <div className="flex flex-col gap-0.5 border-b border-line py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 sm:py-1.5">
+            <dt className="shrink-0 text-xs text-mute sm:text-sm">Цены Pro (кеш {fmtDt(plans.fetchedAt)})</dt>
+            <dd className="m-0 min-w-0 break-words font-semibold sm:text-right">{Object.entries(plans.pro).map(([c, a]) => `${a} ${c}`).join(" · ") || "нет"}</dd>
           </div>
-          <div className="flex justify-between gap-3 border-b border-line py-1">
-            <dt className="text-mute">Продукт / оффер</dt>
-            <dd className="m-0">
+          <div className="flex flex-col gap-0.5 border-b border-line py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 sm:py-1.5">
+            <dt className="shrink-0 text-xs text-mute sm:text-sm">Продукт / оффер</dt>
+            <dd className="m-0 min-w-0 break-words sm:text-right">
               <Mono>{e.LAVA_PRODUCT_ID_PRO || "—"}</Mono> / <Mono>{e.LAVA_OFFER_ID_PRO || "—"}</Mono>
             </dd>
           </div>
-          <div className="flex justify-between gap-3 border-b border-line py-1">
-            <dt className="text-mute">Вебхук</dt>
-            <dd className="m-0 font-semibold">
+          <div className="flex flex-col gap-0.5 border-b border-line py-2 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3 sm:py-1.5">
+            <dt className="shrink-0 text-xs text-mute sm:text-sm">Вебхук</dt>
+            <dd className="m-0 min-w-0 break-words font-semibold sm:text-right">
               {e.LAVA_WEBHOOK_KEY ? "ключ задан" : "ключ не задан"} · IP-фильтр: {e.LAVA_WEBHOOK_IP_MODE}
             </dd>
           </div>
@@ -63,12 +63,19 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
       </Card>
 
       <Card title={`Подписки · ${fmtN(subs.total)}`}>
-        <div className="flex flex-wrap gap-2 text-sm">
-          <Link href="/admin/billing" className={!status ? "font-semibold" : ""}>
+        <div className="flex flex-wrap gap-1.5 text-sm">
+          <Link
+            href="/admin/billing"
+            className={`rounded-full px-2.5 py-1 text-xs no-underline transition-colors sm:text-sm ${!status ? "bg-accent-soft font-semibold text-accent" : "bg-bg text-mute hover:text-ink"}`}
+          >
             все
           </Link>
           {STATUSES.map((s) => (
-            <Link key={s} href={`/admin/billing?status=${s}`} className={status === s ? "font-semibold" : ""}>
+            <Link
+              key={s}
+              href={`/admin/billing?status=${s}`}
+              className={`rounded-full px-2.5 py-1 text-xs no-underline transition-colors sm:text-sm ${status === s ? "bg-accent-soft font-semibold text-accent" : "bg-bg text-mute hover:text-ink"}`}
+            >
               {s}
             </Link>
           ))}
@@ -100,7 +107,7 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
           {invoices.map((i) => (
             <tr key={i.id}>
               <td className="whitespace-nowrap">{fmtDt(i.createdAt)}</td>
-              <td>{i.userId ? <Link href={`/admin/users/${i.userId}`}>{i.email}</Link> : i.email}</td>
+              <td className="max-md:col-span-2">{i.userId ? <Link href={`/admin/users/${i.userId}`}>{i.email}</Link> : i.email}</td>
               <td>{i.kind}</td>
               <td>
                 <Badge tone={i.status === "completed" || i.status === "subscription-active" ? "ok" : i.status === "failed" || i.status === "duplicate" ? "warn" : "mute"}>{i.status}</Badge>
@@ -132,7 +139,7 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
               </td>
               <td>{w.error ? <span className="text-err">{w.error}</span> : w.processedAt ? <Badge tone="ok">ok · {fmtD(w.processedAt)}</Badge> : <Badge tone="warn">не обработан</Badge>}</td>
               <td>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <JsonDetails summary="payload" value={w.payload} />
                   <ActionButton action={{ action: "webhook.replay", id: w.id }} confirm="Обработать событие заново? Обработчики идемпотентны, но письма пользователю могут уйти повторно.">
                     Переиграть

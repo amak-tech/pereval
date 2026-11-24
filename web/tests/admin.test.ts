@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect } from "vitest";
+import { Mono, Table } from "@/components/admin/ui";
 import { bestSubscription, grantPeriodEnd, parseAdminEmails } from "@/lib/admin";
 import { adminActionSchema } from "@/lib/admin-actions";
 import { buildPolicyEntry } from "@/lib/policy";
@@ -78,3 +81,40 @@ describe("buildPolicyEntry (флаг is_admin для Pro DNS)", () => {
     expect("is_admin" in userEntry).toBe(false);
   });
 });
+
+describe("Table & Mono (мобильная адаптация админ-панели)", () => {
+  it("рендерит мобильные подписи колонок, span для заголовка/действий и скрывает пустые ячейки на смартфонах", () => {
+    const row1 = createElement(
+      "tr",
+      { key: "n1" },
+      createElement("td", { className: "font-semibold" }, "pro-worker-ai-1"),
+      createElement("td", null, "pro_worker"),
+      createElement("td", null, createElement(Mono, { nowrap: true }, "153.80.200.170")),
+      createElement("td", null, createElement("button", { type: "button" }, "Отключить")),
+    );
+    const row2 = createElement(
+      "tr",
+      { key: "n2" },
+      createElement("td", null, "primary"),
+      createElement("td", null, "free_primary"),
+      createElement("td", null, createElement(Mono, { nowrap: true }, "85.209.148.147")),
+      createElement("td", null, null),
+    );
+    const html = renderToStaticMarkup(createElement(Table, { head: ["Нода", "Тип", "IP", ""] }, row1, row2));
+
+    expect(html).toContain(">Нода</span>");
+    expect(html).toContain(">Тип</span>");
+    expect(html).toContain(">IP</span>");
+    expect(html).toContain("md:whitespace-nowrap");
+    expect(html).toContain("max-md:col-span-2 max-md:border-b");
+    expect(html).toContain("max-md:col-span-2 max-md:border-t");
+    expect(html).toContain("max-md:hidden");
+  });
+
+  it("показывает текст empty, если строк нет", () => {
+    const html = renderToStaticMarkup(createElement(Table, { head: ["Email"], empty: "Никого не найдено." }));
+    expect(html).toContain("Никого не найдено.");
+    expect(html).not.toContain("<table");
+  });
+});
+

@@ -31,7 +31,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
 
       <Card
         title={
-          <span className="flex flex-wrap items-center gap-2">
+          <span className="flex flex-wrap items-center gap-2 break-all sm:break-words">
             {d.user.email} <ModeBadge mode={d.mode} />
           </span>
         }
@@ -46,11 +46,11 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
           </>
         }
       >
-        <div className="grid gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Доступ до" value={d.accessUntil ? fmtD(d.accessUntil) : "—"} tone={d.mode === "proxy" ? "ok" : undefined} />
           <Stat label="Зарегистрирован" value={fmtD(d.meta?.createdAt)} hint={d.accounts.length ? `вход: ${d.accounts.map((a) => a.provider).join(", ")}` : "вход по ссылке"} />
           <Stat label="Последний вход" value={fmtD(d.meta?.lastLoginAt)} hint={d.meta?.lastLoginAt ? ago(d.meta.lastLoginAt, now) : undefined} />
-          <Stat label="ID" value={<Mono>{d.user.id.slice(0, 8)}…</Mono>} hint={d.user.name ?? undefined} />
+          <Stat label="ID" value={<Mono nowrap>{d.user.id.slice(0, 8)}…</Mono>} hint={d.user.name ?? undefined} />
         </div>
         <div className="mt-4">
           <GrantForm userId={id} />
@@ -78,7 +78,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         </Table>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-2">
         <Card
           title="Доступ: токен и адреса"
           actions={
@@ -119,7 +119,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
             {d.boundIps.map((b) => (
               <tr key={b.id}>
                 <td>
-                  <Mono>{b.ip ? String(b.ip) : "ожидает"}</Mono>
+                  <Mono nowrap>{b.ip ? String(b.ip) : "ожидает"}</Mono>
                 </td>
                 <td>
                   {b.kind}
@@ -205,7 +205,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         </Table>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-2">
         <Card title="Вебхуки по контрактам">
           <Table head={["Получен", "Тип", "Результат", ""]} empty="Вебхуков по контрактам пользователя нет.">
             {d.webhooks.map((w) => (
@@ -214,7 +214,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
                 <td className="font-mono text-xs">{w.eventType}</td>
                 <td>{w.error ? <span className="text-err">{w.error}</span> : w.processedAt ? <Badge tone="ok">ok</Badge> : <Badge tone="warn">не обработан</Badge>}</td>
                 <td>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <JsonDetails summary="payload" value={w.payload} />
                     {w.error ? <ActionButton action={{ action: "webhook.replay", id: w.id }}>Переиграть</ActionButton> : null}
                   </div>

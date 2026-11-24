@@ -63,7 +63,7 @@ export default async function AdminOverviewPage() {
       )}
 
       <Card title="Пользователи и подписки">
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <Stat label="Пользователей" value={fmtN(o.users.total)} hint={`+${o.users.new24h} за сутки · +${o.users.new7d} за неделю`} />
           <Stat label="Pro-доступ (proxy)" value={fmtN(o.proxyUsers)} hint="подписка действует" tone="ok" />
           <Stat label="active" value={fmtN(o.subs.active ?? 0)} />
@@ -79,12 +79,12 @@ export default async function AdminOverviewPage() {
         </div>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-2">
         <Card title="DNS за 24 часа">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Stat label="Пользователей" value={fmtN(o.dns.users24h)} />
             <Stat label="Устройств (IP-хэшей)" value={fmtN(o.dns.devices24h)} />
-            <Stat label="Запросов" value={fmtN(o.dns.queries24h)} />
+            <Stat label="Запросов" value={fmtN(o.dns.queries24h)} className="col-span-2 sm:col-span-1" />
           </div>
           <p className="m-0 mt-3 text-xs text-mute">
             Динамический ACL: {fmtN(o.aclDynamic)} IP · версии policy {o.versions.policy} / acl {o.versions.acl}. Free-кластер — на <Link href="/stats">/stats</Link>.
@@ -92,7 +92,7 @@ export default async function AdminOverviewPage() {
         </Card>
         <Card title="Деньги за 30 дней" actions={<Link href="/admin/billing" className="text-sm">Биллинг →</Link>}>
           {o.revenue30d.length ? (
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {o.revenue30d.map((r) => (
                 <Stat key={r.currency} label={`Оплачено, ${r.currency}`} value={`${Number(r.amount).toLocaleString("ru-RU")} ${r.currency}`} hint={`${r.count} платежей`} tone="ok" />
               ))}
@@ -106,7 +106,7 @@ export default async function AdminOverviewPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-5 sm:gap-6 lg:grid-cols-2">
         <Card title="Ноды" actions={<Link href="/admin/infra" className="text-sm">Инфраструктура →</Link>}>
           <Table head={["Нода", "Тип", "IP", "Контакт"]} empty="Ноды не зарегистрированы — добавьте на странице «Инфраструктура».">
             {o.nodes.map((n) => (
@@ -116,7 +116,7 @@ export default async function AdminOverviewPage() {
                   {!n.enabled ? <Badge tone="mute">off</Badge> : null}
                 </td>
                 <td>{n.kind}</td>
-                <td className="font-mono">{n.ip ?? "—"}</td>
+                <td className="whitespace-nowrap font-mono">{n.ip ?? "—"}</td>
                 <td className={n.stale ? "text-err" : "text-ok"}>{ago(n.lastSeenAt, now)}</td>
               </tr>
             ))}

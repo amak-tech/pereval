@@ -21,12 +21,12 @@ export default async function AdminLeadsPage({ searchParams }: { searchParams: P
         {rows.map((l) => (
           <tr key={l.id}>
             <td className="whitespace-nowrap">{fmtDt(l.createdAt)}</td>
-            <td className="break-all">
+            <td className="max-md:col-span-2 break-all">
               {l.userId ? <Link href={`/admin/users/${l.userId}`}>{l.email}</Link> : <a href={`mailto:${l.email}`}>{l.email}</a>}
             </td>
             <td>{PLAN_TITLES[l.plan] ?? l.plan}</td>
             <td>{SCENARIO_TITLES[l.scenario] ?? l.scenario}</td>
-            <td>{l.desiredServices.length ? l.desiredServices.join(", ") : "—"}</td>
+            <td className="max-md:col-span-2">{l.desiredServices.length ? l.desiredServices.join(", ") : "—"}</td>
             <td className="break-all">{l.contact || "—"}</td>
             <td className="text-xs text-mute">{l.page || "—"}</td>
           </tr>

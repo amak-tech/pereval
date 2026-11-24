@@ -21,8 +21,19 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
   return (
     <Card title={`Пользователи · ${fmtN(total)}`}>
       <form method="get" className="flex flex-wrap items-center gap-2">
-        <input name="q" defaultValue={q} placeholder="поиск по email" className="w-64 rounded-lg border border-line bg-bg px-3 py-1.5 text-sm text-ink outline-none focus:border-accent" aria-label="Поиск по email" />
-        <select name="status" defaultValue={statusRaw} className="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm text-ink" aria-label="Статус подписки">
+        <input
+          name="q"
+          defaultValue={q}
+          placeholder="поиск по email"
+          className="w-full rounded-lg border border-line bg-bg px-3 py-1.5 text-base text-ink outline-none focus:border-accent sm:w-64 sm:text-sm"
+          aria-label="Поиск по email"
+        />
+        <select
+          name="status"
+          defaultValue={statusRaw}
+          className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-1.5 text-base text-ink sm:flex-none sm:text-sm"
+          aria-label="Статус подписки"
+        >
           <option value="">все статусы</option>
           {USER_STATUS_FILTERS.map((s) => (
             <option key={s} value={s}>
@@ -30,11 +41,11 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
             </option>
           ))}
         </select>
-        <button type="submit" className="btn-secondary !px-3 !py-1.5 !text-xs">
+        <button type="submit" className="btn-secondary !px-3.5 !py-2 !text-xs sm:!py-1.5">
           Найти
         </button>
         {q || status ? (
-          <Link href="/admin/users" className="text-xs">
+          <Link href="/admin/users" className="px-1 py-1 text-xs">
             сбросить
           </Link>
         ) : null}

@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const ym = /^\d+$/.test(ymRaw) ? Number(ymRaw) : null;
   return (
     <html lang="ru" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-dvh flex flex-col">
+      <body className="min-h-dvh flex flex-col overflow-x-clip">
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-panel focus:px-3 focus:py-2 focus:shadow"
@@ -52,7 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           К содержимому
         </a>
         <SiteHeader />
-        <main id="main" className="flex-1">
+        <main id="main" className="min-w-0 flex-1">
           {children}
         </main>
         <SiteFooter />

@@ -84,14 +84,14 @@ export function ActionButton({
   );
 }
 
-const input = "rounded-lg border border-line bg-bg px-3 py-1.5 text-sm text-ink outline-none focus:border-accent";
+const input = "rounded-lg border border-line bg-bg px-3 py-1.5 text-base text-ink outline-none focus:border-accent sm:text-sm";
 
 export function GrantForm({ userId }: { userId: string }) {
   const a = useAdminAction();
   const [days, setDays] = useState("30");
   return (
     <form
-      className="grid gap-2"
+      className="grid grid-cols-1 gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         void a.run({ action: "user.grant", userId, days: Number(days) });
@@ -102,10 +102,10 @@ export function GrantForm({ userId }: { userId: string }) {
           Дней
           <input type="number" min={1} max={3660} value={days} onChange={(e) => setDays(e.target.value)} className={`${input} w-24`} />
         </label>
-        <button type="submit" className="btn-primary !px-3 !py-1.5 !text-xs" disabled={a.busy}>
+        <button type="submit" className="btn-primary !px-3 !py-2 !text-xs sm:!py-1.5" disabled={a.busy}>
           Выдать / продлить доступ
         </button>
-        <span className="text-xs text-mute">30 дней = календарный месяц; срок добавляется к текущему, если он не истёк.</span>
+        <span className="w-full text-xs text-mute sm:w-auto">30 дней = календарный месяц; срок добавляется к текущему, если он не истёк.</span>
       </div>
       <Outcome result={a.result} error={a.error} />
     </form>
@@ -119,20 +119,20 @@ export function AddNodeForm() {
   const [ip, setIp] = useState("");
   return (
     <form
-      className="grid gap-2"
+      className="grid grid-cols-1 gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         void a.run({ action: "node.add", name: name.trim(), kind, ip: ip.trim() || undefined });
       }}
     >
-      <div className="flex flex-wrap items-end gap-2">
+      <div className="grid grid-cols-1 gap-2.5 sm:flex sm:flex-wrap sm:items-end sm:gap-2">
         <label className="grid gap-1 text-xs text-mute">
           Имя
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="pro-worker-2" required className={`${input} w-40`} />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="pro-worker-2" required className={`${input} w-full sm:w-40`} />
         </label>
         <label className="grid gap-1 text-xs text-mute">
           Тип
-          <select value={kind} onChange={(e) => setKind(e.target.value)} className={`${input} w-40`}>
+          <select value={kind} onChange={(e) => setKind(e.target.value)} className={`${input} w-full sm:w-40`}>
             {NODE_KINDS.map((k) => (
               <option key={k} value={k}>
                 {k}
@@ -142,9 +142,9 @@ export function AddNodeForm() {
         </label>
         <label className="grid gap-1 text-xs text-mute">
           IP (необязательно)
-          <input value={ip} onChange={(e) => setIp(e.target.value)} placeholder="203.0.113.10" className={`${input} w-40`} />
+          <input value={ip} onChange={(e) => setIp(e.target.value)} placeholder="203.0.113.10" className={`${input} w-full sm:w-40`} />
         </label>
-        <button type="submit" className="btn-primary !px-3 !py-1.5 !text-xs" disabled={a.busy}>
+        <button type="submit" className="btn-primary w-full !px-3 !py-2 !text-xs sm:w-auto sm:!py-1.5" disabled={a.busy}>
           Зарегистрировать ноду
         </button>
       </div>
@@ -158,14 +158,14 @@ export function NodeMaxClientsForm({ defaultMaxClients }: { defaultMaxClients: n
   const [maxClients, setMaxClients] = useState(String(defaultMaxClients));
   return (
     <form
-      className="grid gap-2"
+      className="grid grid-cols-1 gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         void a.run({ action: "settings.node_max_clients", maxClients: Number(maxClients) });
       }}
     >
       <div className="flex flex-wrap items-end gap-2">
-        <label className="grid gap-1 text-xs text-mute">
+        <label className="grid w-full gap-1 text-xs text-mute sm:w-auto">
           Глобальный порог клиентов на ноду (5 мин)
           <input
             type="number"
@@ -174,10 +174,10 @@ export function NodeMaxClientsForm({ defaultMaxClients }: { defaultMaxClients: n
             value={maxClients}
             onChange={(e) => setMaxClients(e.target.value)}
             required
-            className={`${input} w-44`}
+            className={`${input} w-full sm:w-44`}
           />
         </label>
-        <button type="submit" className="btn-primary !px-3 !py-1.5 !text-xs" disabled={a.busy}>
+        <button type="submit" className="btn-primary w-full !px-3 !py-2 !text-xs sm:w-auto sm:!py-1.5" disabled={a.busy}>
           Сохранить порог
         </button>
         <span className="text-xs text-mute">
