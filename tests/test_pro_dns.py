@@ -165,6 +165,43 @@ class DecisionTests(unittest.TestCase):
         qch = dnscommon.parse_question(tu.make_query("claude.ai", 1, qclass=3))
         self.assertEqual(srv.decide(qch, ident), (pro_dns.D_FORWARD, "class"))
 
+    def test_check_beacon_decisions_pro_and_free(self):
+        pm = dict(POLICY_MAP, check_domain="check.pereval.test", check_ip="198.51.100.53")
+        srv = make_server(self.tmp, policy_map=pm)
+
+        # proxy -> A синтезируется на check_ip, AAAA/HTTPS/SVCB -> NODATA, TXT -> forward
+        proxy_id = srv.identify_token(TOK_PROXY, "1.1.1.1")
+        self.assertEqual(srv.decide(self.q("check.pereval.test"), proxy_id), (pro_dns.D_SYNTH_A, "198.51.100.53"))
+        self.assertEqual(srv.decide(self.q("CHECK.PEREVAL.TEST."), proxy_id), (pro_dns.D_SYNTH_A, "198.51.100.53"))
+        for qt in (dnscommon.QTYPE_AAAA, dnscommon.QTYPE_HTTPS, dnscommon.QTYPE_SVCB):
+            self.assertEqual(srv.decide(self.q("check.pereval.test", qt), proxy_id), (pro_dns.D_NODATA, "check.pereval.test"))
+        self.assertEqual(
+            srv.decide(self.q("check.pereval.test", dnscommon.QTYPE_TXT), proxy_id),
+            (pro_dns.D_FORWARD, "qtype"),
+        )
+        # поддомен маячка не перехватывается
+        self.assertEqual(srv.decide(self.q("sub.check.pereval.test"), proxy_id), (pro_dns.D_FORWARD, "nomatch"))
+
+        # plain -> форвард в публичный DNS (клиент попадёт на CP -> tier: none)
+        plain_id = srv.identify_token(TOK_PLAIN, "1.1.1.1")
+        self.assertEqual(srv.decide(self.q("check.pereval.test"), plain_id, now=2000.0), (pro_dns.D_FORWARD, "plain"))
+
+        # deny / unknown -> REFUSED
+        deny_id = srv.identify_token(TOK_DENY, "1.1.1.1")
+        self.assertEqual(srv.decide(self.q("check.pereval.test"), deny_id), (pro_dns.D_REFUSED, "deny"))
+        unk_id = srv.identify_token(TOK_UNKNOWN, "1.1.1.1")
+        self.assertEqual(srv.decide(self.q("check.pereval.test"), unk_id), (pro_dns.D_REFUSED, "unknown"))
+
+        # --tier free: любой клиент получает check_ip для A и NODATA для AAAA
+        pm_free = dict(POLICY_MAP, tier="free", check_domain="check.pereval.test", check_ip="153.80.200.170")
+        srv_free = make_server(self.tmp, extra_argv=["--tier", "free"], policy_map=pm_free)
+        free_id = srv_free.identify_ip("198.51.100.42")
+        self.assertEqual(srv_free.decide(self.q("check.pereval.test"), free_id), (pro_dns.D_SYNTH_A, "153.80.200.170"))
+        self.assertEqual(
+            srv_free.decide(self.q("check.pereval.test", dnscommon.QTYPE_AAAA), free_id),
+            (pro_dns.D_NODATA, "check.pereval.test"),
+        )
+
     def test_rate_limit(self):
         srv = self.srv
         plain = srv.identify_token(TOK_PLAIN, "1.1.1.1")  # qps_limit=2, burst x2 = 4

@@ -1006,6 +1006,7 @@ def cluster_nodes_json(doc, primary_ip):
         ("primary", primary_ip),
         ("domain", domain),
         ("free_domains", free_domains(doc)),
+        ("check_domain", check_domain(doc)),
         ("site_origin", doc.meta.get("origin", "").rstrip("/")),
         ("cert_domains", cert_domains(doc)),
         ("include_primary_in_dns", bool(doc.nodes.include_primary_in_dns)),
@@ -1026,6 +1027,7 @@ def pro_nodes_json(doc):
         ("domain", doc.pro.domain),
         ("dns_ip", doc.pro.dns_ip),
         ("cp_ip", doc.pro.cp_ip),
+        ("check_domain", check_domain(doc)),
         ("site_origin", doc.meta.get("origin", "").rstrip("/")),
         ("cert_domains", cert_domains(doc)),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
@@ -1053,6 +1055,8 @@ def free_policy_map_json(doc, primary_ip):
         ("tier", "free"),
         ("domain", domain),
         ("free_domains", free_domains(doc)),
+        ("check_domain", check_domain(doc)),
+        ("check_ip", primary_ip),
         ("dns_ip", primary_ip),
         ("primary", primary_ip),
         ("include_primary_in_dns", bool(doc.nodes.include_primary_in_dns)),
@@ -1101,6 +1105,8 @@ def pro_policy_map_json(doc):
     payload = OrderedDict([
         ("tier", "pro"),
         ("domain", doc.pro.domain),
+        ("check_domain", check_domain(doc)),
+        ("check_ip", doc.pro.dns_ip),
         ("dns_ip", doc.pro.dns_ip),
         ("probe_sni", doc.nodes.probe_sni or "claude.ai"),
         ("max_clients", doc.pro.max_clients),
@@ -1168,6 +1174,7 @@ def services_json(doc, primary_ip):
         ("meta", OrderedDict([
             ("name", doc.meta.get("name", "")),
             ("origin", doc.meta.get("origin", "").rstrip("/")),
+            ("check_domain", check_domain(doc)),
             ("cert_domains", cert_domains(doc)),
         ])),
         ("free", OrderedDict([
@@ -1242,6 +1249,12 @@ def site_domain(doc):
     return host
 
 
+def check_domain(doc):
+    """Служебный домен-маячок диагностики DNS: check.<site_domain>."""
+    site = site_domain(doc)
+    return "check.%s" % site if site else "check.%s" % extract_domain(doc)
+
+
 def free_domains(doc):
     """Все имена, по которым доступен Free DNS: основное, затем legacy."""
     main = extract_domain(doc)
@@ -1306,6 +1319,7 @@ def build_values(doc, ip, source):
         "ip": ip,
         "origin": doc.meta.get("origin", "").rstrip("/"),
         "site_domain": site_domain(doc),
+        "check_domain": check_domain(doc),
         "domain": domain,
         "free_domain": domain,
         "free_domains": " ".join(fdomains),

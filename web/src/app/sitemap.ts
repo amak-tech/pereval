@@ -22,6 +22,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     page("/dedicated", now, "monthly", 0.7),
     page("/services", now, "weekly", 0.8),
     page("/setup", now, "monthly", 0.8),
+    page("/check", now, "weekly", 0.8),
     ...deviceEntries,
     ...serviceEntries,
     page("/stats", now, "hourly", 0.4),

@@ -26,6 +26,7 @@ export function SiteFooter() {
           <Link href="/dedicated" className="text-mute no-underline transition-colors hover:text-ink">{SITE.name} Dedicated</Link>
           <Link href="/services" className="text-mute no-underline transition-colors hover:text-ink">Каталог сервисов</Link>
           <Link href="/setup" className="text-mute no-underline transition-colors hover:text-ink">Настройка устройств</Link>
+          <Link href="/check" className="text-mute no-underline transition-colors hover:text-ink">Диагностика DNS</Link>
           <Link href="/stats" className="text-mute no-underline transition-colors hover:text-ink">Статистика</Link>
           <Link href="/account" className="text-mute no-underline transition-colors hover:text-ink">Личный кабинет</Link>
           <Link href="/#faq" className="text-mute no-underline transition-colors hover:text-ink">Вопросы и ответы</Link>

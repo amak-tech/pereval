@@ -127,7 +127,9 @@ class PolicyMap:
             for d in (data.get("free_domains") or [])
             if str(d).strip()
         ]
+        self.check_domain = str(data.get("check_domain") or "").strip().rstrip(".").lower()
         self.dns_ip = str(data.get("dns_ip") or "").strip()
+        self.check_ip = str(data.get("check_ip") or self.dns_ip or "").strip()
         self.primary = str(data.get("primary") or self.dns_ip or "").strip()
         self.include_primary_in_dns = bool(data.get("include_primary_in_dns", False))
         self.probe_sni = str(data.get("probe_sni") or self.domain or "").strip()
@@ -666,6 +668,14 @@ class ProDnsServer:
             args.no_cp = True
         self.pro_domain = (args.pro_domain or policy_map.domain or "").strip().rstrip(".").lower()
         self.probe_sni = policy_map.probe_sni or self.pro_domain
+        self.check_domain = (policy_map.check_domain or "").strip().rstrip(".").lower()
+        self.check_ip = (
+            getattr(args, "check_ip", None)
+            or policy_map.check_ip
+            or args.listen_ip
+            or policy_map.dns_ip
+            or ""
+        ).strip()
         self.started_at = now_ts()
         self.stop_event = None
 
@@ -808,6 +818,14 @@ class ProDnsServer:
             if not self.pro_domain:
                 self.pro_domain = self.policy_map.domain
             self.probe_sni = self.policy_map.probe_sni or self.pro_domain
+            self.check_domain = (self.policy_map.check_domain or "").strip().rstrip(".").lower()
+            self.check_ip = (
+                getattr(self.args, "check_ip", None)
+                or self.policy_map.check_ip
+                or self.args.listen_ip
+                or self.policy_map.dns_ip
+                or ""
+            ).strip()
             if self.cache is not None:
                 self.cache.clear()
             self.recompute_routing()
@@ -882,6 +900,13 @@ class ProDnsServer:
         # proxy
         if q.qclass != dnscommon.QCLASS_IN:
             return D_FORWARD, "class"
+        qname_norm = (q.qname or "").strip().rstrip(".").lower()
+        if self.check_domain and qname_norm == self.check_domain and self.check_ip:
+            if q.qtype == dnscommon.QTYPE_A:
+                return D_SYNTH_A, self.check_ip
+            if q.qtype in NODATA_QTYPES:
+                return D_NODATA, self.check_domain
+            return D_FORWARD, "qtype"
         if self.policy_map.is_passthrough(q.qname):
             return D_FORWARD, "passthrough"
         dom, info = self.policy_map.match(q.qname)
@@ -958,8 +983,12 @@ class ProDnsServer:
             is_admin_svc = bool(matched_info and matched_info.get("admin_only"))
             acl_wait_ev = self.tracker.record(ident, now, count_activity=not is_admin_svc)
         if action == D_SYNTH_A:
+            is_check_beacon = bool(
+                self.check_domain and (q.qname or "").strip().rstrip(".").lower() == self.check_domain
+            )
             if (
-                acl_wait_ev is not None
+                not is_check_beacon
+                and acl_wait_ev is not None
                 and self.cp is not None
                 and self.args.acl_sync_timeout > 0
             ):
@@ -1581,6 +1610,8 @@ def parse_args(argv=None):
                    help="адрес:порт DoH по обычному HTTP за nginx (по умолчанию 127.0.0.1:8057; пусто — выключить)")
     g.add_argument("--pro-domain", default=_env("PRO_DOMAIN"),
                    help="домен для токена в SNI <token>.<domain> и проб /healthz (env PRO_DOMAIN; иначе из policy map)")
+    g.add_argument("--check-ip", default=_env("CHECK_IP"),
+                   help="IP-адрес для синтеза A-записи маячка check_domain (по умолчанию из policy map или --listen-ip)")
 
     g = p.add_argument_group("политика и control plane")
     g.add_argument("--policy-map", default="/etc/pereval/pro-policy-map.json",

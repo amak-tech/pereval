@@ -235,6 +235,20 @@ class HealthcheckDnsmasqTests(unittest.TestCase):
         legacy = healthcheck.render_dnsmasq_conf(self.TEMPLATE, ["1.1.1.1"])
         self.assertEqual(pooled, legacy)
 
+    def test_host_record_beacon_preserved_by_render(self):
+        tpl = (
+            "# opts\nlisten-address=0.0.0.0\n"
+            "host-record=check.pereval.top,9.9.9.9\n\n"
+            "address=/a.com/0.0.0.0\n"
+        )
+        healthy = {"default": ["1.1.1.1"], "ai": ["5.5.5.5"]}
+        out_pooled = healthcheck.render_dnsmasq_conf_pooled(tpl, POOLS, healthy, self.SMAP, ["9.9.9.9"])
+        out_legacy = healthcheck.render_dnsmasq_conf(tpl, ["1.1.1.1"])
+        self.assertIn("host-record=check.pereval.top,9.9.9.9", out_pooled)
+        self.assertIn("host-record=check.pereval.top,9.9.9.9", out_legacy)
+        self.assertIn("address=/a.com/5.5.5.5", out_pooled)
+        self.assertIn("address=/a.com/1.1.1.1", out_legacy)
+
 
 class BuildConsistencyTests(unittest.TestCase):
     """Проверки на реальном build/, если он собран."""
@@ -261,6 +275,30 @@ class BuildConsistencyTests(unittest.TestCase):
         smap = json.loads((self.build / "service-map.json").read_text(encoding="utf-8"))
         self.assertTrue(set(smap) <= set(pro["domains"]))
         self.assertTrue(all(c["tier"] in ("free", "pro") for c in pro["categories"]))
+
+    def test_check_beacon_generated(self):
+        cluster = json.loads((self.build / "cluster-nodes.json").read_text(encoding="utf-8"))
+        check_dom = cluster["check_domain"]
+        primary = cluster["primary"]
+        self.assertTrue(check_dom.startswith("check."))
+
+        dnsmasq_conf = (self.build / "dnsmasq-geoblock.conf").read_text(encoding="utf-8")
+        self.assertIn(f"host-record={check_dom},{primary}", dnsmasq_conf)
+
+        nginx_conf = (self.build / "nginx.conf").read_text(encoding="utf-8")
+        self.assertIn(check_dom, nginx_conf)
+        self.assertIn('"tier":"free"', nginx_conf)
+
+        pro_nginx = (self.build / "pro-dns-nginx.conf").read_text(encoding="utf-8")
+        self.assertIn(check_dom, pro_nginx)
+        self.assertIn('"tier":"pro"', pro_nginx)
+
+        fpm = json.loads((self.build / "free-policy-map.json").read_text(encoding="utf-8"))
+        ppm = json.loads((self.build / "pro-policy-map.json").read_text(encoding="utf-8"))
+        self.assertEqual(fpm["check_domain"], check_dom)
+        self.assertEqual(fpm["check_ip"], primary)
+        self.assertEqual(ppm["check_domain"], check_dom)
+        self.assertEqual(ppm["check_ip"], ppm["dns_ip"])
 
 
 class RegionalRoutingTests(unittest.TestCase):

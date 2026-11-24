@@ -177,6 +177,9 @@ export function AccountDashboard() {
           <Link href="/pro" className="btn-secondary">
             Что входит в Pro
           </Link>
+          <Link href="/check" className="btn-secondary">
+            Диагностика подключения
+          </Link>
         </div>
       </section>
 

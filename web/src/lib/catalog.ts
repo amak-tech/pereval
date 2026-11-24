@@ -24,7 +24,7 @@ export type ProRegionOption = { code: string; name: string; note?: string; pools
 
 export type Catalog = {
   /** cert_domains — имена единого wildcard-сертификата инфраструктуры */
-  meta: { name: string; origin: string; cert_domains: string[] };
+  meta: { name: string; origin: string; check_domain?: string; cert_domains: string[] };
   free: {
     domain: string;
     legacy_domains: string[];
