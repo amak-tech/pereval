@@ -84,8 +84,8 @@ nodes:
       name: free-worker-ai-2
       pools: [ ai ]
 
-    - ip: 144.31.159.214
-      name: free-worker-ai-5
+    - ip: 144.31.159.235
+      name: free-worker-ai-7
       pools: [ ai ]
 
     - ip: 144.31.159.229
