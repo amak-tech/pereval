@@ -891,20 +891,58 @@ class HttpServerBase:
     body_timeout = 5.0
     max_body = MAX_DNS_PACKET_LEN
 
+    def __init__(self):
+        self._closing = False
+        self._active_writers = set()
+        self._idle_writers = set()
+
+    def _ensure_conn_tracking(self):
+        if not hasattr(self, "_closing"):
+            self._closing = False
+        if not hasattr(self, "_active_writers"):
+            self._active_writers = set()
+        if not hasattr(self, "_idle_writers"):
+            self._idle_writers = set()
+
+    def begin_shutdown(self):
+        """Запрещает keep-alive для новых ответов и немедленно закрывает простаивающие соединения."""
+        self._ensure_conn_tracking()
+        self._closing = True
+        for w in list(self._idle_writers):
+            try:
+                w.close()
+            except Exception:
+                pass
+
+    def abort_connections(self):
+        """Принудительно закрывает все оставшиеся активные клиентские соединения."""
+        self._ensure_conn_tracking()
+        self._closing = True
+        for w in list(self._active_writers):
+            try:
+                w.close()
+            except Exception:
+                pass
+
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        self._ensure_conn_tracking()
         peer = writer.get_extra_info("peername")
+        self._active_writers.add(writer)
         try:
-            while True:
+            while not self._closing:
+                self._idle_writers.add(writer)
                 try:
                     header_block = await asyncio.wait_for(
                         reader.readuntil(b"\r\n\r\n"),
                         timeout=self.header_timeout,
                     )
-                except (asyncio.IncompleteReadError, asyncio.TimeoutError, ConnectionError):
+                except (asyncio.IncompleteReadError, asyncio.TimeoutError, ConnectionError, asyncio.CancelledError):
                     break
                 except asyncio.LimitOverrunError:
                     await self.send_response(writer, 413, b"Header too large", keep_alive=False)
                     break
+                finally:
+                    self._idle_writers.discard(writer)
 
                 if len(header_block) > MAX_HTTP_HEADER_BYTES:
                     await self.send_response(writer, 413, b"Header too large", keep_alive=False)
@@ -954,17 +992,20 @@ class HttpServerBase:
                         break
 
                 parsed = urlsplit(target)
+                eff_keep_alive = keep_alive and not self._closing
                 req = HttpRequest(method, target, parsed.path, parsed.query, headers, body,
-                                  keep_alive, version, peer)
+                                  eff_keep_alive, version, peer)
                 keep_alive = await self.handle_request(writer, req)
-                if not keep_alive:
+                if not keep_alive or self._closing:
                     break
         except Exception:
             pass
         finally:
+            self._idle_writers.discard(writer)
+            self._active_writers.discard(writer)
             try:
                 writer.close()
-                await writer.wait_closed()
+                await asyncio.wait_for(writer.wait_closed(), timeout=0.5)
             except Exception:
                 pass
 
@@ -1016,6 +1057,7 @@ class DohHttpServer(HttpServerBase):
     """
 
     def __init__(self, dns_pool: UdpDnsPool = None, endpoint_path: str = "/dns-query", max_inflight: int = 4096):
+        super().__init__()
         self.dns_pool = dns_pool
         self.endpoint_path = endpoint_path
         self._sem = asyncio.Semaphore(max_inflight)

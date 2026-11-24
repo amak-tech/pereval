@@ -84,12 +84,12 @@ nodes:
       name: free-worker-ai-2
       pools: [ ai ]
 
-    - ip: 151.247.25.209
-      name: free-worker-ai-3
+    - ip: 144.31.159.214
+      name: free-worker-ai-5
       pools: [ ai ]
 
-    - ip: 151.247.25.223
-      name: free-worker-ai-4
+    - ip: 144.31.159.229
+      name: free-worker-ai-6
       pools: [ ai ]
 
 dnsmasq_options:

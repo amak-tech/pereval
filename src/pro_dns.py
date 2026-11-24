@@ -730,6 +730,9 @@ class ProDnsServer:
         self.udp_transports = []
         self.tasks = []
         self.tcp_conn_sem = None  # создаётся внутри цикла
+        self._doh_server = None
+        self._active_writers = set()
+        self._idle_writers = set()
 
     # --------------------------------------------------------------- политика
 
@@ -1056,13 +1059,17 @@ class ProDnsServer:
             finally:
                 inflight.release()
 
+        self._active_writers.add(writer)
         try:
-            while True:
+            while not (self.stop_event and self.stop_event.is_set()):
+                self._idle_writers.add(writer)
                 try:
                     msg = await dnscommon.read_tcp_message(reader, args.tcp_idle_timeout)
-                except (asyncio.TimeoutError, ValueError, ConnectionError):
+                except (asyncio.TimeoutError, ValueError, ConnectionError, asyncio.CancelledError):
                     break
-                if msg is None:
+                finally:
+                    self._idle_writers.discard(writer)
+                if msg is None or (self.stop_event and self.stop_event.is_set()):
                     break
                 await inflight.acquire()
                 task = asyncio.ensure_future(one(msg))
@@ -1074,14 +1081,17 @@ class ProDnsServer:
         except Exception:
             pass
         finally:
+            self._idle_writers.discard(writer)
+            self._active_writers.discard(writer)
             if pending:
+                wait_limit = min(1.0, args.upstream_timeout) if (self.stop_event and self.stop_event.is_set()) else (args.upstream_timeout + 1)
                 try:
-                    await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=args.upstream_timeout + 1)
+                    await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=wait_limit)
                 except Exception:
                     pass
             try:
                 writer.close()
-                await writer.wait_closed()
+                await asyncio.wait_for(writer.wait_closed(), timeout=0.5)
             except Exception:
                 pass
 
@@ -1440,6 +1450,7 @@ class ProDnsServer:
         if args.doh_listen:
             doh_host, doh_port = _split_hostport(args.doh_listen, 8057)
             doh = self.doh_server()
+            self._doh_server = doh
             doh_srv = await asyncio.start_server(
                 doh.handle_client, host=doh_host, port=doh_port,
                 reuse_address=True, backlog=1024, limit=dnscommon.MAX_HTTP_HEADER_BYTES * 2,
@@ -1482,19 +1493,54 @@ class ProDnsServer:
             await self.shutdown()
 
     async def shutdown(self):
-        for srv in self.servers:
-            srv.close()
-        for t in self.tasks:
-            t.cancel()
-        for srv in self.servers:
+        if self.stop_event is not None:
+            self.stop_event.set()
+        if self._doh_server is not None:
+            self._doh_server.begin_shutdown()
+        for w in list(self._idle_writers):
             try:
-                await srv.wait_closed()
+                w.close()
             except Exception:
                 pass
+        for srv in self.servers:
+            srv.close()
         for tr in self.udp_transports:
             tr.close()
+        for t in self.tasks:
+            t.cancel()
+
+        # В Python 3.12+ Server.wait_closed() ждёт закрытия всех клиентских
+        # соединений (keep-alive DoH от nginx, DoT-сессии). Даём короткое окно
+        # на завершение in-flight запросов и принудительно закрываем остаток,
+        # чтобы systemd не вешал рестарт на 90 секунд до SIGKILL.
+        deadline = time.monotonic() + 1.5
+        for srv in self.servers:
+            rem = max(0.05, deadline - time.monotonic())
+            try:
+                await asyncio.wait_for(srv.wait_closed(), timeout=rem)
+            except Exception:
+                pass
+
+        if self._doh_server is not None:
+            self._doh_server.abort_connections()
+        for w in list(self._active_writers):
+            try:
+                w.close()
+            except Exception:
+                pass
+        for srv in self.servers:
+            abort = getattr(srv, "abort_clients", None)
+            if callable(abort):
+                try:
+                    abort()
+                except Exception:
+                    pass
+
         if self.tasks:
-            await asyncio.gather(*self.tasks, return_exceptions=True)
+            try:
+                await asyncio.wait_for(asyncio.gather(*self.tasks, return_exceptions=True), timeout=1.0)
+            except Exception:
+                pass
         self.upstream.close()
         log("stopped")
 

@@ -706,6 +706,14 @@ if [[ ! -f "$SSL_DIR/fullchain.pem" || ! -f "$SSL_DIR/privkey.pem" ]]; then
 fi
 
 # --- общие Python-модули (poolrouting, dnscommon, healthcheck) -------------
+file_differs() { [[ ! -f "$2" ]] || ! cmp -s "$1" "$2"; }
+DOH_NEED_RESTART=0
+if file_differs "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py" \
+	|| file_differs "$STAGE/dnscommon.py" "$LIB_DIR/dnscommon.py" \
+	|| file_differs "$STAGE/healthcheck.py" "$LIB_DIR/healthcheck.py" \
+	|| file_differs "$STAGE/pro_dns.py" "$DOH_DST"; then
+	DOH_NEED_RESTART=1
+fi
 install -m 0644 "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py"
 install -m 0644 "$STAGE/dnscommon.py"   "$LIB_DIR/dnscommon.py"
 install -m 0644 "$STAGE/healthcheck.py" "$LIB_DIR/healthcheck.py"
@@ -750,7 +758,7 @@ fi
 # --- единый DNS-сервер (pro_dns.py --tier free на Primary) -----------------
 install -m 0755 "$STAGE/pro_dns.py"           "$DOH_DST"
 if [[ $NODE_ROLE == "primary" ]]; then
-	cat >"$DOH_UNIT_DST" <<UNIT
+	cat >"$STAGE/pereval-doh.service" <<UNIT
 [Unit]
 Description=Pereval Free unified DNS (DoH/DoT/Do53) daemon
 After=network-online.target
@@ -760,6 +768,7 @@ Wants=network-online.target
 Type=simple
 ExecStart=/usr/bin/python3 $DOH_DST --tier free --no-cp --listen-ip $SERVER_IP --pro-domain $DOMAIN --policy-map $MAP_DIR/free-policy-map.json --cert $SSL_DIR/fullchain.pem --key $SSL_DIR/privkey.pem --doh-listen 127.0.0.1:8053 --upstream 1.1.1.1:53,8.8.8.8:53 --health-out $WEB_DIR/cluster-health.json
 ExecReload=/bin/kill -HUP \$MAINPID
+TimeoutStopSec=5
 Restart=always
 RestartSec=2
 LimitNOFILE=65535
@@ -767,7 +776,10 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 UNIT
-	chmod 0644 "$DOH_UNIT_DST"
+	if file_differs "$STAGE/pereval-doh.service" "$DOH_UNIT_DST"; then
+		DOH_NEED_RESTART=1
+	fi
+	install -m 0644 "$STAGE/pereval-doh.service" "$DOH_UNIT_DST"
 else
 	if systemctl list-unit-files pereval-doh.service >/dev/null 2>&1; then
 		systemctl disable --now pereval-doh.service >/dev/null 2>&1 || true
@@ -784,6 +796,7 @@ After=network.target nginx.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $WEB_DIR/node-stats.json --output $WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $DOMAIN --role $NODE_ROLE
+TimeoutStopSec=5
 Restart=always
 RestartSec=5
 Nice=10
@@ -814,6 +827,7 @@ After=network.target nginx.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 $HC_DST --cluster-config $MAP_DIR/cluster-nodes.json --nginx-stream-out $MAP_DIR/nginx-workers-stream.conf --nginx-http-out $MAP_DIR/nginx-workers-http.conf --service-map $MAP_DIR/service-map.json --status-out $WEB_DIR/cluster-health.json --state-file $HC_STATE_DIR/state.json --interval 5 --fail-threshold 2 --rise-threshold 2
+TimeoutStopSec=5
 Restart=always
 RestartSec=3
 
@@ -889,12 +903,21 @@ if [[ $NODE_ROLE == "primary" ]]; then
 	systemctl disable --now dnsmasq.service >/dev/null 2>&1 || true
 	pkill -9 -x dnsmasq >/dev/null 2>&1 || true
 	systemctl enable pereval-doh.service >/dev/null 2>&1 || true
-	if ! systemctl restart pereval-doh.service; then
-		journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
-		restore
-		fail "pereval-doh.service не поднялся"
+	if [[ $DOH_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-doh.service; then
+		if ! systemctl reload pereval-doh.service; then
+			journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
+			restore
+			fail "pereval-doh.service не перезагрузился по SIGHUP"
+		fi
+		say "единый DNS-сервер pereval-doh перезагружен по SIGHUP без простоя"
+	else
+		if ! systemctl restart pereval-doh.service; then
+			journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
+			restore
+			fail "pereval-doh.service не поднялся"
+		fi
+		say "единый DNS-сервер pereval-doh (pro_dns --tier free) перезапущен"
 	fi
-	say "единый DNS-сервер pereval-doh (pro_dns --tier free) перезапущен"
 fi
 
 systemctl enable pereval-stats.service >/dev/null 2>&1 || true
@@ -1095,15 +1118,27 @@ SYSCTL
 sysctl -e -p "$SYSCTL_DST" >/dev/null 2>&1 || true
 
 # --- общие модули ------------------------------------------------------------
+file_differs() { [[ ! -f "$2" ]] || ! cmp -s "$1" "$2"; }
+LIB_CHANGED=0
+if file_differs "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py" \
+	|| file_differs "$STAGE/dnscommon.py" "$LIB_DIR/dnscommon.py" \
+	|| file_differs "$STAGE/healthcheck.py" "$LIB_DIR/healthcheck.py"; then
+	LIB_CHANGED=1
+fi
 install -m 0644 "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py"
 install -m 0644 "$STAGE/dnscommon.py"   "$LIB_DIR/dnscommon.py"
 install -m 0644 "$STAGE/healthcheck.py" "$LIB_DIR/healthcheck.py"
 
 # --- node.env (секрет ноды для control plane) ---------------------------------
+ENV_CHANGED=0
 if [[ -f "$STAGE/node.env" ]]; then
+	if file_differs "$STAGE/node.env" "$NODE_ENV_DST"; then
+		ENV_CHANGED=1
+	fi
 	install -m 0640 "$STAGE/node.env" "$NODE_ENV_DST"
 	say "обновлён $NODE_ENV_DST"
 elif [[ ! -f "$NODE_ENV_DST" ]]; then
+	ENV_CHANGED=1
 	cat >"$NODE_ENV_DST" <<ENVEOF
 CP_ORIGIN=${CP_ORIGIN:-https://pereval.top}
 NODE_SECRET=
@@ -1122,6 +1157,10 @@ if [[ $NODE_ROLE == "pro-dns" ]]; then
 	id -u pereval-dns >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin pereval-dns
 	mkdir -p "$PRO_DNS_STATE"; chown pereval-dns:pereval-dns "$PRO_DNS_STATE"
 	chgrp pereval-dns "$ETC_DIR" "$NODE_ENV_DST" 2>/dev/null || true
+	PRO_DNS_NEED_RESTART=$(( LIB_CHANGED || ENV_CHANGED ))
+	if file_differs "$STAGE/pro_dns.py" "$PRO_DNS_DST"; then
+		PRO_DNS_NEED_RESTART=1
+	fi
 	install -m 0644 "$STAGE/pro-policy-map.json" "$ETC_DIR/pro-policy-map.json"
 	install -m 0644 "$STAGE/pro-nodes.json"      "$ETC_DIR/pro-nodes.json"
 	install -m 0755 "$STAGE/pro_dns.py"          "$PRO_DNS_DST"
@@ -1193,7 +1232,7 @@ UNIT
 	systemctl enable nginx >/dev/null 2>&1 || true
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx || { restore; fail "nginx не поднялся"; }
 
-	cat >"$PRO_DNS_UNIT" <<UNIT
+	cat >"$STAGE/pereval-pro-dns.service" <<UNIT
 [Unit]
 Description=Pereval Pro personal DNS (DoH/DoT/Do53) daemon
 After=network-online.target
@@ -1209,6 +1248,7 @@ CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ExecStart=/usr/bin/python3 $PRO_DNS_DST --tier pro --listen-ip $PRO_DNS_IP --pro-domain $PRO_DOMAIN --policy-map $ETC_DIR/pro-policy-map.json --policy-cache $PRO_DNS_STATE/policy-cache.json --cert $SSL_DIR/fullchain.pem --key $SSL_DIR/privkey.pem --doh-listen 127.0.0.1:8057 --upstream 1.1.1.1:53,8.8.8.8:53 --answer-ttl 30 --health-out $WEB_DIR/pro-health.json
 ExecReload=/bin/kill -HUP \$MAINPID
+TimeoutStopSec=5
 StateDirectory=pereval-pro-dns
 ReadWritePaths=$WEB_DIR
 Restart=always
@@ -1218,11 +1258,20 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 UNIT
+	if file_differs "$STAGE/pereval-pro-dns.service" "$PRO_DNS_UNIT"; then
+		PRO_DNS_NEED_RESTART=1
+	fi
+	install -m 0644 "$STAGE/pereval-pro-dns.service" "$PRO_DNS_UNIT"
 	chown -R pereval-dns:pereval-dns "$WEB_DIR"
 	systemctl daemon-reload
 	systemctl enable pereval-pro-dns.service >/dev/null 2>&1 || true
-	systemctl restart pereval-pro-dns.service || { journalctl -u pereval-pro-dns -n 30 --no-pager >&2 || true; fail "pereval-pro-dns не поднялся"; }
-	say "pereval-pro-dns перезапущен"
+	if [[ $PRO_DNS_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-pro-dns.service; then
+		systemctl reload pereval-pro-dns.service || { journalctl -u pereval-pro-dns -n 30 --no-pager >&2 || true; fail "pereval-pro-dns не перезагрузился по SIGHUP"; }
+		say "pereval-pro-dns перезагружен по SIGHUP без простоя"
+	else
+		systemctl restart pereval-pro-dns.service || { journalctl -u pereval-pro-dns -n 30 --no-pager >&2 || true; fail "pereval-pro-dns не поднялся"; }
+		say "pereval-pro-dns перезапущен"
+	fi
 
 	sleep 1
 	for unit in nginx pereval-pro-dns; do
@@ -1292,7 +1341,22 @@ NFT
 		printf '\ninclude "/etc/nftables.d/pereval-pro.nft"\n' >>/etc/nftables.conf
 	fi
 	systemctl enable nftables >/dev/null 2>&1 || true
-	nft -f /etc/nftables.d/pereval-pro.nft 2>/dev/null || { nft delete table inet pereval_pro 2>/dev/null || true; nft -f /etc/nftables.d/pereval-pro.nft; }
+	# Если таблица уже существует, атомарно обновляем только цепочку input,
+	# не сбрасывая set pro_clients (иначе все текущие Pro-клиенты теряют доступ до синхронизации агента).
+	if nft list table inet pereval_pro >/dev/null 2>&1 && nft list set inet pereval_pro pro_clients >/dev/null 2>&1; then
+		{
+			printf 'flush chain inet pereval_pro input\n'
+			printf 'add rule inet pereval_pro input iif lo accept\n'
+			printf 'add rule inet pereval_pro input tcp dport { 80, 443, 9339 } ip saddr @pro_clients accept\n'
+			if [[ -n $NFT_TRUSTED ]]; then
+				printf 'add rule inet pereval_pro input tcp dport { 80, 443, 9339 } ip saddr { %s } accept\n' "$NFT_TRUSTED"
+			fi
+			printf 'add rule inet pereval_pro input tcp dport { 80, 443, 9339 } drop\n'
+			printf 'add rule inet pereval_pro input udp dport 443 reject\n'
+		} | nft -f - || { nft delete table inet pereval_pro 2>/dev/null || true; nft -f /etc/nftables.d/pereval-pro.nft; }
+	else
+		nft -f /etc/nftables.d/pereval-pro.nft 2>/dev/null || { nft delete table inet pereval_pro 2>/dev/null || true; nft -f /etc/nftables.d/pereval-pro.nft; }
+	fi
 	if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
 		ufw allow 80/tcp >/dev/null 2>&1 || true
 		ufw allow 443/tcp >/dev/null 2>&1 || true
@@ -1303,8 +1367,12 @@ NFT
 	id -u pereval-supercell >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin pereval-supercell
 	mkdir -p "$SUPERCELL_STATE_DIR"
 	chown pereval-supercell:pereval-supercell "$SUPERCELL_STATE_DIR"
+	SUPERCELL_NEED_RESTART=0
+	if file_differs "$STAGE/supercell_proxy.py" "$SUPERCELL_DST"; then
+		SUPERCELL_NEED_RESTART=1
+	fi
 	install -m 0755 "$STAGE/supercell_proxy.py" "$SUPERCELL_DST"
-	cat >"$SUPERCELL_UNIT" <<UNIT
+	cat >"$STAGE/pereval-supercell.service" <<UNIT
 [Unit]
 Description=Pereval Pro Supercell TCP/9339 game relay daemon
 After=network-online.target nftables.service
@@ -1317,6 +1385,7 @@ Group=pereval-supercell
 NoNewPrivileges=yes
 ExecStart=/usr/bin/python3 $SUPERCELL_DST --state-file $SUPERCELL_STATE_DIR/signatures.json
 ExecReload=/bin/kill -HUP \$MAINPID
+TimeoutStopSec=5
 StateDirectory=pereval-supercell
 Restart=always
 RestartSec=2
@@ -1325,9 +1394,17 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 UNIT
+	if file_differs "$STAGE/pereval-supercell.service" "$SUPERCELL_UNIT"; then
+		SUPERCELL_NEED_RESTART=1
+	fi
+	install -m 0644 "$STAGE/pereval-supercell.service" "$SUPERCELL_UNIT"
 
+	AGENT_NEED_RESTART=$(( LIB_CHANGED || ENV_CHANGED ))
+	if file_differs "$STAGE/pro_node_agent.py" "$AGENT_DST"; then
+		AGENT_NEED_RESTART=1
+	fi
 	install -m 0755 "$STAGE/pro_node_agent.py" "$AGENT_DST"
-	cat >"$AGENT_UNIT" <<UNIT
+	cat >"$STAGE/pereval-pro-agent.service" <<UNIT
 [Unit]
 Description=Pereval Pro worker agent (nftables ACL sync with control plane)
 After=network-online.target nftables.service nginx.service
@@ -1337,12 +1414,17 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=$NODE_ENV_DST
 ExecStart=/usr/bin/python3 $AGENT_DST
+TimeoutStopSec=5
 Restart=always
 RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 UNIT
+	if file_differs "$STAGE/pereval-pro-agent.service" "$AGENT_UNIT"; then
+		AGENT_NEED_RESTART=1
+	fi
+	install -m 0644 "$STAGE/pereval-pro-agent.service" "$AGENT_UNIT"
 	install -m 0755 "$STAGE/stats_collector.py" "$COLLECTOR_DST"
 	cat >"$STATS_UNIT_DST" <<UNIT
 [Unit]
@@ -1352,6 +1434,7 @@ After=network.target nginx.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $GEO_WEB_DIR/node-stats.json --output $GEO_WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $PRO_DOMAIN --role worker
+TimeoutStopSec=5
 Restart=always
 RestartSec=5
 Nice=10
@@ -1361,10 +1444,20 @@ WantedBy=multi-user.target
 UNIT
 	systemctl daemon-reload
 	systemctl enable pereval-pro-agent.service pereval-stats.service pereval-supercell.service >/dev/null 2>&1 || true
-	systemctl restart pereval-supercell.service || { journalctl -u pereval-supercell -n 20 --no-pager >&2 || true; fail "pereval-supercell не поднялся"; }
+	if [[ $SUPERCELL_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-supercell.service; then
+		say "pereval-supercell без изменений — оставлен работать без разрыва сессий"
+	else
+		systemctl restart pereval-supercell.service || { journalctl -u pereval-supercell -n 20 --no-pager >&2 || true; fail "pereval-supercell не поднялся"; }
+		say "pereval-supercell перезапущен"
+	fi
 	systemctl restart pereval-stats.service || { journalctl -u pereval-stats -n 20 --no-pager >&2 || true; fail "pereval-stats не поднялся"; }
-	systemctl restart pereval-pro-agent.service || { journalctl -u pereval-pro-agent -n 30 --no-pager >&2 || true; fail "pereval-pro-agent не поднялся"; }
-	say "pereval-supercell, pereval-pro-agent и pereval-stats перезапущены"
+	if [[ $AGENT_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-pro-agent.service; then
+		say "pereval-pro-agent без изменений — оставлен работать"
+	else
+		systemctl restart pereval-pro-agent.service || { journalctl -u pereval-pro-agent -n 30 --no-pager >&2 || true; fail "pereval-pro-agent не поднялся"; }
+		say "pereval-pro-agent перезапущен"
+	fi
+	say "pereval-stats перезапущен"
 
 	sleep 1
 	for unit in nginx pereval-pro-agent pereval-stats pereval-supercell; do

@@ -613,6 +613,7 @@ class SupercellProxyServer:
         self.conn_sem = None
         self.per_ip_conns = {}
         self.refresh_task = None
+        self._active_writers = set()
         self.counters = OrderedDict([
             ("accepted", 0),
             ("routed_static", 0),
@@ -641,6 +642,7 @@ class SupercellProxyServer:
         await self.conn_sem.acquire()
         self.per_ip_conns[peer_ip] = self.per_ip_conns.get(peer_ip, 0) + 1
         self.counters["accepted"] += 1
+        self._active_writers.add(client_writer)
         up_writer = None
         try:
             hello = await self._read_client_hello(client_reader)
@@ -673,12 +675,16 @@ class SupercellProxyServer:
                 self.counters["routed_probed"] += 1
 
             self.by_game[game["id"]] = self.by_game.get(game["id"], 0) + 1
+            if up_writer is not None:
+                self._active_writers.add(up_writer)
             if initial_reply:
                 client_writer.write(initial_reply)
                 await asyncio.wait_for(client_writer.drain(), timeout=self.args.connect_timeout)
 
             await self._splice(client_reader, client_writer, up_reader, up_writer)
         finally:
+            self._active_writers.discard(up_writer)
+            self._active_writers.discard(client_writer)
             await self._safe_close(up_writer)
             await self._safe_close(client_writer)
             rem = self.per_ip_conns.get(peer_ip, 1) - 1
@@ -871,16 +877,31 @@ class SupercellProxyServer:
             self.refresh_task = asyncio.ensure_future(self._refresh_loop())
 
     async def shutdown(self) -> None:
+        if self.stop_event is not None:
+            self.stop_event.set()
         if self.refresh_task is not None:
             self.refresh_task.cancel()
-            await asyncio.gather(self.refresh_task, return_exceptions=True)
+            try:
+                await asyncio.wait_for(asyncio.gather(self.refresh_task, return_exceptions=True), timeout=1.0)
+            except Exception:
+                pass
             self.refresh_task = None
         if self.server is not None:
             self.server.close()
+            for w in list(self._active_writers):
+                try:
+                    w.close()
+                except Exception:
+                    pass
             try:
-                await self.server.wait_closed()
+                await asyncio.wait_for(self.server.wait_closed(), timeout=1.5)
             except Exception:
-                pass
+                abort = getattr(self.server, "abort_clients", None)
+                if callable(abort):
+                    try:
+                        abort()
+                    except Exception:
+                        pass
             self.server = None
         log("stopped")
 

@@ -1219,5 +1219,72 @@ class ProRegionRoutingTests(unittest.TestCase):
             self.assertEqual(srv.decide(q_ai, id_us1, now=t3), (pro_dns.D_SYNTH_A, w_def_eu))
 
 
+class ShutdownTests(unittest.TestCase):
+    def setUp(self):
+        _quiet()
+
+    def test_shutdown_fast_with_open_keepalive_and_tcp_connections(self):
+        import tempfile
+
+        async def run():
+            up = await tu.FakeUpstream().start()
+            with tempfile.TemporaryDirectory() as tmp:
+                dns_port = tu.free_port()
+                doh_port = tu.free_port()
+                pm_path = _write_json(Path(tmp) / "shutdown-pm.json", POLICY_MAP)
+                args = pro_dns.parse_args([
+                    "--tier", "free",
+                    "--no-cp",
+                    "--policy-map", pm_path,
+                    "--health-out", "",
+                    "--listen-ip", "127.0.0.1",
+                    "--port", str(dns_port),
+                    "--dot-port", "0",
+                    "--doh-listen", "127.0.0.1:%d" % doh_port,
+                    "--upstream", "127.0.0.1:%d" % up.port,
+                    "--tcp-idle-timeout", "20.0",
+                    "--health-interval", "60",
+                ])
+                srv = pro_dns.build_server(args)
+                await srv.start()
+                doh_r = doh_w = tcp_r = tcp_w = None
+                try:
+                    # 1. Открытое keep-alive HTTP/1.1 соединение (как пул nginx -> DoH)
+                    doh_r, doh_w = await asyncio.open_connection("127.0.0.1", doh_port)
+                    doh_w.write(b"GET /healthz HTTP/1.1\r\nHost: free.test\r\nConnection: keep-alive\r\n\r\n")
+                    await doh_w.drain()
+                    head = await asyncio.wait_for(doh_r.readuntil(b"\r\n\r\n"), timeout=2.0)
+                    self.assertIn(b"200 OK", head)
+                    body = await asyncio.wait_for(doh_r.readexactly(3), timeout=2.0)
+                    self.assertEqual(body, b"ok\n")
+
+                    # 2. Открытое TCP DNS-соединение, остающееся в простое (idle_timeout=20s)
+                    tcp_r, tcp_w = await asyncio.open_connection("127.0.0.1", dns_port)
+                    tcp_w.write(dnscommon.frame_tcp(tu.make_query("claude.ai", 1, qid=77)))
+                    await tcp_w.drain()
+                    resp = await dnscommon.read_tcp_message(tcp_r, timeout=2.0)
+                    self.assertIsNotNone(resp)
+                    self.assertIn(tu.a_answers(resp)[0], (W1, W2, W3))
+
+                    # Даём обработчикам вернуться в idle-ожидание следующего запроса
+                    await asyncio.sleep(0.05)
+
+                    # Shutdown обязан завершиться быстро, не дожидаясь 20–30с таймаутов
+                    t0 = time.monotonic()
+                    await asyncio.wait_for(srv.shutdown(), timeout=2.0)
+                    elapsed = time.monotonic() - t0
+                    self.assertLess(elapsed, 1.0)
+                finally:
+                    for w in (doh_w, tcp_w):
+                        if w is not None:
+                            try:
+                                w.close()
+                            except Exception:
+                                pass
+                    await up.stop()
+
+        asyncio.run(run())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -337,6 +337,56 @@ class RelayAndProbeIntegrationTests(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_shutdown_fast_with_active_client_session(self):
+        import time
+
+        async def run():
+            async def slow_upstream(reader, writer):
+                try:
+                    hdr = await reader.readexactly(sp.HEADER_LEN)
+                    _mid, plen, _ = sp.parse_header(hdr)
+                    await reader.readexactly(plen)
+                    writer.write(make_server_hello(b"STAY_OPEN"))
+                    await writer.drain()
+                    await asyncio.sleep(30)
+                except Exception:
+                    pass
+                finally:
+                    writer.close()
+
+            up_srv = await asyncio.start_server(slow_upstream, "127.0.0.1", 0)
+            up_port = up_srv.sockets[0].getsockname()[1]
+            router = sp.SupercellRouter([
+                {"id": "brawlstars", "name": "BS", "host": "127.0.0.1", "port": up_port, "major": 70, "protocols": [2]},
+            ])
+            args = sp.parse_args([
+                "--listen-host", "127.0.0.1", "--port", "0",
+                "--state-file", "", "--no-refresh", "--idle-timeout", "180",
+            ])
+            proxy = sp.SupercellProxyServer(args, router=router)
+            await proxy.start()
+            proxy_port = proxy.server.sockets[0].getsockname()[1]
+            w = None
+            try:
+                r, w = await asyncio.open_connection("127.0.0.1", proxy_port)
+                pkt = sp.build_client_hello(protocol=2, key_version=61, major=70, field4=1, field5=100, content_hash="c" * 40)
+                w.write(pkt)
+                await w.drain()
+                sh_hdr = await asyncio.wait_for(r.readexactly(sp.HEADER_LEN), timeout=2.0)
+                mid, plen, _ = sp.parse_header(sh_hdr)
+                await asyncio.wait_for(r.readexactly(plen), timeout=2.0)
+                self.assertEqual(mid, sp.MSG_SERVER_HELLO)
+
+                t0 = time.monotonic()
+                await asyncio.wait_for(proxy.shutdown(), timeout=2.0)
+                self.assertLess(time.monotonic() - t0, 1.0)
+            finally:
+                if w is not None:
+                    w.close()
+                up_srv.close()
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main()
