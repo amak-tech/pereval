@@ -48,7 +48,7 @@
 1. **Пулы воркеров** (`src/poolrouting.py`): пул у сервиса > у категории > `default`; нода для сервиса выбирается rendezvous-хэшем по здоровым нодам пула — все домены сервиса идут с одного IP, при отказе ноды пересаживается минимум сервисов. Пустой пул → `fallback` → Primary (Free) / все ноды (Pro).
 2. **Pro-доступ на уровне DNS**: токен (DoH-путь / DoT-SNI) или привязанный IP. IP, с которых приходят запросы подписчиков, попадают в динамический ACL (2 ч) и уезжают на воркеры long-poll'ом (<1 с). Истёкшая подписка → `plain` (обычный резолв без прокси), а не отказ: Android strict / iOS-профиль не имеют fallback-DNS.
 3. **Один writer состояния — control plane** (Postgres). `pro_dns.py` и агенты — stateless-клиенты CP по HTTPS с bearer-секретом, кешируют политику на диске.
-4. **DNS-петля**: nginx и ОС на DNS/прокси-нодах никогда не используют 127.0.0.1 как резолвер (кроме pro-dns, где локальный dnsmasq — чистый кеш без `address=`); `resolver 1.1.1.1 8.8.8.8` в nginx.
+4. **DNS-петля**: ОС на DNS/прокси-нодах не использует 127.0.0.1 в `/etc/resolv.conf`; на Free-узлах и Pro-воркерах работает локальный кэширующий `dnsmasq` (`cache-dnsmasq.conf` на `127.0.0.1:53`, чистый форвардер без `address=` с `all-servers` на `1.1.1.1`/`8.8.8.8`/`9.9.9.9`), а `nginx` использует `resolver 127.0.0.1 valid=300s ipv6=off`.
 5. `filter-AAAA` и `filter-rr=HTTPS,SVCB` в dnsmasq (Free) и NODATA на AAAA/HTTPS/SVCB в `pro_dns.py` — иначе клиенты уйдут по IPv6/ECH мимо прокси. UDP/443 на воркерах — reject (QUIC не проксируется).
 6. **Один TLS-сертификат на всю инфраструктуру**: lineage `pereval.top` с SAN `pereval.top`, `*.pereval.top`, `*.pro.pereval.top` и устаревшими Free-именами вне зоны сайта (`pereval.portbuddy.tech`); список — `cert_domains(doc)` в `generate.py` (попадает в `cluster-nodes.json`, `pro-nodes.json`, `services.json.meta`). Выпускается на CP вручную (`web/deploy/issue-cert.sh`, DNS-01), nginx-контейнер публикует копию в `/etc/letsencrypt/pereval` (root:10001, ключ 0640), ноды с ролями `free_primary`/`pro_dns` забирают её через `GET /api/internal/v1/node/cert` скриптом `src/cert_sync.py` (systemd-таймер раз в час, ETag = sha256 fullchain, проверка пары/срока/имён, атомарная запись, `nginx reload` + `SIGHUP pro_dns`). certbot на нодах не используется; `jobs/certwatch` напоминает о продлении за 25/14/7/3 дня и ругается, если хост отдаёт не тот сертификат, что лежит на CP.
 
@@ -73,7 +73,7 @@ src/
   update_hosts.py      клиентская утилита /etc/hosts (macOS/Linux)
 templates/
   dnsmasq/dnsmasq.conf           → build/dnsmasq-geoblock.conf (Free)
-  dnsmasq/cache-dnsmasq.conf     → build/cache-dnsmasq.conf (pro-dns: кеш на 127.0.0.1:53)
+  dnsmasq/cache-dnsmasq.conf     → build/cache-dnsmasq.conf (локальный кеш на 127.0.0.1:53 для nginx на Free-узлах и Pro-воркерах)
   nginx/nginx.conf               → build/nginx.conf (Free Primary/worker; оба DNS-имени, 301 страниц на сайт)
   nginx/nginx-*-allow.map        → build/nginx-*-allow.map (Free) и build/pro-nginx-*-allow.map (Free+Pro)
   nginx/nginx-workers-*.conf     → build/nginx-workers-*.conf (upstream на пул + map домен→пул)

@@ -35,6 +35,7 @@ LIB_FILES=("$SRC_DIR/poolrouting.py" "$SRC_DIR/dnscommon.py")
 # Free-кластер (primary / worker)
 FREE_FILES=(
 	"$BUILD_DIR/dnsmasq-geoblock.conf"
+	"$BUILD_DIR/cache-dnsmasq.conf"
 	"$BUILD_DIR/nginx.conf"
 	"$BUILD_DIR/nginx-sni-allow.map"
 	"$BUILD_DIR/nginx-host-allow.map"
@@ -62,6 +63,7 @@ PRO_DNS_FILES=(
 # Pro прокси-воркер
 PRO_WORKER_FILES=(
 	"$BUILD_DIR/pro-worker-nginx.conf"
+	"$BUILD_DIR/cache-dnsmasq.conf"
 	"$BUILD_DIR/pro-nginx-sni-allow.map"
 	"$BUILD_DIR/pro-nginx-host-allow.map"
 	"$BUILD_DIR/pro-service-map.json"
@@ -571,7 +573,7 @@ fi
 mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" "$LIB_DIR" /etc/sysctl.d
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json free-policy-map.json stats_collector.py pro_dns.py doh_proxy.py healthcheck.py poolrouting.py dnscommon.py cert_sync.py; do
+for f in dnsmasq-geoblock.conf cache-dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json free-policy-map.json stats_collector.py pro_dns.py doh_proxy.py healthcheck.py poolrouting.py dnscommon.py cert_sync.py; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
 say "файлы получены (роль узла: $NODE_ROLE)"
@@ -645,6 +647,9 @@ restore() {
 		fi
 	done
 	systemctl daemon-reload 2>/dev/null || true
+	if [[ -f "$BACKUP/dnsmasq.conf" ]]; then
+		systemctl restart dnsmasq.service 2>/dev/null || true
+	fi
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 	systemctl restart pereval-doh.service 2>/dev/null || true
 	systemctl restart pereval-stats.service 2>/dev/null || true
@@ -740,16 +745,50 @@ install -m 0644 "$STAGE/free-policy-map.json"            "$MAP_DIR/free-policy-m
 install -m 0644 "$STAGE/dnsmasq-geoblock.conf"           "$DNSMASQ_BASE_DST"
 install -m 0644 "$STAGE/nginx.conf"                      "$NGINX_DST"
 
-# --- отключение системного dnsmasq (заменён единым pro_dns.py) -------------
+# --- локальный кеширующий dnsmasq на 127.0.0.1:53 (чистый форвардер для nginx) -
+# Подмену доменов для клиентов делает pro_dns.py на публичном IP, а этот dnsmasq
+# не содержит ни одной address= и обслуживает только 127.0.0.1:53 для nginx.
 # Сначала останавливаем старый pereval-healthcheck, чтобы он до своего обновления
-# не перезапустил dnsmasq по таймеру при изменении cluster-nodes.json.
+# не перезаписал /etc/dnsmasq.conf по таймеру.
 if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1; then
 	systemctl stop pereval-healthcheck.service >/dev/null 2>&1 || true
 fi
-if systemctl list-unit-files dnsmasq.service >/dev/null 2>&1; then
-	systemctl disable --now dnsmasq.service >/dev/null 2>&1 || true
+if [[ -f $DNSMASQ_OLD ]]; then
+	cp -a "$DNSMASQ_OLD" "$BACKUP/dnsmasq.d-dnsmasq-geoblock.conf"
+	rm -f "$DNSMASQ_OLD"
+	say "убрал устаревший $DNSMASQ_OLD (копия в бэкапе)"
 fi
-pkill -9 -x dnsmasq >/dev/null 2>&1 || true
+DNSMASQ_NEED_RESTART=0
+if file_differs "$STAGE/cache-dnsmasq.conf" "$DNSMASQ_DST" || ! systemctl is-active --quiet dnsmasq.service; then
+	DNSMASQ_NEED_RESTART=1
+fi
+install -m 0644 "$STAGE/cache-dnsmasq.conf" "$DNSMASQ_DST"
+if ! dnsmasq --test 2>/tmp/dnsmasq-test.log; then
+	cat /tmp/dnsmasq-test.log >&2
+	restore
+	fail "dnsmasq --test не прошёл, откатился на предыдущий конфиг"
+fi
+mkdir -p /etc/systemd/system/dnsmasq.service.d
+cat >"$STAGE/dnsmasq-restart.conf" <<'DROPIN'
+[Service]
+Restart=always
+RestartSec=2
+DROPIN
+if file_differs "$STAGE/dnsmasq-restart.conf" /etc/systemd/system/dnsmasq.service.d/pereval-restart.conf; then
+	install -m 0644 "$STAGE/dnsmasq-restart.conf" /etc/systemd/system/dnsmasq.service.d/pereval-restart.conf
+	systemctl daemon-reload
+fi
+systemctl enable dnsmasq.service >/dev/null 2>&1 || true
+if [[ $DNSMASQ_NEED_RESTART -eq 1 ]]; then
+	if ! systemctl restart dnsmasq.service; then
+		journalctl -u dnsmasq.service -n 20 --no-pager >&2 || true
+		restore
+		fail "локальный кеширующий dnsmasq не поднялся"
+	fi
+	say "локальный кеширующий dnsmasq (127.0.0.1:53) запущен"
+else
+	say "локальный кеширующий dnsmasq без изменений — кеш сохранён"
+fi
 if ! grep -qE '^nameserver\s+[0-9]+' /etc/resolv.conf 2>/dev/null || grep -qE '^nameserver\s+127\.' /etc/resolv.conf 2>/dev/null; then
 	rm -f /etc/resolv.conf
 	printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' >/etc/resolv.conf
@@ -867,12 +906,6 @@ if ! nginx -t 2>/tmp/nginx-test.log; then
 fi
 say "синтаксис nginx в порядке"
 
-if [[ -f $DNSMASQ_OLD ]]; then
-	cp -a "$DNSMASQ_OLD" "$BACKUP/dnsmasq.d-dnsmasq-geoblock.conf"
-	rm -f "$DNSMASQ_OLD"
-	say "убрал устаревший $DNSMASQ_OLD (копия в бэкапе)"
-fi
-
 # --- перезапуск -----------------------------------------------------------
 if systemctl is-active --quiet nginx; then
 	if [[ $NODE_ROLE == "primary" ]] && ss -tlnp "sport = :853" 2>/dev/null | grep -q nginx; then
@@ -900,8 +933,6 @@ fi
 
 systemctl daemon-reload
 if [[ $NODE_ROLE == "primary" ]]; then
-	systemctl disable --now dnsmasq.service >/dev/null 2>&1 || true
-	pkill -9 -x dnsmasq >/dev/null 2>&1 || true
 	systemctl enable pereval-doh.service >/dev/null 2>&1 || true
 	if [[ $DOH_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-doh.service; then
 		if ! systemctl reload pereval-doh.service; then
@@ -1009,13 +1040,21 @@ fi
 
 # --- проверка результата --------------------------------------------------
 sleep 1
-EXPECTED_UNITS=(nginx pereval-stats)
+EXPECTED_UNITS=(dnsmasq nginx pereval-stats)
 if [[ $NODE_ROLE == "primary" ]]; then
 	EXPECTED_UNITS+=(pereval-doh pereval-healthcheck)
 fi
 for unit in "${EXPECTED_UNITS[@]}"; do
 	systemctl is-active --quiet "$unit" || { restore; fail "$unit не активен после перезапуска"; }
 done
+if command -v dig >/dev/null 2>&1; then
+	cache_ip=$(dig +short +time=2 +tries=1 @127.0.0.1 cloudflare.com A 2>/dev/null | head -1)
+	if [[ -n $cache_ip ]]; then
+		say "проверка локального резолвера 127.0.0.1:53 -> cloudflare.com = $cache_ip"
+	else
+		say "ВНИМАНИЕ: локальный резолвер 127.0.0.1:53 не ответил на тестовый запрос"
+	fi
+fi
 
 if [[ $NODE_ROLE == "primary" ]]; then
 	got=""
@@ -1097,6 +1136,9 @@ restore() {
 	[[ -f "$BACKUP/dnsmasq.conf" ]] && cp -a "$BACKUP/dnsmasq.conf" /etc/dnsmasq.conf
 	[[ -f "$BACKUP/nginx-sni-allow.map" ]] && cp -a "$BACKUP/nginx-sni-allow.map" "$MAP_DIR/nginx-sni-allow.map"
 	[[ -f "$BACKUP/nginx-host-allow.map" ]] && cp -a "$BACKUP/nginx-host-allow.map" "$MAP_DIR/nginx-host-allow.map"
+	if [[ $NODE_ROLE == "pro-worker" && -f "$BACKUP/dnsmasq.conf" ]]; then
+		systemctl restart dnsmasq.service 2>/dev/null || true
+	fi
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 }
 
@@ -1286,9 +1328,34 @@ UNIT
 	fi
 
 elif [[ $NODE_ROLE == "pro-worker" ]]; then
-	for f in pro-worker-nginx.conf pro-nginx-sni-allow.map pro-nginx-host-allow.map pro-service-map.json pro-nodes.json pro_node_agent.py supercell_proxy.py stats_collector.py; do
+	for f in pro-worker-nginx.conf cache-dnsmasq.conf pro-nginx-sni-allow.map pro-nginx-host-allow.map pro-service-map.json pro-nodes.json pro_node_agent.py supercell_proxy.py stats_collector.py; do
 		[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал"
 	done
+	# локальный кеширующий dnsmasq на 127.0.0.1:53 (поднимаем ДО nginx reload)
+	rm -f /etc/dnsmasq.d/dnsmasq-geoblock.conf
+	DNSMASQ_NEED_RESTART=0
+	if file_differs "$STAGE/cache-dnsmasq.conf" /etc/dnsmasq.conf || ! systemctl is-active --quiet dnsmasq.service; then
+		DNSMASQ_NEED_RESTART=1
+	fi
+	install -m 0644 "$STAGE/cache-dnsmasq.conf" /etc/dnsmasq.conf
+	dnsmasq --test 2>/tmp/dnsmasq-test.log || { cat /tmp/dnsmasq-test.log >&2; restore; fail "dnsmasq --test не прошёл"; }
+	mkdir -p /etc/systemd/system/dnsmasq.service.d
+	cat >"$STAGE/dnsmasq-restart.conf" <<'DROPIN'
+[Service]
+Restart=always
+RestartSec=2
+DROPIN
+	if file_differs "$STAGE/dnsmasq-restart.conf" /etc/systemd/system/dnsmasq.service.d/pereval-restart.conf; then
+		install -m 0644 "$STAGE/dnsmasq-restart.conf" /etc/systemd/system/dnsmasq.service.d/pereval-restart.conf
+		systemctl daemon-reload
+	fi
+	systemctl enable dnsmasq.service >/dev/null 2>&1 || true
+	if [[ $DNSMASQ_NEED_RESTART -eq 1 ]]; then
+		systemctl restart dnsmasq.service || { journalctl -u dnsmasq.service -n 20 --no-pager >&2 || true; restore; fail "локальный кеширующий dnsmasq не поднялся"; }
+		say "локальный кеширующий dnsmasq (127.0.0.1:53) запущен"
+	else
+		say "локальный кеширующий dnsmasq без изменений — кеш сохранён"
+	fi
 	install -m 0644 "$STAGE/pro-nginx-sni-allow.map"  "$MAP_DIR/nginx-sni-allow.map"
 	install -m 0644 "$STAGE/pro-nginx-host-allow.map" "$MAP_DIR/nginx-host-allow.map"
 	for pm in "$STAGE"/pro-nginx-sni-allow.*.map "$STAGE"/pro-nginx-host-allow.*.map; do
@@ -1460,9 +1527,17 @@ UNIT
 	say "pereval-stats перезапущен"
 
 	sleep 1
-	for unit in nginx pereval-pro-agent pereval-stats pereval-supercell; do
+	for unit in dnsmasq nginx pereval-pro-agent pereval-stats pereval-supercell; do
 		systemctl is-active --quiet "$unit" || fail "$unit не активен"
 	done
+	if command -v dig >/dev/null 2>&1; then
+		cache_ip=$(dig +short +time=2 +tries=1 @127.0.0.1 cloudflare.com A 2>/dev/null | head -1)
+		if [[ -n $cache_ip ]]; then
+			say "проверка локального резолвера 127.0.0.1:53 -> cloudflare.com = $cache_ip"
+		else
+			say "ВНИМАНИЕ: локальный резолвер 127.0.0.1:53 не ответил на тестовый запрос"
+		fi
+	fi
 	for port in 80 443 9339; do
 		if ss -tlnH "sport = :$port" | grep -q .; then say "порт $port слушается (доступ ограничен nftables)"; else say "ВНИМАНИЕ: порт $port не слушается"; fi
 	done
@@ -1564,11 +1639,12 @@ DRYPRE
 				printf '    затем: dnsmasq(cache) :53, resolv.conf, nginx (DoH), pereval-pro-dns (:53/:853/:8057), pereval-cert-sync.timer (единый сертификат с CP: %s)\n' "$CERT_DOMAINS"
 			else
 				for f in "${PRO_WORKER_FILES[@]}" "${LIB_FILES[@]}"; do printf '    %-34s -> %s\n' "$f" "pro-worker"; done
-				printf '    затем: nginx (SNI/Host-прокси), pereval-supercell (:9339), nftables pereval_pro, pereval-pro-agent, pereval-stats\n'
+				printf '    затем: dnsmasq(cache 127.0.0.1:53), nginx (SNI/Host-прокси), pereval-supercell (:9339), nftables pereval_pro, pereval-pro-agent, pereval-stats\n'
 			fi
 			return 0
 		fi
-		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/dnsmasq.conf (и /etc/nginx/geoblock/dnsmasq-base.conf)"
+		printf '    %-34s -> %s\n' "$BUILD_DIR/cache-dnsmasq.conf" "/etc/dnsmasq.conf (локальный кеш 127.0.0.1:53)"
+		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/nginx/geoblock/dnsmasq-base.conf"
 		printf '    %-34s -> %s\n' "$BUILD_DIR/nginx.conf" "/etc/nginx/nginx.conf"
 		for m in nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json; do
 			printf '    %-34s -> %s\n' "$BUILD_DIR/$m" "/etc/nginx/geoblock/$m"
@@ -1659,7 +1735,7 @@ if ((${#need_pkgs[@]})); then
 	}
 fi
 
-for u in nginx; do
+for u in nginx dnsmasq; do
 	if systemctl list-unit-files "$u.service" >/dev/null 2>&1 || systemctl cat "$u" >/dev/null 2>&1; then
 		printf 'unit=%s\n' "$u"
 	fi
@@ -1679,7 +1755,7 @@ PRE
 		info "автоматически установлены пакеты: $installed_pkgs"
 	fi
 
-	for unit in nginx; do
+	for unit in nginx dnsmasq; do
 		printf '%s' "$preflight" | grep -qx "unit=$unit" \
 			|| die "на сервере $node_ip не удалось подготовить сервис $unit"
 	done

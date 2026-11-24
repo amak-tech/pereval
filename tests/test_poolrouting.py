@@ -300,6 +300,25 @@ class BuildConsistencyTests(unittest.TestCase):
         self.assertEqual(ppm["check_domain"], check_dom)
         self.assertEqual(ppm["check_ip"], ppm["dns_ip"])
 
+    def test_local_caching_dnsmasq_and_nginx_resolvers(self):
+        cache_conf = (self.build / "cache-dnsmasq.conf").read_text(encoding="utf-8")
+        self.assertIn("listen-address=127.0.0.1", cache_conf)
+        self.assertIn("bind-interfaces", cache_conf)
+        self.assertIn("no-resolv", cache_conf)
+        self.assertIn("all-servers", cache_conf)
+        self.assertIn("server=1.1.1.1", cache_conf)
+        self.assertIn("server=8.8.8.8", cache_conf)
+        self.assertIn("server=9.9.9.9", cache_conf)
+        # ни одной address= записи — иначе возможна DNS-петля
+        self.assertIsNone(re.search(r"^\s*address=", cache_conf, re.M))
+
+        for fname in ("nginx.conf", "pro-worker-nginx.conf"):
+            text = (self.build / fname).read_text(encoding="utf-8")
+            resolvers = re.findall(r"^\s*resolver\s+([^;]+);", text, re.M)
+            self.assertEqual(len(resolvers), 2, fname)
+            for r in resolvers:
+                self.assertTrue(r.startswith("127.0.0.1 "), f"{fname}: {r}")
+
 
 class RegionalRoutingTests(unittest.TestCase):
     def test_iter_pool_candidate_tiers_pool_over_region(self):

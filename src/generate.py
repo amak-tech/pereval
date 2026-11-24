@@ -74,6 +74,7 @@ PLACEHOLDER_NET = ipaddress.ip_network("203.0.113.0/24")  # TEST-NET-3: адре
 # (шаблон, имя файла в build/, вариант значений: None = Free, "pro" = каталог Free+Pro)
 TEMPLATES = [
     ("dnsmasq/dnsmasq.conf", "dnsmasq-geoblock.conf", None),
+    ("dnsmasq/cache-dnsmasq.conf", "cache-dnsmasq.conf", None),
     ("nginx/nginx.conf", "nginx.conf", None),
     ("nginx/nginx-sni-allow.map", "nginx-sni-allow.map", None),
     ("nginx/nginx-host-allow.map", "nginx-host-allow.map", None),
@@ -85,7 +86,6 @@ PRO_TEMPLATES = [
     ("nginx/pro-worker-nginx.conf", "pro-worker-nginx.conf", "pro"),
     ("nginx/nginx-sni-allow.map", "pro-nginx-sni-allow.map", "pro"),
     ("nginx/nginx-host-allow.map", "pro-nginx-host-allow.map", "pro"),
-    ("dnsmasq/cache-dnsmasq.conf", "cache-dnsmasq.conf", "pro"),
 ]
 SERVICES_JSON_DEFAULT = Path("web") / "src" / "generated" / "services.json"
 
