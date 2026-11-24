@@ -18,7 +18,13 @@ export type CatalogCategory = {
   services: CatalogService[];
 };
 export type PoolInfo = { note: string; fallback: string | null; strict_allowlist: boolean; max_clients?: number | null };
-export type RegionInfo = { name: string; note?: string };
+export type RegionInfo = {
+  name: string;
+  note?: string;
+  probe_timeout?: number;
+  fail_threshold?: number;
+  rise_threshold?: number;
+};
 export type WorkerInfo = { ip: string; name: string; weight: number; pools: string[]; max_clients?: number | null; region?: string };
 export type ProRegionOption = { code: string; name: string; note?: string; pools: string[] };
 

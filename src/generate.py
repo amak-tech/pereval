@@ -113,10 +113,13 @@ class Pool:
 
 
 class Region:
-    def __init__(self, code, name, note=""):
+    def __init__(self, code, name, note="", probe_timeout=None, fail_threshold=None, rise_threshold=None):
         self.code = code
         self.name = name
         self.note = note
+        self.probe_timeout = probe_timeout
+        self.fail_threshold = fail_threshold
+        self.rise_threshold = rise_threshold
 
     def as_dict(self):
         d = OrderedDict([
@@ -124,6 +127,12 @@ class Region:
         ])
         if self.note:
             d["note"] = self.note
+        if self.probe_timeout is not None:
+            d["probe_timeout"] = self.probe_timeout
+        if self.fail_threshold is not None:
+            d["fail_threshold"] = self.fail_threshold
+        if self.rise_threshold is not None:
+            d["rise_threshold"] = self.rise_threshold
         return d
 
 
@@ -387,6 +396,15 @@ def _opt_int(obj, key, where, default=None):
     return val
 
 
+def _opt_float(obj, key, where, default=None):
+    if key not in obj or obj[key] is None:
+        return default
+    val = obj[key]
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ParseError("%s: поле «%s» должно быть числом, а не %s" % (where, key, type(val).__name__))
+    return float(val)
+
+
 def _opt_bool(obj, key, where, default=False):
     if key not in obj or obj[key] is None:
         return default
@@ -462,11 +480,19 @@ def _parse_regions(raw, where, cluster):
         raise ParseError("%s: regions должен быть словарём {код: {name: ...}}" % where)
     for code, rraw in raw.items():
         rcode = str(code).strip().lower()
+        rwhere = "%s: regions.%s" % (where, rcode)
         if not isinstance(rraw, dict):
-            raise ParseError("%s: regions.%s должен быть словарём" % (where, rcode))
-        rname = _need(rraw, "name", "%s: regions.%s" % (where, rcode), str).strip()
+            raise ParseError("%s должен быть словарём" % rwhere)
+        rname = _need(rraw, "name", rwhere, str).strip()
         rnote = str(rraw.get("note") or "").strip()
-        cluster.regions[rcode] = Region(rcode, rname, note=rnote)
+        cluster.regions[rcode] = Region(
+            rcode,
+            rname,
+            note=rnote,
+            probe_timeout=_opt_float(rraw, "probe_timeout", rwhere, default=None),
+            fail_threshold=_opt_int(rraw, "fail_threshold", rwhere, default=None),
+            rise_threshold=_opt_int(rraw, "rise_threshold", rwhere, default=None),
+        )
 
 
 def _parse_workers(raw, where, cluster):
@@ -589,6 +615,7 @@ def parse(path):
             doc.nodes.probe_sni = probe_sni.lower()
         doc.nodes.max_clients = _opt_int(nodes_raw, "max_clients", where, default=None)
         _parse_pools(nodes_raw.get("pools"), where, doc.nodes)
+        _parse_regions(nodes_raw.get("regions"), where, doc.nodes)
         _parse_workers(nodes_raw.get("workers"), where, doc.nodes)
 
     opts = data.get("dnsmasq_options") or []
@@ -670,6 +697,12 @@ def _validate_cluster(cluster, label, forbidden_ips, errors, warnings):
             errors.append("%s: код региона «%s» должен соответствовать %s" % (label, rcode, SLUG_RE.pattern))
         if not reg.name:
             errors.append("%s: у региона «%s» не указано название (name)" % (label, rcode))
+        if reg.probe_timeout is not None and not (0.1 <= reg.probe_timeout <= 60.0):
+            errors.append("%s: у региона «%s» probe_timeout должен быть в диапазоне 0.1..60 секунд" % (label, rcode))
+        if reg.fail_threshold is not None and reg.fail_threshold < 1:
+            errors.append("%s: у региона «%s» fail_threshold должен быть >= 1" % (label, rcode))
+        if reg.rise_threshold is not None and reg.rise_threshold < 1:
+            errors.append("%s: у региона «%s» rise_threshold должен быть >= 1" % (label, rcode))
     seen_worker_ips = set()
     for w in cluster.workers:
         try:
@@ -1015,6 +1048,8 @@ def cluster_nodes_json(doc, primary_ip):
         ("pools", OrderedDict((n, p.as_dict()) for n, p in doc.nodes.pools.items())),
         ("workers", [w.as_dict(idx) for idx, w in enumerate(doc.active_workers(primary_ip), 1)]),
     ])
+    if doc.nodes.regions:
+        payload["regions"] = OrderedDict((c, r.as_dict()) for c, r in doc.nodes.regions.items())
     # control plane опрашивает /node-stats.json воркеров (nodewatch) — stats_collector не считает его клиентом
     cp_ip = getattr(getattr(doc, "pro", None), "cp_ip", None)
     if cp_ip:
@@ -1074,6 +1109,8 @@ def free_policy_map_json(doc, primary_ip):
         ("passthrough", sorted(set(doc.passthrough.domains) | set(doc.excluded_domains(cats)))),
         ("domains", domains),
     ])
+    if doc.nodes.regions:
+        payload["regions"] = OrderedDict((c, r.as_dict()) for c, r in doc.nodes.regions.items())
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 

@@ -1218,6 +1218,93 @@ class ProRegionRoutingTests(unittest.TestCase):
             srv.recompute_routing()
             self.assertEqual(srv.decide(q_ai, id_us1, now=t3), (pro_dns.D_SYNTH_A, w_def_eu))
 
+    def test_region_probe_timeout_and_hysteresis(self):
+        import tempfile
+
+        w_eu = "10.30.0.1"
+        w_us = "10.30.0.2"
+        pm = dict(POLICY_MAP)
+        pm["regions"] = {
+            "eu": {"name": "Европа"},
+            "us": {"name": "США", "probe_timeout": 6.0, "fail_threshold": 4, "rise_threshold": 3},
+        }
+        pm["workers"] = [
+            {"ip": w_eu, "name": "ai-eu", "weight": 1, "pools": ["ai", "default"], "region": "eu"},
+            {"ip": w_us, "name": "ai-us", "weight": 1, "pools": ["ai"], "region": "us"},
+        ]
+
+        # Проверяем также helper в healthcheck.py
+        self.assertEqual(
+            pro_dns.healthcheck.worker_probe_params(pm["workers"][0], pm["regions"], 3.0, 2, 2),
+            (3.0, 2, 2),
+        )
+        self.assertEqual(
+            pro_dns.healthcheck.worker_probe_params(pm["workers"][1], pm["regions"], 3.0, 2, 2),
+            (6.0, 4, 3),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            srv = make_server(tmp, ["--probe-timeout", "3.0", "--fail-threshold", "2", "--rise-threshold", "2"],
+                              policy=POLICY, policy_map=pm)
+            seen_timeouts = {}
+            probe_ok_flag = {"ok": False}
+
+            async def fake_tls(ip, _port, _sni, timeout, **_kw):
+                seen_timeouts.setdefault(ip, []).append(("tls", timeout))
+                return (True, 10.0, None) if probe_ok_flag["ok"] else (False, 10.0, "TimeoutError")
+
+            async def fake_http(ip, _port, _host, timeout):
+                seen_timeouts.setdefault(ip, []).append(("http", timeout))
+                return (True, 10.0, None) if probe_ok_flag["ok"] else (False, 10.0, "TimeoutError")
+
+            orig_tls = pro_dns.healthcheck.probe_tls_sni
+            orig_http = pro_dns.healthcheck.probe_http_healthz
+            pro_dns.healthcheck.probe_tls_sni = fake_tls
+            pro_dns.healthcheck.probe_http_healthz = fake_http
+            try:
+                async def run():
+                    # 1-я ошибка: оба UP
+                    await srv.health_cycle()
+                    self.assertTrue(srv.health.is_healthy(w_eu))
+                    self.assertTrue(srv.health.is_healthy(w_us))
+                    self.assertEqual(seen_timeouts[w_eu], [("tls", 3.0), ("http", 3.0)])
+                    self.assertEqual(seen_timeouts[w_us], [("tls", 6.0), ("http", 6.0)])
+
+                    # 2-я ошибка: eu -> DOWN (fail_threshold=2), us -> всё ещё UP (fail_threshold=4)
+                    await srv.health_cycle()
+                    self.assertFalse(srv.health.is_healthy(w_eu))
+                    self.assertTrue(srv.health.is_healthy(w_us))
+
+                    # 3-я ошибка: us -> всё ещё UP
+                    await srv.health_cycle()
+                    self.assertTrue(srv.health.is_healthy(w_us))
+
+                    # 4-я ошибка: us -> DOWN
+                    await srv.health_cycle()
+                    self.assertFalse(srv.health.is_healthy(w_us))
+
+                    # Восстановление: eu -> UP за 2 успеха, us -> UP за 3 успеха
+                    probe_ok_flag["ok"] = True
+                    await srv.health_cycle()
+                    self.assertFalse(srv.health.is_healthy(w_eu))
+                    self.assertFalse(srv.health.is_healthy(w_us))
+
+                    await srv.health_cycle()
+                    self.assertTrue(srv.health.is_healthy(w_eu))
+                    self.assertFalse(srv.health.is_healthy(w_us))
+
+                    await srv.health_cycle()
+                    self.assertTrue(srv.health.is_healthy(w_us))
+
+                    snap = srv.health_snapshot()
+                    by_ip = {w["ip"]: w for w in snap["workers"]}
+                    self.assertEqual(by_ip[w_us]["region"], "us")
+
+                asyncio.run(run())
+            finally:
+                pro_dns.healthcheck.probe_tls_sni = orig_tls
+                pro_dns.healthcheck.probe_http_healthz = orig_http
+
 
 class ShutdownTests(unittest.TestCase):
     def setUp(self):

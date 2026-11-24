@@ -160,7 +160,11 @@ class WorkerSecretEnvTests(unittest.TestCase):
             payload = json.loads(raw_json)
             self.assertIn("regions", payload)
             self.assertEqual(payload["regions"]["eu"]["name"], "Европа")
+            self.assertNotIn("probe_timeout", payload["regions"]["eu"])
             self.assertEqual(payload["regions"]["us"]["name"], "США")
+            self.assertEqual(payload["regions"]["us"]["probe_timeout"], 6.0)
+            self.assertEqual(payload["regions"]["us"]["fail_threshold"], 4)
+            self.assertEqual(payload["regions"]["us"]["rise_threshold"], 2)
             by_name = {w["name"]: w for w in payload["workers"]}
             self.assertEqual(by_name["pro-worker-default-1"]["region"], "eu")
             self.assertEqual(by_name["pro-worker-ai-1"]["region"], "eu")
@@ -205,6 +209,16 @@ class WorkerSecretEnvTests(unittest.TestCase):
         generate._validate_cluster(c3, "pro", set(), errs, warns)
         self.assertTrue(any("код региона" in e for e in errs), errs)
         self.assertTrue(any("название (name)" in e for e in errs), errs)
+
+        # Невалидные probe_timeout / fail_threshold / rise_threshold у региона
+        c4 = generate.Cluster()
+        c4.regions["us"] = generate.Region("us", "США", probe_timeout=0.0, fail_threshold=0, rise_threshold=0)
+        c4.workers.append(generate.WorkerNode("198.51.100.1", "w1", region="us"))
+        errs, warns = [], []
+        generate._validate_cluster(c4, "pro", set(), errs, warns)
+        self.assertTrue(any("probe_timeout" in e for e in errs), errs)
+        self.assertTrue(any("fail_threshold" in e for e in errs), errs)
+        self.assertTrue(any("rise_threshold" in e for e in errs), errs)
 
 
 if __name__ == "__main__":

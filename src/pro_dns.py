@@ -387,7 +387,10 @@ class WorkerHealth:
         self.rise_threshold = max(1, rise_threshold)
         self.states = {}  # ip -> dict
 
-    def update(self, ip: str, name: str, ok: bool, latency_ms: float, err, now: float):
+    def update(self, ip: str, name: str, ok: bool, latency_ms: float, err, now: float,
+               fail_threshold: int = None, rise_threshold: int = None):
+        f_thr = max(1, int(fail_threshold)) if fail_threshold is not None else self.fail_threshold
+        r_thr = max(1, int(rise_threshold)) if rise_threshold is not None else self.rise_threshold
         st = self.states.setdefault(ip, {
             "name": name, "healthy": True, "fails": 0, "rises": 0,
             "last_transition_ts": int(now), "last_error": None, "latency_ms": 0.0,
@@ -398,14 +401,14 @@ class WorkerHealth:
         if ok:
             st["rises"] += 1
             st["fails"] = 0
-            if not st["healthy"] and st["rises"] >= self.rise_threshold:
+            if not st["healthy"] and st["rises"] >= r_thr:
                 st["healthy"] = True
                 st["last_transition_ts"] = int(now)
                 log("worker %s (%s) UP" % (name, ip))
         else:
             st["fails"] += 1
             st["rises"] = 0
-            if st["healthy"] and st["fails"] >= self.fail_threshold:
+            if st["healthy"] and st["fails"] >= f_thr:
                 st["healthy"] = False
                 st["last_transition_ts"] = int(now)
                 log("worker %s (%s) DOWN: %s" % (name, ip, err))
@@ -1189,7 +1192,7 @@ class ProDnsServer:
         for w in self.workers():
             ip = str(w.get("ip"))
             st = self.health.states.get(ip) or {}
-            workers.append(OrderedDict([
+            entry = OrderedDict([
                 ("ip", ip),
                 ("name", str(w.get("name") or ip)),
                 ("pools", [str(p) for p in (w.get("pools") or [poolrouting.DEFAULT_POOL])]),
@@ -1200,7 +1203,10 @@ class ProDnsServer:
                 ("consecutive_successes", st.get("rises", 0)),
                 ("last_transition_ts", st.get("last_transition_ts", int(self.started_at))),
                 ("last_error", st.get("last_error")),
-            ]))
+            ])
+            if w.get("region"):
+                entry["region"] = str(w["region"]).strip().lower()
+            workers.append(entry)
         return OrderedDict([
             ("updated_at", int(now_ts())),
             ("domain", self.pro_domain),
@@ -1281,15 +1287,52 @@ class ProDnsServer:
             except asyncio.TimeoutError:
                 pass
 
+    def _worker_probe_params(self, worker: dict):
+        """Возвращает (probe_timeout, fail_threshold, rise_threshold) с учётом настроек региона."""
+        args = self.args
+        timeout = float(args.probe_timeout)
+        fail_thr = int(args.fail_threshold)
+        rise_thr = int(args.rise_threshold)
+        region = str(worker.get("region") or "").strip().lower()
+        rcfg = self.policy_map.regions.get(region) if region else None
+        if isinstance(rcfg, dict):
+            raw_t = rcfg.get("probe_timeout")
+            if raw_t is not None and not isinstance(raw_t, bool):
+                try:
+                    t = float(raw_t)
+                    if t > 0:
+                        timeout = t
+                except (TypeError, ValueError):
+                    pass
+            raw_f = rcfg.get("fail_threshold")
+            if raw_f is not None and not isinstance(raw_f, bool):
+                try:
+                    f = int(raw_f)
+                    if f >= 1:
+                        fail_thr = f
+                except (TypeError, ValueError):
+                    pass
+            raw_r = rcfg.get("rise_threshold")
+            if raw_r is not None and not isinstance(raw_r, bool):
+                try:
+                    r = int(raw_r)
+                    if r >= 1:
+                        rise_thr = r
+                except (TypeError, ValueError):
+                    pass
+        return timeout, fail_thr, rise_thr
+
     async def health_cycle(self):
         args = self.args
         workers = self.workers()
         now = now_ts()
+        params_by_ip = {str(w["ip"]): self._worker_probe_params(w) for w in workers}
 
         async def probe(w):
             ip = str(w["ip"])
-            tls_ok, tls_ms, tls_err = await healthcheck.probe_tls_sni(ip, args.worker_tls_port, self.probe_sni, args.probe_timeout, fallback_sni=None)
-            http_ok, http_ms, http_err = await healthcheck.probe_http_healthz(ip, args.worker_http_port, self.pro_domain, args.probe_timeout)
+            timeout, _f, _r = params_by_ip[ip]
+            tls_ok, tls_ms, tls_err = await healthcheck.probe_tls_sni(ip, args.worker_tls_port, self.probe_sni, timeout, fallback_sni=None)
+            http_ok, http_ms, http_err = await healthcheck.probe_http_healthz(ip, args.worker_http_port, self.pro_domain, timeout)
             return ip, (tls_ok and http_ok), max(tls_ms, http_ms), (tls_err or http_err)
 
         if workers:
@@ -1297,11 +1340,14 @@ class ProDnsServer:
             for w, res in zip(workers, results):
                 ip = str(w["ip"])
                 name = str(w.get("name") or ip)
+                _t, fail_thr, rise_thr = params_by_ip[ip]
                 if isinstance(res, Exception):
-                    self.health.update(ip, name, False, 0.0, "probe_error: %s" % res, now)
+                    self.health.update(ip, name, False, 0.0, "probe_error: %s" % res, now,
+                                       fail_threshold=fail_thr, rise_threshold=rise_thr)
                 else:
                     _ip, ok, ms, err = res
-                    self.health.update(ip, name, ok, ms, err, now)
+                    self.health.update(ip, name, ok, ms, err, now,
+                                       fail_threshold=fail_thr, rise_threshold=rise_thr)
         self.recompute_routing()
         self.limiter.prune(now)
         self.tracker.prune_known_ips(now)

@@ -858,6 +858,9 @@ pro:
       name: Европа
     us:
       name: США
+      probe_timeout: 6.0                     # запас на трансатлантический RTT и TCP SYN retransmit
+      fail_threshold: 4                      # 4 ошибки подряд до DOWN вместо 2, чтобы убрать флапы
+      rise_threshold: 2
   pools:
     default:
       note: Общий пул Pro.

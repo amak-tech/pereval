@@ -374,6 +374,42 @@ def apply_configs_and_reload(
     return dns_updated, nginx_updated
 
 
+def worker_probe_params(worker: dict, regions: dict, default_timeout: float,
+                        default_fail: int, default_rise: int):
+    """Возвращает (timeout, fail_threshold, rise_threshold) с учётом региона воркера."""
+    timeout = float(default_timeout)
+    fail_thr = max(1, int(default_fail))
+    rise_thr = max(1, int(default_rise))
+    region = str((worker or {}).get("region") or "").strip().lower()
+    rcfg = regions.get(region) if (region and isinstance(regions, dict)) else None
+    if isinstance(rcfg, dict):
+        raw_t = rcfg.get("probe_timeout")
+        if raw_t is not None and not isinstance(raw_t, bool):
+            try:
+                t = float(raw_t)
+                if t > 0:
+                    timeout = t
+            except (TypeError, ValueError):
+                pass
+        raw_f = rcfg.get("fail_threshold")
+        if raw_f is not None and not isinstance(raw_f, bool):
+            try:
+                f = int(raw_f)
+                if f >= 1:
+                    fail_thr = f
+            except (TypeError, ValueError):
+                pass
+        raw_r = rcfg.get("rise_threshold")
+        if raw_r is not None and not isinstance(raw_r, bool):
+            try:
+                r = int(raw_r)
+                if r >= 1:
+                    rise_thr = r
+            except (TypeError, ValueError):
+                pass
+    return timeout, fail_thr, rise_thr
+
+
 async def run_cycle(args, state: dict) -> dict:
     """Выполняет один цикл опроса всех воркеров и синхронизирует конфиги при смене состояния."""
     if not args.cluster_config.is_file():
@@ -385,6 +421,7 @@ async def run_cycle(args, state: dict) -> dict:
     include_primary_in_dns = bool(cluster.get("include_primary_in_dns", False))
     probe_sni = cluster.get("probe_sni") or domain
     pools = poolrouting.normalize_pools(cluster.get("pools") or {})
+    regions = cluster.get("regions") if isinstance(cluster.get("regions"), dict) else {}
     service_map = load_service_map(args.service_map)
     raw_workers = [
         w for w in (cluster.get("workers") or [])
@@ -393,14 +430,19 @@ async def run_cycle(args, state: dict) -> dict:
 
     now_ts = int(time.time())
     worker_states = state.setdefault("workers", {})
+    params_by_ip = {
+        w["ip"]: worker_probe_params(w, regions, args.timeout, args.fail_threshold, args.rise_threshold)
+        for w in raw_workers
+    }
 
     async def check_one(w):
         ip = w["ip"]
+        timeout, _f, _r = params_by_ip[ip]
         tls_ok, tls_ms, tls_err = await probe_tls_sni(
-            ip, args.tls_port, probe_sni, args.timeout, fallback_sni=domain
+            ip, args.tls_port, probe_sni, timeout, fallback_sni=domain
         )
         http_ok, http_ms, http_err = await probe_http_healthz(
-            ip, args.http_port, domain, args.timeout
+            ip, args.http_port, domain, timeout
         )
         return ip, tls_ok, tls_ms, tls_err, http_ok, http_ms, http_err
 
@@ -414,6 +456,7 @@ async def run_cycle(args, state: dict) -> dict:
         ip = w["ip"]
         name = w.get("name") or f"worker-{idx}"
         weight = int(w.get("weight") or 1)
+        _t, fail_thr, rise_thr = params_by_ip[ip]
         wstate = worker_states.setdefault(ip, {
             "healthy": True,
             "consecutive_failures": 0,
@@ -430,7 +473,7 @@ async def run_cycle(args, state: dict) -> dict:
         if probe_ok:
             wstate["consecutive_successes"] = int(wstate.get("consecutive_successes", 0)) + 1
             wstate["consecutive_failures"] = 0
-            if not prev_healthy and wstate["consecutive_successes"] >= args.rise_threshold:
+            if not prev_healthy and wstate["consecutive_successes"] >= rise_thr:
                 wstate["healthy"] = True
                 wstate["last_transition_ts"] = now_ts
                 print(f"[healthcheck] worker {name} ({ip}) transitioned UP "
@@ -438,7 +481,7 @@ async def run_cycle(args, state: dict) -> dict:
         else:
             wstate["consecutive_failures"] = int(wstate.get("consecutive_failures", 0)) + 1
             wstate["consecutive_successes"] = 0
-            if prev_healthy and wstate["consecutive_failures"] >= args.fail_threshold:
+            if prev_healthy and wstate["consecutive_failures"] >= fail_thr:
                 wstate["healthy"] = False
                 wstate["last_transition_ts"] = now_ts
                 print(f"[healthcheck] worker {name} ({ip}) transitioned DOWN: {last_error} "
