@@ -92,6 +92,14 @@ nodes:
       name: free-worker-ai-6
       pools: [ ai ]
 
+    - ip: 144.31.159.235
+      name: fweu-ai-7
+      pools: [ ai ]
+
+    - ip: 144.31.159.185
+      name: fweu-ai-2
+      pools: [ ai ]
+
 dnsmasq_options:
   - listen-address=0.0.0.0
   - port=53
@@ -887,8 +895,8 @@ pro:
       name: pro-worker-ai-1
       region: eu
       pools: [ ai ]
-    - ip: 45.91.138.24                     # VPS pro-worker-ai-us-1 — США, пул ai
-      name: pro-worker-ai-us-1
+    - ip: 162.35.51.158                     # VPS pro-worker-ai-us-1 — США, пул ai
+      name: pwus-ai-2
       region: us
       pools: [ ai ]
   categories:

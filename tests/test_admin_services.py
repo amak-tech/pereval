@@ -339,7 +339,7 @@ class AdminServicesDnsAndStatsTests(unittest.TestCase):
             proc_tcp_path=self.tmp / "no-tcp",
             proc_tcp6_path=self.tmp / "no-tcp6",
             self_domain="pro.pereval.top",
-            role="worker",
+            role="primary",
         )
         try:
             collector.bootstrap_logs({}, now=ts + 5)

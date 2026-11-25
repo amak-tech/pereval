@@ -336,7 +336,7 @@ class StatsCollector:
         service_map_path: Path,
         sni_log_path: Path,
         http_log_path: Path,
-        output_path: Path,
+        output_path: Path = None,
         state_path: Path = None,
         proc_tcp_path: Path = Path("/proc/net/tcp"),
         proc_tcp6_path: Path = Path("/proc/net/tcp6"),
@@ -1085,6 +1085,8 @@ class StatsCollector:
     def write_output(self, now: int = None):
         if self.node_output_path:
             self.write_node_snapshot(now=now)
+        if self.role == "worker" or not self.output_path:
+            return None
         payload = self.build_payload(now=now)
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.output_path.parent / f".{self.output_path.name}.tmp"
@@ -1161,7 +1163,7 @@ def main(argv=None) -> int:
     service_map_path = Path(args.service_map) if args.service_map else resolve_default_service_map()
     cluster_config_path = Path(args.cluster_config) if args.cluster_config else resolve_default_cluster_config()
     node_output_path = Path(args.node_output) if args.node_output else None
-    output_path = Path(args.output)
+    output_path = Path(args.output) if args.output else None
 
     collector = StatsCollector(
         service_map_path=service_map_path,

@@ -827,6 +827,12 @@ fi
 
 # --- коллектор статистики (pereval-stats.service) -------------------------
 install -m 0755 "$STAGE/stats_collector.py"   "$COLLECTOR_DST"
+STATS_OUTPUT_OPT=""
+if [[ $NODE_ROLE == "primary" ]]; then
+	STATS_OUTPUT_OPT="--output $WEB_DIR/stats.json"
+else
+	rm -f "$WEB_DIR/stats.json" "$WEB_DIR/.stats.json.tmp"
+fi
 cat >"$STATS_UNIT_DST" <<UNIT
 [Unit]
 Description=Pereval lightweight nginx proxy usage collector
@@ -834,7 +840,7 @@ After=network.target nginx.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $WEB_DIR/node-stats.json --output $WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $DOMAIN --role $NODE_ROLE
+ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $WEB_DIR/node-stats.json $STATS_OUTPUT_OPT --state-file $STATS_STATE_DIR/state.json --self-domain $DOMAIN --role $NODE_ROLE
 TimeoutStopSec=5
 Restart=always
 RestartSec=5
@@ -849,7 +855,7 @@ chmod 0644 "$STATS_UNIT_DST"
 	--service-map "$MAP_DIR/service-map.json" \
 	--cluster-config "$MAP_DIR/cluster-nodes.json" \
 	--node-output "$WEB_DIR/node-stats.json" \
-	--output "$WEB_DIR/stats.json" \
+	$STATS_OUTPUT_OPT \
 	--state-file "$STATS_STATE_DIR/state.json" \
 	--self-domain "$DOMAIN" \
 	--role "$NODE_ROLE" \
@@ -1493,6 +1499,7 @@ UNIT
 	fi
 	install -m 0644 "$STAGE/pereval-pro-agent.service" "$AGENT_UNIT"
 	install -m 0755 "$STAGE/stats_collector.py" "$COLLECTOR_DST"
+	rm -f "$GEO_WEB_DIR/stats.json" "$GEO_WEB_DIR/.stats.json.tmp"
 	cat >"$STATS_UNIT_DST" <<UNIT
 [Unit]
 Description=Pereval lightweight nginx proxy usage collector
@@ -1500,11 +1507,12 @@ After=network.target nginx.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $GEO_WEB_DIR/node-stats.json --output $GEO_WEB_DIR/stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $PRO_DOMAIN --role worker
+ExecStart=/usr/bin/python3 $COLLECTOR_DST --service-map $MAP_DIR/service-map.json --cluster-config $MAP_DIR/cluster-nodes.json --node-output $GEO_WEB_DIR/node-stats.json --state-file $STATS_STATE_DIR/state.json --self-domain $PRO_DOMAIN --role worker
 TimeoutStopSec=5
 Restart=always
 RestartSec=5
 Nice=10
+IOSchedulingClass=idle
 
 [Install]
 WantedBy=multi-user.target
