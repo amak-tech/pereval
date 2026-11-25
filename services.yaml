@@ -80,12 +80,12 @@ nodes:
       name: free-worker-ai-1
       pools: [ ai ]
 
-    - ip: 144.31.159.185
-      name: free-worker-ai-2
+    - ip: 162.35.51.217
+      name: fwus-ai-1
       pools: [ ai ]
 
-    - ip: 144.31.159.235
-      name: free-worker-ai-7
+    - ip: 162.35.51.215
+      name: fwus-ai-1
       pools: [ ai ]
 
     - ip: 144.31.159.229
@@ -276,6 +276,7 @@ categories:
           - aisandbox-pa.clients6.google.com
           - aisandbox-pa-webchannel.clients6.google.com
           - feedback-pa.clients6.google.com
+          - ogads-pa.clients6.google.com
       - name: Google Antigravity
         slug: google-antigravity
         note: "Агентная среда разработки Google Antigravity (IDE, десктопный менеджер агентов и CLI) ограничивает авторизацию, обращения к моделям и автообновление с IP-адресов РФ и РБ."
