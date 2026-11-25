@@ -11,9 +11,9 @@ import { getNodeWatchStatus, type NodeWatchReport } from "@/jobs/nodewatch";
  * Фоновый мониторинг сетевых блокировок (ТСПУ/РКН) и недоступности нод из РФ.
  *
  * Комбинирует два независимых сигнала:
- *   1. Активные TCP :443 пробы из российских узлов check-host.net (для DNS-нод и Free-воркеров,
- *      где порт 443 открыт для всех). При подозрении на полную блокировку (0/N) выполняется
- *      контрольная перепроверка, чтобы исключить разовый сбой check-host.net.
+ *   1. Активные HTTPS :443 пробы (/healthz) из российских узлов Globalping (для DNS-нод и Free-воркеров,
+ *      где порт 443 открыт для всех). Все цели проверяются параллельно; при подозрении на полную
+ *      блокировку (0/N) выполняется контрольная перепроверка, чтобы исключить разовый сбой.
  *   2. Пассивный анализ перекоса трафика внутри пула (по данным nodewatch /node-stats.json):
  *      если в пуле >= 2 здоровых воркеров с достаточной нагрузкой (baseline >= 20 клиентов),
  *      и у ноды online_users_5m/weight < 50% от среднего по верхней половине пула — это
@@ -23,11 +23,8 @@ import { getNodeWatchStatus, type NodeWatchReport } from "@/jobs/nodewatch";
 export const BLOCKWATCH_STATUS_KEY = "blockwatch:status";
 const STATE_KEY_PREFIX = "blockwatch:state:";
 
-export const DEFAULT_RU_CHECK_NODES = [
-  "ru1.node.check-host.net",
-  "ru2.node.check-host.net",
-  "ru3.node.check-host.net",
-] as const;
+export const GLOBALPING_API_BASE = "https://api.globalping.io/v1";
+export const DEFAULT_RU_PROBE_LIMIT = 3;
 
 export const SKEW_MIN_BASELINE = 20;
 export const SKEW_RATIO_THRESHOLD = 0.5;
@@ -43,8 +40,10 @@ export type BlockWatchTarget = {
   kind: BlockNodeKind;
   pools: string[];
   weight: number;
-  /** Можно ли проверять TCP :443 извне (у Pro-воркеров порт закрыт nftables). */
+  /** Можно ли проверять HTTPS/TCP :443 извне (у Pro-воркеров порт закрыт nftables). */
   probeTcp443: boolean;
+  /** SNI / Host для HTTPS-пробы /healthz на порту 443. */
+  probeHost: string;
 };
 
 export type RuProbeNodeResult = {
@@ -101,26 +100,50 @@ export type NodeBlockState = {
   lastStatus: BlockStatus;
 };
 
-type CheckHostNodesResponse = {
-  nodes?: Record<string, { location?: unknown[]; ip?: string; asn?: string }>;
+type GlobalpingCreateResponse = {
+  id?: string;
+  probesCount?: number;
+  error?: { type?: string; message?: string };
 };
 
-type CheckHostStartResponse = {
-  ok?: number;
-  request_id?: string;
-  nodes?: Record<string, unknown[]>;
-  error?: string;
+export type GlobalpingMeasurementResult = {
+  probe?: {
+    city?: string;
+    country?: string;
+    network?: string;
+    asn?: number;
+  };
+  result?: {
+    status?: string;
+    statusCode?: number;
+    rawOutput?: string;
+    timings?: {
+      total?: number | null;
+      tcp?: number | null;
+      tls?: number | null;
+      firstByte?: number | null;
+    };
+  };
 };
 
-export type CheckHostOptions = {
+export type GlobalpingMeasurementResponse = {
+  id?: string;
+  status?: string;
+  results?: GlobalpingMeasurementResult[];
+  error?: { type?: string; message?: string };
+};
+
+export type RuProbeOptions = {
   fetcher?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
-  /** Пауза между проверками разных IP (для соблюдения rate-limit check-host.net). */
-  interTargetDelayMs?: number;
-  /** Паузы поллинга результатов check-result. */
+  /** Количество российских проб Globalping на одну цель (по умолчанию 3). */
+  probeLimit?: number;
+  /** Паузы поллинга результатов Globalping (мс). */
   pollDelaysMs?: number[];
-  /** Пауза перед контрольной перепроверкой при 0/N. */
+  /** Пауза перед контрольной перепроверкой при 0/N (мс). */
   recheckDelayMs?: number;
+  /** Опциональный API-токен Globalping (увеличивает лимит с 250 до 500 проб/ч). */
+  token?: string;
 };
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -140,6 +163,9 @@ export function collectBlockWatchTargets(disabledIps: Set<string> = new Set()): 
     targets.push({ ...t, ip });
   };
 
+  const freeHost = catalog.free.domain || "free.pereval.top";
+  const proHost = catalog.pro?.domain || "pro.pereval.top";
+
   if (catalog.free.dns_ip) {
     push({
       ip: catalog.free.dns_ip,
@@ -149,11 +175,12 @@ export function collectBlockWatchTargets(disabledIps: Set<string> = new Set()): 
       pools: ["dns"],
       weight: 1,
       probeTcp443: true,
+      probeHost: freeHost,
     });
   }
 
   for (const w of catalog.free.workers ?? []) {
-    push(workerToTarget(w, "free", true));
+    push(workerToTarget(w, "free", true, freeHost));
   }
 
   if (catalog.pro?.dns_ip) {
@@ -165,20 +192,21 @@ export function collectBlockWatchTargets(disabledIps: Set<string> = new Set()): 
       pools: ["dns"],
       weight: 1,
       probeTcp443: true,
+      probeHost: proHost,
     });
   }
 
   if (catalog.pro) {
     for (const w of catalog.pro.workers ?? []) {
       if (w.pools?.length === 1 && w.pools[0] === "reserve") continue;
-      push(workerToTarget(w, "pro", false));
+      push(workerToTarget(w, "pro", false, proHost));
     }
   }
 
   return targets;
 }
 
-function workerToTarget(w: WorkerInfo, tier: "free" | "pro", probeTcp443: boolean): BlockWatchTarget {
+function workerToTarget(w: WorkerInfo, tier: "free" | "pro", probeTcp443: boolean, probeHost: string): BlockWatchTarget {
   return {
     ip: (w.ip ?? "").trim(),
     name: w.name || w.ip,
@@ -187,6 +215,7 @@ function workerToTarget(w: WorkerInfo, tier: "free" | "pro", probeTcp443: boolea
     pools: w.pools?.length ? w.pools : ["default"],
     weight: typeof w.weight === "number" && w.weight > 0 ? w.weight : 1,
     probeTcp443,
+    probeHost,
   };
 }
 
@@ -209,154 +238,152 @@ export function probeTcpDirect(ip: string, port = 443, timeoutMs = 4_000): Promi
   });
 }
 
-// ---------------------------------------------------------------- check-host.net API
+// ---------------------------------------------------------------- Globalping API
 
-export async function fetchRuCheckNodes(fetcher: typeof fetch = fetch): Promise<{ nodes: string[]; cities: Record<string, string> }> {
-  const cities: Record<string, string> = {};
-  try {
-    const res = await fetcher("https://check-host.net/nodes/hosts", {
-      signal: AbortSignal.timeout(8_000),
-      headers: { Accept: "application/json", "User-Agent": "pereval-blockwatch/1.0" },
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as CheckHostNodesResponse;
-    const ru: string[] = [];
-    for (const [host, meta] of Object.entries(data.nodes ?? {})) {
-      const loc = Array.isArray(meta?.location) ? meta.location : [];
-      if (String(loc[0] ?? "").toLowerCase() === "ru") {
-        ru.push(host);
-        cities[host] = String(loc[2] ?? loc[1] ?? "RU");
-      }
-    }
-    if (ru.length > 0) {
-      ru.sort();
-      return { nodes: ru.slice(0, 5), cities };
-    }
-  } catch {
-    // фоллбек на фиксированный список российских узлов
-  }
-  return { nodes: [...DEFAULT_RU_CHECK_NODES], cities };
-}
-
-/** Разбирает сырой JSON-ответ /check-result/<id> для check-tcp. */
-export function parseCheckHostTcpResult(
-  raw: Record<string, unknown> | null | undefined,
-  requestedNodes: string[],
-  cities: Record<string, string> = {},
-  requestId: string | null = null,
+/** Разбирает JSON-ответ GET /v1/measurements/<id> для HTTPS-пробы :443. */
+export function parseGlobalpingHttpResult(
+  raw: GlobalpingMeasurementResponse | null | undefined,
+  expectedTotal = DEFAULT_RU_PROBE_LIMIT,
 ): RuProbeSummary {
-  const obj = raw && typeof raw === "object" ? raw : {};
-  const nodeKeys = requestedNodes.length > 0 ? requestedNodes : Object.keys(obj);
+  const list = Array.isArray(raw?.results) ? raw.results : [];
   const results: RuProbeNodeResult[] = [];
   let ok = 0;
   let responded = 0;
 
-  for (const node of nodeKeys) {
-    const entry = obj[node];
-    const city = cities[node] || node.split(".")[0] || "RU";
-    if (entry === null || entry === undefined) {
-      results.push({ node, city, ok: null, latencyMs: null, error: null });
-      continue;
-    }
-    if (Array.isArray(entry) && entry.length > 0 && entry[0] && typeof entry[0] === "object") {
-      const first = entry[0] as Record<string, unknown>;
+  for (const item of list) {
+    const city = item.probe?.city?.trim() || "RU";
+    const netLabel = item.probe?.network?.trim() || (item.probe?.asn ? `AS${item.probe.asn}` : "");
+    const node = netLabel ? `${city} (${netLabel})` : city;
+    const st = item.result?.status;
+
+    if (st === "finished") {
       responded++;
-      if (typeof first.error === "string" && first.error) {
-        results.push({ node, city, ok: false, latencyMs: null, error: first.error });
-      } else if (typeof first.time === "number" && Number.isFinite(first.time)) {
-        ok++;
-        results.push({ node, city, ok: true, latencyMs: Math.round(first.time * 1000), error: null });
-      } else if (typeof first.address === "string") {
-        ok++;
-        results.push({ node, city, ok: true, latencyMs: null, error: null });
-      } else {
-        results.push({ node, city, ok: false, latencyMs: null, error: "unexpected response" });
-      }
-      continue;
+      ok++;
+      const tcp = item.result?.timings?.tcp;
+      const total = item.result?.timings?.total;
+      const latencyMs =
+        typeof tcp === "number" && Number.isFinite(tcp)
+          ? Math.round(tcp)
+          : typeof total === "number" && Number.isFinite(total)
+            ? Math.round(total)
+            : null;
+      results.push({ node, city, ok: true, latencyMs, error: null });
+    } else if (st === "failed") {
+      responded++;
+      const firstLine = (item.result?.rawOutput ?? "").split(/\r?\n/)[0]?.trim() || "connection failed";
+      results.push({ node, city, ok: false, latencyMs: null, error: firstLine.slice(0, 140) });
+    } else {
+      results.push({ node, city, ok: null, latencyMs: null, error: null });
     }
-    results.push({ node, city, ok: null, latencyMs: null, error: null });
   }
 
   return {
-    requestId,
+    requestId: raw?.id ?? null,
     ok,
     responded,
-    total: nodeKeys.length,
+    total: results.length > 0 ? results.length : expectedTotal,
     nodes: results,
     error: null,
   };
 }
 
-export async function probeTcpFromRussia(
+export async function probeHttpsFromRussia(
   ip: string,
-  ruNodes: string[],
-  cities: Record<string, string> = {},
-  opts: CheckHostOptions = {},
+  host: string,
+  opts: RuProbeOptions = {},
 ): Promise<RuProbeSummary> {
   const fetcher = opts.fetcher ?? fetch;
   const sleep = opts.sleep ?? defaultSleep;
-  const pollDelays = opts.pollDelaysMs ?? [4_000, 3_000, 3_000];
+  const probeLimit = Math.max(1, opts.probeLimit ?? DEFAULT_RU_PROBE_LIMIT);
+  const pollDelays = opts.pollDelaysMs ?? [1_500, 1_500, 2_000, 2_000, 2_000, 2_000, 2_000, 2_000, 2_000, 2_000];
+  const token = (opts.token ?? process.env.GLOBALPING_TOKEN ?? "").trim();
 
-  const params = new URLSearchParams({ host: `${ip}:443` });
-  for (const n of ruNodes) params.append("node", n);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "User-Agent": "pereval-blockwatch/1.0",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-  let requestId: string | null = null;
-  let activeNodes = ruNodes;
+  let measurementId: string | null = null;
+  let expectedCount = probeLimit;
   try {
-    const startRes = await fetcher(`https://check-host.net/check-tcp?${params.toString()}`, {
+    const startRes = await fetcher(`${GLOBALPING_API_BASE}/measurements`, {
+      method: "POST",
       signal: AbortSignal.timeout(10_000),
-      headers: { Accept: "application/json", "User-Agent": "pereval-blockwatch/1.0" },
+      headers: { ...headers, "Content-Type": "application/json" },
       cache: "no-store",
+      body: JSON.stringify({
+        type: "http",
+        target: ip,
+        locations: [{ country: "RU", limit: probeLimit }],
+        measurementOptions: {
+          protocol: "HTTPS",
+          port: 443,
+          request: {
+            host: host || "free.pereval.top",
+            path: "/healthz",
+            method: "HEAD",
+          },
+        },
+      }),
     });
     if (!startRes.ok) {
-      return { requestId: null, ok: 0, responded: 0, total: ruNodes.length, nodes: [], error: `check-host HTTP ${startRes.status}` };
+      let detail = `Globalping HTTP ${startRes.status}`;
+      try {
+        const errBody = (await startRes.json()) as GlobalpingCreateResponse;
+        if (errBody?.error?.message) detail = `Globalping ${startRes.status}: ${errBody.error.message}`;
+      } catch {
+        // игнорируем не-JSON тело ошибки
+      }
+      return { requestId: null, ok: 0, responded: 0, total: probeLimit, nodes: [], error: detail };
     }
-    const started = (await startRes.json()) as CheckHostStartResponse;
-    if (!started.request_id) {
+    const started = (await startRes.json()) as GlobalpingCreateResponse;
+    if (!started.id) {
       return {
         requestId: null,
         ok: 0,
         responded: 0,
-        total: ruNodes.length,
+        total: probeLimit,
         nodes: [],
-        error: started.error || "check-host не вернул request_id",
+        error: started.error?.message || "Globalping не вернул id измерения",
       };
     }
-    requestId = started.request_id;
-    const returnedNodes = Object.keys(started.nodes ?? {});
-    if (returnedNodes.length > 0) activeNodes = returnedNodes;
+    measurementId = started.id;
+    if (typeof started.probesCount === "number" && started.probesCount > 0) {
+      expectedCount = started.probesCount;
+    }
   } catch (err) {
     return {
       requestId: null,
       ok: 0,
       responded: 0,
-      total: ruNodes.length,
+      total: probeLimit,
       nodes: [],
-      error: (err as Error)?.message || "check-host request failed",
+      error: (err as Error)?.message || "Globalping request failed",
     };
   }
 
   let latest: RuProbeSummary = {
-    requestId,
+    requestId: measurementId,
     ok: 0,
     responded: 0,
-    total: activeNodes.length,
-    nodes: activeNodes.map((node) => ({ node, city: cities[node] || node, ok: null, latencyMs: null, error: null })),
+    total: expectedCount,
+    nodes: [],
     error: null,
   };
 
   for (const delay of pollDelays) {
     if (delay > 0) await sleep(delay);
     try {
-      const pollRes = await fetcher(`https://check-host.net/check-result/${encodeURIComponent(requestId)}`, {
+      const pollRes = await fetcher(`${GLOBALPING_API_BASE}/measurements/${encodeURIComponent(measurementId)}`, {
         signal: AbortSignal.timeout(10_000),
-        headers: { Accept: "application/json", "User-Agent": "pereval-blockwatch/1.0" },
+        headers,
         cache: "no-store",
       });
       if (!pollRes.ok) continue;
-      const raw = (await pollRes.json()) as Record<string, unknown>;
-      latest = parseCheckHostTcpResult(raw, activeNodes, cities, requestId);
+      const raw = (await pollRes.json()) as GlobalpingMeasurementResponse;
+      latest = parseGlobalpingHttpResult(raw, expectedCount);
+      if (raw.status && raw.status !== "in-progress") break;
       if (latest.responded >= latest.total && latest.total > 0) break;
     } catch {
       // попробуем ещё раз на следующей итерации
@@ -448,13 +475,13 @@ export function classifyNodeBlockStatus(input: {
       if (ru.ok === 0) {
         return {
           status: "blocked",
-          reason: `TCP :443 недоступен из РФ (${ru.ok}/${ru.responded} RU-узлов check-host.net)`,
+          reason: `HTTPS :443 недоступен из РФ (${ru.ok}/${ru.responded} RU-узлов Globalping)`,
         };
       }
       if (ru.ok < ru.responded) {
         return {
           status: "degraded",
-          reason: `Частичная недоступность из РФ (${ru.ok}/${ru.responded} RU-узлов check-host.net)`,
+          reason: `Частичная недоступность из РФ (${ru.ok}/${ru.responded} RU-узлов Globalping)`,
         };
       }
       // Из РФ все ответившие узлы достучались
@@ -467,16 +494,16 @@ export function classifyNodeBlockStatus(input: {
       return { status: "ok", reason: `Доступна из РФ (${ru.ok}/${ru.responded} RU-узлов)` };
     }
 
-    // check-host.net не ответил — опираемся на пассивный перекос трафика
+    // Globalping не ответил — опираемся на пассивный перекос трафика
     if (input.trafficSkew?.skewed) {
       return {
         status: "skewed",
-        reason: `Перекос трафика в пуле ${input.trafficSkew.pool}: ${input.trafficSkew.onlineUsers5m} клиентов против базы ${input.trafficSkew.baseline} (${Math.round(input.trafficSkew.ratio * 100)}%); check-host.net не ответил`,
+        reason: `Перекос трафика в пуле ${input.trafficSkew.pool}: ${input.trafficSkew.onlineUsers5m} клиентов против базы ${input.trafficSkew.baseline} (${Math.round(input.trafficSkew.ratio * 100)}%); Globalping не ответил`,
       };
     }
     return {
       status: "unknown",
-      reason: ru?.error ? `check-host.net: ${ru.error}` : "RU-узлы check-host.net не вернули ответ",
+      reason: ru?.error ? `Globalping: ${ru.error}` : "RU-узлы Globalping не вернули ответ",
     };
   }
 
@@ -613,7 +640,7 @@ function getFreshNodeWatchMap(report: NodeWatchReport | null, now: Date): Map<st
 
 export async function checkNodesBlocking(
   now: Date = new Date(),
-  opts: CheckHostOptions = {},
+  opts: RuProbeOptions = {},
 ): Promise<{
   checked: number;
   blocked: number;
@@ -623,11 +650,13 @@ export async function checkNodesBlocking(
   alerted: string[];
   recovered: string[];
 }> {
-  const fetcher = opts.fetcher ?? fetch;
   const sleep = opts.sleep ?? defaultSleep;
-  const interTargetDelayMs = opts.interTargetDelayMs ?? 1_500;
-  const recheckDelayMs = opts.recheckDelayMs ?? 8_000;
+  const recheckDelayMs = opts.recheckDelayMs ?? 3_000;
   const cooldownMinutes = env().BLOCK_ALERT_COOLDOWN_MINUTES;
+  const probeOpts: RuProbeOptions = {
+    ...opts,
+    token: opts.token ?? env().GLOBALPING_TOKEN,
+  };
 
   const [dbNodes, nodewatch] = await Promise.all([
     db().select().from(schema.nodes),
@@ -668,34 +697,49 @@ export async function checkNodesBlocking(
   }
   const skewMap = detectPoolTrafficSkew(workerSamples);
 
-  // 3. Получаем актуальные RU-узлы check-host.net и проверяем открытые цели
-  const { nodes: ruNodes, cities } = await fetchRuCheckNodes(fetcher);
+  // 3. Параллельно проверяем все открытые цели из РФ через Globalping
+  const ruProbes: Array<RuProbeSummary | null> = await Promise.all(
+    targets.map(async (t, i) => {
+      if (!t.probeTcp443 || !cpReachableList[i]) return null;
+      return probeHttpsFromRussia(t.ip, t.probeHost, probeOpts);
+    }),
+  );
+
+  // Контрольная перепроверка для целей с 0/N (тоже параллельно), чтобы исключить разовый сбой
+  const recheckIdx: number[] = [];
+  for (let i = 0; i < ruProbes.length; i++) {
+    const p = ruProbes[i];
+    if (p && p.responded > 0 && p.ok === 0) recheckIdx.push(i);
+  }
+  if (recheckIdx.length > 0) {
+    if (recheckDelayMs > 0) await sleep(recheckDelayMs);
+    await Promise.all(
+      recheckIdx.map(async (i) => {
+        const t = targets[i]!;
+        const recheck = await probeHttpsFromRussia(t.ip, t.probeHost, probeOpts);
+        if (recheck.responded > 0) {
+          ruProbes[i] = recheck;
+        }
+      }),
+    );
+  }
+
+  const ruNodeSet = new Set<string>();
+  for (const p of ruProbes) {
+    for (const n of p?.nodes ?? []) ruNodeSet.add(n.node);
+  }
+  const ruNodes = [...ruNodeSet].sort();
+
   const checkedAt = now.toISOString();
   const entries: BlockWatchEntry[] = [];
   const toAlert: BlockWatchEntry[] = [];
   const recoveredEntries: BlockWatchEntry[] = [];
 
-  let probedCount = 0;
   for (let i = 0; i < targets.length; i++) {
     const t = targets[i]!;
     const cpReachable = cpReachableList[i]!;
     const trafficSkew = skewMap.get(t.ip) ?? null;
-
-    let ruProbe: RuProbeSummary | null = null;
-    if (t.probeTcp443 && cpReachable) {
-      if (probedCount > 0 && interTargetDelayMs > 0) await sleep(interTargetDelayMs);
-      probedCount++;
-      ruProbe = await probeTcpFromRussia(t.ip, ruNodes, cities, opts);
-
-      // Контрольная перепроверка при 0/N, чтобы исключить разовый сбой check-host.net
-      if (ruProbe.responded > 0 && ruProbe.ok === 0) {
-        if (recheckDelayMs > 0) await sleep(recheckDelayMs);
-        const recheck = await probeTcpFromRussia(t.ip, ruNodes, cities, opts);
-        if (recheck.responded > 0) {
-          ruProbe = recheck;
-        }
-      }
-    }
+    const ruProbe = ruProbes[i] ?? null;
 
     const { status, reason } = classifyNodeBlockStatus({
       cpReachable,
@@ -748,7 +792,7 @@ export async function checkNodesBlocking(
         `• ${e.name} (${e.ip}) — [${e.status.toUpperCase()}]`,
         `  Кластер: ${e.tier === "pro" ? "Pro" : "Free"} · роль: ${e.kind} · пулы: ${e.pools.join(", ")}`,
         `  Причина: ${e.reason}`,
-        e.probeTcp443 ? `  RU-пробы (TCP :443): ${formatRuNodesShort(e.ruProbe)}` : `  RU-пробы: порт 443 закрыт nftables (оценка по перекосу трафика)`,
+        e.probeTcp443 ? `  RU-пробы (HTTPS :443): ${formatRuNodesShort(e.ruProbe)}` : `  RU-пробы: порт 443 закрыт nftables (оценка по перекосу трафика)`,
         e.trafficSkew ? `  Трафик пула ${e.trafficSkew.pool}: ${e.trafficSkew.onlineUsers5m} клиентов против базы ${e.trafficSkew.baseline} (${Math.round(e.trafficSkew.ratio * 100)}%)` : "",
         ``,
       ]).filter((l, idx, arr) => l !== "" || (idx > 0 && arr[idx - 1] !== "")),
@@ -798,46 +842,40 @@ export async function checkNodesBlocking(
  */
 export async function probeAdhocIps(
   ips: string[],
-  opts: CheckHostOptions = {},
+  opts: RuProbeOptions = {},
 ): Promise<BlockWatchEntry[]> {
-  const fetcher = opts.fetcher ?? fetch;
-  const sleep = opts.sleep ?? defaultSleep;
-  const interTargetDelayMs = opts.interTargetDelayMs ?? 1_500;
-  const { nodes: ruNodes, cities } = await fetchRuCheckNodes(fetcher);
   const checkedAt = new Date().toISOString();
-  const results: BlockWatchEntry[] = [];
+  const probeHost = catalog.free.domain || "free.pereval.top";
+  const cleanIps = ips.map((x) => x.trim()).filter(Boolean);
 
-  for (let i = 0; i < ips.length; i++) {
-    const ip = ips[i]!.trim();
-    if (!ip) continue;
-    if (i > 0 && interTargetDelayMs > 0) await sleep(interTargetDelayMs);
-    const [cpReachable, ruProbe] = await Promise.all([
-      probeTcpDirect(ip, 443, 4_000),
-      probeTcpFromRussia(ip, ruNodes, cities, opts),
-    ]);
-    const { status, reason } = classifyNodeBlockStatus({
-      cpReachable,
-      probeTcp443: true,
-      ruProbe,
-      trafficSkew: null,
-    });
-    results.push({
-      ip,
-      name: ip,
-      tier: "free",
-      kind: "worker",
-      pools: ["adhoc"],
-      probeTcp443: true,
-      cpReachable,
-      ruProbe,
-      trafficSkew: null,
-      status,
-      reason,
-      consecutiveBad: status === "ok" || status === "unknown" ? 0 : 1,
-      checkedAt,
-      alertedAt: null,
-    });
-  }
-
-  return results;
+  return Promise.all(
+    cleanIps.map(async (ip) => {
+      const [cpReachable, ruProbe] = await Promise.all([
+        probeTcpDirect(ip, 443, 4_000),
+        probeHttpsFromRussia(ip, probeHost, opts),
+      ]);
+      const { status, reason } = classifyNodeBlockStatus({
+        cpReachable,
+        probeTcp443: true,
+        ruProbe,
+        trafficSkew: null,
+      });
+      return {
+        ip,
+        name: ip,
+        tier: "free" as const,
+        kind: "worker" as const,
+        pools: ["adhoc"],
+        probeTcp443: true,
+        cpReachable,
+        ruProbe,
+        trafficSkew: null,
+        status,
+        reason,
+        consecutiveBad: status === "ok" || status === "unknown" ? 0 : 1,
+        checkedAt,
+        alertedAt: null,
+      };
+    }),
+  );
 }

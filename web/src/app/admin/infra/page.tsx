@@ -157,7 +157,7 @@ export default async function AdminInfraPage() {
         actions={<ActionButton action={{ action: "blockwatch.check" }}>Проверить сейчас</ActionButton>}
       >
         <p className="m-0 mb-3 text-xs text-mute">
-          Задача <code>blockwatch</code> раз в 30 минут проверяет TCP <code>:443</code> всех DNS-нод и Free-воркеров с российских узлов <code>check-host.net</code> и отслеживает перекос трафика внутри пулов (в том числе для Pro-воркеров с nftables). Кулдаун алертов: {e.BLOCK_ALERT_COOLDOWN_MINUTES} мин.
+          Задача <code>blockwatch</code> раз в 30 минут проверяет HTTPS <code>:443</code> всех DNS-нод и Free-воркеров с российских узлов <code>Globalping</code> и отслеживает перекос трафика внутри пулов (в том числе для Pro-воркеров с nftables). Кулдаун алертов: {e.BLOCK_ALERT_COOLDOWN_MINUTES} мин.
           {blockwatch?.checkedAt ? ` Последняя проверка: ${fmtDt(new Date(blockwatch.checkedAt))}.` : " Опрос ещё не выполнялся."}
         </p>
         <Table head={["Нода", "Кластер / Пулы", "IP", "RU-пробы (:443)", "Перекос пула", "Статус"]} empty="Ноды не найдены в каталоге.">
@@ -298,6 +298,7 @@ export default async function AdminInfraPage() {
             ["Каталог", `${totalServices()} сервисов, ${catalog.categories.length} категорий, ${totalDomains()} доменов (services.yaml)`],
             ["Grace / ACL TTL / IP на аккаунт", `${e.GRACE_DAYS} дн. / ${e.ACL_DYNAMIC_TTL_MINUTES} мин / ${e.MAX_BOUND_IPS}`],
             ["Google OAuth", e.AUTH_GOOGLE_ID ? "включён" : "выключен"],
+            ["Globalping (blockwatch)", e.GLOBALPING_TOKEN ? "с токеном (500 проб/ч)" : "без токена (250 проб/ч)"],
             ["SMTP", `${e.SMTP_HOST}:${e.SMTP_PORT} (${e.SMTP_USERNAME ? "с авторизацией" : "без логина"}) от ${e.MAIL_FROM}`],
             ["Админы", [...new Set(`${e.ADMIN_EMAILS},${e.ADMIN_EMAIL}`.split(",").map((s) => s.trim()).filter(Boolean))].join(", ")],
           ].map(([k, v]) => (

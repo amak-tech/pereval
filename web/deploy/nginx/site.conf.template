@@ -95,6 +95,13 @@ server {
         proxy_pass http://app;
     }
 
+    # Админские действия (blockwatch.check, billing.reconcile и т.п.) могут идти дольше 30 с
+    location /api/admin/ {
+        proxy_pass http://app;
+        proxy_read_timeout 90s;
+        proxy_send_timeout 90s;
+    }
+
     # Long-poll нод data plane: держим соединение до 60 с
     location /api/internal/ {
         proxy_pass http://app;

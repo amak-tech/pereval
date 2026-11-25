@@ -30,6 +30,8 @@ const schema = z.object({
   NODE_MAX_CLIENTS: z.coerce.number().int().min(1).max(100_000).default(150),
   NODE_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(360),
   BLOCK_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(360),
+  /** опциональный API-токен Globalping (без токена — 250 проб/час, с токеном — 500/час) */
+  GLOBALPING_TOKEN: z.string().default(""),
 
   RETENTION_WEBHOOK_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
   RETENTION_ACTIVITY_DAYS: z.coerce.number().int().min(7).max(365).default(35),

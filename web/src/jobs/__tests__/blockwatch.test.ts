@@ -5,37 +5,41 @@ import {
   detectPoolTrafficSkew,
   evaluateBlockAlertState,
   formatRuNodesShort,
-  parseCheckHostTcpResult,
-  probeTcpFromRussia,
+  parseGlobalpingHttpResult,
+  probeHttpsFromRussia,
   type RuProbeSummary,
   type WorkerTrafficSample,
 } from "@/jobs/blockwatch";
 
-describe("parseCheckHostTcpResult", () => {
-  const nodes = ["ru1.node.check-host.net", "ru2.node.check-host.net", "ru3.node.check-host.net"];
-  const cities = {
-    "ru1.node.check-host.net": "Moscow",
-    "ru2.node.check-host.net": "Moscow",
-    "ru3.node.check-host.net": "Saint Petersburg",
-  };
-
-  it("разбирает смесь успешных ответов, таймаутов и null", () => {
-    const parsed = parseCheckHostTcpResult(
-      {
-        "ru1.node.check-host.net": [{ address: "144.31.159.229", time: 0.0412 }],
-        "ru2.node.check-host.net": null,
-        "ru3.node.check-host.net": [{ error: "Connection timed out" }],
-      },
-      nodes,
-      cities,
-      "req-1",
-    );
-    expect(parsed.requestId).toBe("req-1");
+describe("parseGlobalpingHttpResult", () => {
+  it("разбирает смесь успешных ответов, ошибок и in-progress", () => {
+    const parsed = parseGlobalpingHttpResult({
+      id: "m-1",
+      status: "in-progress",
+      results: [
+        {
+          probe: { city: "Moscow", country: "RU", network: "Timeweb", asn: 9123 },
+          result: { status: "finished", statusCode: 200, timings: { tcp: 41.2, total: 120 } },
+        },
+        {
+          probe: { city: "Moscow", country: "RU", network: "Yandex.Cloud", asn: 200350 },
+          result: { status: "in-progress" },
+        },
+        {
+          probe: { city: "Saint Petersburg", country: "RU", network: "Selectel", asn: 49505 },
+          result: {
+            status: "failed",
+            rawOutput: "Request timed out while establishing the TCP connection.\n",
+          },
+        },
+      ],
+    });
+    expect(parsed.requestId).toBe("m-1");
     expect(parsed.ok).toBe(1);
     expect(parsed.responded).toBe(2);
     expect(parsed.total).toBe(3);
     expect(parsed.nodes[0]).toEqual({
-      node: "ru1.node.check-host.net",
+      node: "Moscow (Timeweb)",
       city: "Moscow",
       ok: true,
       latencyMs: 41,
@@ -43,65 +47,94 @@ describe("parseCheckHostTcpResult", () => {
     });
     expect(parsed.nodes[1]?.ok).toBeNull();
     expect(parsed.nodes[2]).toEqual({
-      node: "ru3.node.check-host.net",
+      node: "Saint Petersburg (Selectel)",
       city: "Saint Petersburg",
       ok: false,
       latencyMs: null,
-      error: "Connection timed out",
+      error: "Request timed out while establishing the TCP connection.",
     });
     expect(formatRuNodesShort(parsed)).toBe("1/2 (Moscow:41ms, Moscow:?, Saint Petersburg:fail)");
   });
 
   it("фиксирует полную недоступность (0/2)", () => {
-    const parsed = parseCheckHostTcpResult(
-      {
-        "ru1.node.check-host.net": [{ error: "Connection timed out" }],
-        "ru2.node.check-host.net": null,
-        "ru3.node.check-host.net": [{ error: "Connection timed out" }],
-      },
-      nodes,
-      cities,
-      "req-2",
-    );
+    const parsed = parseGlobalpingHttpResult({
+      id: "m-2",
+      status: "finished",
+      results: [
+        {
+          probe: { city: "Moscow", country: "RU", network: "Timeweb" },
+          result: { status: "failed", rawOutput: "Connection timed out" },
+        },
+        {
+          probe: { city: "Moscow", country: "RU", network: "Selectel" },
+          result: { status: "offline" },
+        },
+        {
+          probe: { city: "Saint Petersburg", country: "RU", network: "Miran" },
+          result: { status: "failed", rawOutput: "Connection timed out" },
+        },
+      ],
+    });
     expect(parsed.ok).toBe(0);
     expect(parsed.responded).toBe(2);
   });
 });
 
-describe("probeTcpFromRussia", () => {
-  it("выходит из поллинга, как только все узлы ответили", async () => {
+describe("probeHttpsFromRussia", () => {
+  it("выходит из поллинга, как только измерение Globalping завершилось", async () => {
     let polls = 0;
-    const fakeFetch: typeof fetch = async (input) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fakeFetch: typeof fetch = async (input, init) => {
       const url = String(input);
-      if (url.includes("/check-tcp")) {
-        return new Response(
-          JSON.stringify({
-            ok: 1,
-            request_id: "abc123",
-            nodes: { "ru1.node.check-host.net": [], "ru3.node.check-host.net": [] },
-          }),
-          { status: 200 },
-        );
+      if (url.endsWith("/measurements")) {
+        bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+        return new Response(JSON.stringify({ id: "abc123", probesCount: 2 }), { status: 202 });
       }
       polls++;
       return new Response(
         JSON.stringify({
-          "ru1.node.check-host.net": [{ address: "1.2.3.4", time: 0.05 }],
-          "ru3.node.check-host.net": [{ address: "1.2.3.4", time: 0.08 }],
+          id: "abc123",
+          status: "finished",
+          results: [
+            {
+              probe: { city: "Moscow", country: "RU", network: "Timeweb" },
+              result: { status: "finished", statusCode: 200, timings: { tcp: 50, total: 140 } },
+            },
+            {
+              probe: { city: "SPb", country: "RU", network: "Selectel" },
+              result: { status: "finished", statusCode: 200, timings: { tcp: 80, total: 180 } },
+            },
+          ],
         }),
         { status: 200 },
       );
     };
 
-    const res = await probeTcpFromRussia(
-      "1.2.3.4",
-      ["ru1.node.check-host.net", "ru3.node.check-host.net"],
-      { "ru1.node.check-host.net": "Moscow", "ru3.node.check-host.net": "SPb" },
-      { fetcher: fakeFetch, sleep: async () => {}, pollDelaysMs: [0, 0, 0] },
-    );
+    const res = await probeHttpsFromRussia("1.2.3.4", "free.pereval.top", {
+      fetcher: fakeFetch,
+      sleep: async () => {},
+      pollDelaysMs: [0, 0, 0],
+      probeLimit: 2,
+    });
     expect(polls).toBe(1);
     expect(res.ok).toBe(2);
     expect(res.responded).toBe(2);
+    expect(bodies[0]?.target).toBe("1.2.3.4");
+    expect(bodies[0]?.type).toBe("http");
+  });
+
+  it("возвращает ошибку при HTTP 429 от Globalping (без ложного blocked)", async () => {
+    const fakeFetch: typeof fetch = async () =>
+      new Response(JSON.stringify({ error: { type: "too_many_requests", message: "Too many requests" } }), {
+        status: 429,
+      });
+
+    const res = await probeHttpsFromRussia("1.2.3.4", "free.pereval.top", {
+      fetcher: fakeFetch,
+      sleep: async () => {},
+    });
+    expect(res.responded).toBe(0);
+    expect(res.error).toContain("429");
   });
 });
 
