@@ -31,6 +31,11 @@ const schema = z.object({
   NODE_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(360),
   BLOCK_ALERT_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(10_080).default(360),
 
+  RETENTION_WEBHOOK_DAYS: z.coerce.number().int().min(7).max(3650).default(90),
+  RETENTION_ACTIVITY_DAYS: z.coerce.number().int().min(7).max(365).default(35),
+  RETENTION_MAIL_DAYS: z.coerce.number().int().min(3).max(365).default(30),
+  RETENTION_AUDIT_DAYS: z.coerce.number().int().min(30).max(3650).default(180),
+
   LAVA_API_KEY: z.string().default(""),
   LAVA_BASE_URL: z.string().url().default("https://gate.lava.top"),
   LAVA_OFFER_ID_PRO: z.string().default(""),

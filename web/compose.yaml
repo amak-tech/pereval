@@ -37,7 +37,7 @@ services:
       retries: 3
     logging: &log
       driver: json-file
-      options: { max-size: "20m", max-file: "5" }
+      options: { max-size: "10m", max-file: "5", compress: "true" }
 
   jobs:
     image: ${APP_IMAGE:-ghcr.io/amak-tech/pereval-web:latest}
@@ -75,7 +75,8 @@ services:
     image: postgres:16-alpine
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
-      BACKUP_KEEP_DAYS: "30"
+      BACKUP_KEEP_DAYS: "${BACKUP_KEEP_DAYS:-14}"
+      BACKUP_MAX_FILES: "${BACKUP_MAX_FILES:-20}"
     volumes:
       - /var/backups/pereval:/backups
       - ./deploy/backup-loop.sh:/backup-loop.sh:ro
@@ -115,6 +116,7 @@ services:
       - certbot-www:/var/www/certbot
       - ./deploy/certbot-auth-hook.sh:/hooks/auth.sh:ro
       - ./dns01:/dns01            # сюда hook пишет TXT-записи для DNS-01 (dns01/records.txt)
+    logging: *log
 
 volumes:
   pgdata:

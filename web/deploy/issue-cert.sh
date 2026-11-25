@@ -51,9 +51,10 @@ echo
 echo "TXT-записи появятся в $(pwd)/dns01/records.txt — добавьте их у регистратора; certbot дождётся их в DNS сам."
 echo
 if "${COMPOSE[@]}" run --rm -T certbot certonly --manual --preferred-challenges dns \
-	--manual-auth-hook /hooks/auth.sh --non-interactive \
+	--manual-auth-hook /hooks/auth.sh --non-interactive --max-log-backups 10 \
 	--cert-name "$SITE_DOMAIN" "${args[@]}" --agree-tos "${email_args[@]}" \
 	--keep-until-expiring --expand "${force_args[@]}"; then
+	rm -f dns01/records.txt
 	echo
 	"${COMPOSE[@]}" exec -T nginx sh /docker-entrypoint.d/40-pereval-certs.sh publish
 	echo "Готово. Ноды подхватят сертификат по таймеру pereval-cert-sync (до 1 ч)."

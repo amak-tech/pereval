@@ -148,9 +148,15 @@ jobs:
           # образ в GHCR приватный: логинимся на сервере токеном этого запуска (живёт только на время job)
           printf '%s' "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           scp -i "$KEY" -o StrictHostKeyChecking=accept-new -r web/compose.yaml web/deploy "$CP_SSH_USER@$CP_HOST:/opt/pereval/"
-          $SSH "cd /opt/pereval && test -f .env || { echo 'нет /opt/pereval/.env — создайте из deploy/.env.example'; exit 1; }"
+          $SSH "chmod +x /opt/pereval/deploy/*.sh && cd /opt/pereval && test -f .env || { echo 'нет /opt/pereval/.env — создайте из deploy/.env.example'; exit 1; }"
           # синхронизация секретов в .env: KEY=VALUE построчно через stdin, на сервере upsert (значения в файл, не в командную строку)
           env | grep '^SYNC_' | sed 's/^SYNC_//' | awk -F= 'length($0) > length($1) + 1' \
             | $SSH 'cd /opt/pereval && while IFS= read -r line; do k="${line%%=*}"; if grep -q "^$k=" .env; then awk -v l="$line" -v k="$k" "index(\$0, k\"=\")==1 {print l; next} {print}" .env > .env.tmp && cat .env.tmp > .env && rm -f .env.tmp; else printf "%s\n" "$line" >> .env; fi; done; chmod 600 .env; echo "секреты синхронизированы: $(grep -cE "^(SMTP_PASSWORD|LAVA_API_KEY)=.+" .env)/2 ключевых заполнены"'
+          # настраиваем лимиты логов (journald, docker, logrotate) и автоочистку файлов/бэкапов на CP
+          $SSH 'if [ "$(id -u)" -eq 0 ]; then bash -s; else sudo -n bash -s; fi' < web/deploy/setup-host-maintenance.sh
+          # перед загрузкой нового образа убираем старые неиспользуемые образы, чтобы не упереться в диск
+          $SSH 'docker container prune -f >/dev/null 2>&1 || true; docker image prune -af >/dev/null 2>&1 || true'
           $SSH "cd /opt/pereval && echo 'APP_IMAGE=$IMAGE' > .image.env && docker compose --env-file .env --env-file .image.env pull app jobs && docker compose --env-file .env --env-file .image.env up -d --remove-orphans && docker compose --env-file .env --env-file .image.env up -d --force-recreate --no-deps nginx && docker compose ps"
           $SSH 'cd /opt/pereval && sleep 5 && curl -fsS http://127.0.0.1/healthz && d=$(grep -E "^SITE_DOMAIN=" .env 2>/dev/null | tail -n1 | cut -d= -f2- || true) && curl -fsSk -H "Host: check.${d:-pereval.top}" https://127.0.0.1/ping && docker compose exec -T app wget -qO- http://127.0.0.1:3000/api/healthz'
+          # после успешной проверки здоровья удаляем старые Docker-образы и кэш сборки
+          $SSH 'docker container prune -f && docker image prune -af && (docker builder prune -af >/dev/null 2>&1 || true) && (docker logout ghcr.io >/dev/null 2>&1 || true) && df -h /'
