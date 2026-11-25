@@ -166,16 +166,19 @@ class WorkerSecretEnvTests(unittest.TestCase):
             self.assertEqual(payload["regions"]["us"]["fail_threshold"], 4)
             self.assertEqual(payload["regions"]["us"]["rise_threshold"], 2)
             by_name = {w["name"]: w for w in payload["workers"]}
-            self.assertEqual(by_name["pro-worker-default-1"]["region"], "eu")
-            self.assertEqual(by_name["pro-worker-ai-1"]["region"], "eu")
-            self.assertEqual(by_name["pro-worker-ai-us-1"]["region"], "us")
-            self.assertEqual(by_name["pro-worker-ai-us-1"]["ip"], "45.91.138.24")
+            for w in doc.pro.workers:
+                self.assertEqual(by_name[w.name].get("region"), w.region)
+                self.assertEqual(by_name[w.name]["ip"], w.ip)
+
+        self.assertTrue(any(w.region == "eu" for w in doc.pro.workers))
+        self.assertTrue(any(w.region == "us" for w in doc.pro.workers))
 
         site = json.loads(generate.services_json(doc, "153.80.200.170"))
         self.assertIn("regions", site["pro"])
         self.assertEqual(site["pro"]["regions"]["us"]["name"], "США")
         site_workers = {w["name"]: w for w in site["pro"]["workers"]}
-        self.assertEqual(site_workers["pro-worker-ai-us-1"]["region"], "us")
+        for w in doc.pro.workers:
+            self.assertEqual(site_workers[w.name].get("region"), w.region)
 
     def test_worker_as_dict_region_optional(self):
         w_no = generate.WorkerNode("1.2.3.4", "w1")
