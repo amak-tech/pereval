@@ -41,9 +41,11 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import ssl
+import subprocess
 import sys
 import time
 from collections import OrderedDict
@@ -72,6 +74,8 @@ ACTIVITY_FLUSH_INTERVAL = 5.0
 RECENT_WINDOW = 300              # «активные токены» в метриках — за последние 5 минут
 POLICY_API = "/api/internal/v1/policy"
 ACTIVITY_API = "/api/internal/v1/dns/activity"
+NGINX_WORKERS_HEADER = "# Обновлено автоматически pereval-free-dns (pro_dns.py)"
+NGINX_RELOAD_TIMEOUT = 10.0
 
 # Решения по запросу (ключи счётчиков)
 D_REFUSED = "refused"            # неизвестная личность / deny / битый запрос
@@ -835,6 +839,7 @@ class ProDnsServer:
             if self.cache is not None:
                 self.cache.clear()
             self.recompute_routing()
+            self._schedule_nginx_sync()
             log("policy map reloaded: %d domains, %d passthrough, %d workers" % (
                 len(self.policy_map.domains), len(self.policy_map.passthrough), len(self.policy_map.workers)))
         except Exception as exc:
@@ -845,15 +850,15 @@ class ProDnsServer:
     def identify_free(self, client_ip) -> Identity:
         ip = dnscommon.normalize_ip(client_ip) if client_ip else None
         eff_ip = ip or "127.0.0.1"
-        subnet = poolrouting.client_subnet_key(eff_ip)
+        client_key = poolrouting.client_subnet_key(eff_ip, ipv4_prefix=32, ipv6_prefix=64)
         user = {
-            "user_id": subnet,
+            "user_id": client_key,
             "mode": "proxy",
             "disabled_categories": frozenset(),
             "qps_limit": max(1, int(self.args.default_qps)),
             "is_admin": False,
         }
-        return Identity("subnet", subnet, user, eff_ip)
+        return Identity("ip", client_key, user, eff_ip)
 
     def identify_token(self, token, client_ip) -> Identity:
         tok = (token or "").strip().lower()
@@ -871,7 +876,12 @@ class ProDnsServer:
 
     def _sticky_client_key(self, ident: Identity, service_name: str = "") -> str:
         if self.tier == "free":
-            return str(ident.key or poolrouting.client_subnet_key(ident.client_ip or "127.0.0.1"))
+            return str(
+                ident.key
+                or poolrouting.client_subnet_key(
+                    ident.client_ip or "127.0.0.1", ipv4_prefix=32, ipv6_prefix=64
+                )
+            )
         uid = (ident.user.get("user_id") if ident.user else "") or ""
         if uid:
             return str(uid)
@@ -1358,6 +1368,129 @@ class ProDnsServer:
                 atomic_write_json(args.health_out, self.health_snapshot())
             except Exception as exc:
                 log("warning: cannot write %s: %s" % (args.health_out, exc))
+        await self.sync_nginx_workers()
+
+    def _render_nginx_worker_configs(self):
+        """Рендерит содержимое nginx-workers-stream.conf и nginx-workers-http.conf по живым воркерам."""
+        pools = self.policy_map.pools
+        domain_pools = {
+            d: info.get("pool") or poolrouting.DEFAULT_POOL
+            for d, info in self.policy_map.domains.items()
+        }
+        workers = self.workers()
+        if self.fail_open or not workers:
+            healthy_workers = []
+        else:
+            healthy_workers = [w for w in workers if self.health.is_healthy(str(w.get("ip")))]
+        healthy_by_pool = poolrouting.workers_by_pool(healthy_workers, pools)
+        weights = {str(w.get("ip")): max(1, int(w.get("weight") or 1)) for w in healthy_workers}
+        stream_content = poolrouting.render_stream_workers(
+            pools,
+            healthy_by_pool,
+            domain_pools,
+            weights=weights,
+            tls_port=int(self.args.worker_tls_port),
+            header=NGINX_WORKERS_HEADER,
+        )
+        http_content = poolrouting.render_http_workers(
+            pools,
+            healthy_by_pool,
+            domain_pools,
+            weights=weights,
+            http_port=int(self.args.worker_http_port),
+            header=NGINX_WORKERS_HEADER,
+        )
+        return stream_content, http_content
+
+    def _reload_nginx(self) -> bool:
+        """Проверяет конфиг nginx (`nginx -t`) и выполняет `systemctl reload nginx`.
+        Возвращает False, если проверка конфига провалилась (нужен откат файлов)."""
+        if not shutil.which("nginx"):
+            log("warning: nginx binary not found, skipping reload")
+            return True
+        try:
+            test_res = subprocess.run(
+                ["nginx", "-t"],
+                capture_output=True,
+                text=True,
+                timeout=NGINX_RELOAD_TIMEOUT,
+            )
+        except Exception as exc:
+            log("warning: nginx -t failed with exception: %s" % exc)
+            return False
+        if test_res.returncode != 0:
+            log("warning: nginx -t failed, rolling back worker configs: %s" % (test_res.stderr or test_res.stdout).strip())
+            return False
+        if shutil.which("systemctl"):
+            try:
+                rel_res = subprocess.run(
+                    ["systemctl", "reload", "nginx"],
+                    capture_output=True,
+                    text=True,
+                    timeout=NGINX_RELOAD_TIMEOUT,
+                )
+                if rel_res.returncode != 0:
+                    log("warning: systemctl reload nginx failed: %s" % (rel_res.stderr or rel_res.stdout).strip())
+            except Exception as exc:
+                log("warning: systemctl reload nginx exception: %s" % exc)
+        return True
+
+    def sync_nginx_workers_sync(self, reload_nginx: bool = True) -> bool:
+        """Атомарно обновляет nginx-workers-stream.conf / nginx-workers-http.conf при отличии
+        и при необходимости перезагружает nginx. Возвращает True, если конфиги были обновлены."""
+        stream_path = Path(self.args.nginx_stream_out) if getattr(self.args, "nginx_stream_out", "") else None
+        http_path = Path(self.args.nginx_http_out) if getattr(self.args, "nginx_http_out", "") else None
+        if stream_path is None and http_path is None:
+            return False
+
+        stream_content, http_content = self._render_nginx_worker_configs()
+        prev_stream = stream_path.read_text(encoding="utf-8") if (stream_path and stream_path.is_file()) else None
+        prev_http = http_path.read_text(encoding="utf-8") if (http_path and http_path.is_file()) else None
+
+        stream_changed = stream_path is not None and prev_stream != stream_content
+        http_changed = http_path is not None and prev_http != http_content
+        if not stream_changed and not http_changed:
+            return False
+
+        if stream_changed:
+            healthcheck.atomic_write_text(stream_path, stream_content)
+        if http_changed:
+            healthcheck.atomic_write_text(http_path, http_content)
+
+        if reload_nginx and not getattr(self.args, "no_nginx_reload", False):
+            if not self._reload_nginx():
+                if stream_changed and prev_stream is not None:
+                    healthcheck.atomic_write_text(stream_path, prev_stream)
+                if http_changed and prev_http is not None:
+                    healthcheck.atomic_write_text(http_path, prev_http)
+                return False
+        log("nginx worker configs updated (fail_open=%s)" % self.fail_open)
+        return True
+
+    async def sync_nginx_workers(self, reload_nginx: bool = True) -> bool:
+        """Неблокирующая синхронизация nginx-workers-*.conf (в отдельном потоке)."""
+        if not (getattr(self.args, "nginx_stream_out", "") or getattr(self.args, "nginx_http_out", "")):
+            return False
+        try:
+            return await asyncio.to_thread(self.sync_nginx_workers_sync, reload_nginx)
+        except Exception as exc:
+            log("warning: cannot sync nginx worker configs: %s" % exc)
+            return False
+
+    def _schedule_nginx_sync(self):
+        if not (getattr(self.args, "nginx_stream_out", "") or getattr(self.args, "nginx_http_out", "")):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None:
+            loop.create_task(self.sync_nginx_workers())
+        else:
+            try:
+                self.sync_nginx_workers_sync()
+            except Exception as exc:
+                log("warning: cannot sync nginx worker configs: %s" % exc)
 
     async def policy_loop(self):
         """Long-poll политики: 200 -> применить и закешировать, 304 -> снова,
@@ -1515,6 +1648,7 @@ class ProDnsServer:
         except (NotImplementedError, RuntimeError, ValueError, AttributeError):
             pass
 
+        await self.sync_nginx_workers()
         self.tasks.append(asyncio.ensure_future(self.health_loop()))
         if self.cp is not None:
             self.tasks.append(asyncio.ensure_future(self.policy_loop()))
@@ -1689,7 +1823,7 @@ def parse_args(argv=None):
     )
     g = p.add_argument_group("режим и слушатели")
     g.add_argument("--tier", choices=("pro", "free"), default=_env("PEREVAL_TIER", "pro"),
-                   help="режим работы: pro (по токену/IP из CP) или free (открытый по подсети /24)")
+                   help="режим работы: pro (по токену/IP из CP) или free (открытый по IP /32, IPv6 /64)")
     g.add_argument("--listen-ip", default=_env("PRO_DNS_IP"),
                    help="публичный IP для UDP/TCP 53 и DoT (env PRO_DNS_IP; пусто — не слушать 53/853)")
     g.add_argument("--port", type=int, default=53, help="порт классического DNS (по умолчанию 53)")
@@ -1757,6 +1891,12 @@ def parse_args(argv=None):
     g.add_argument("--worker-http-port", type=int, default=80, help="порт HTTP-прокси воркеров (по умолчанию 80)")
     g.add_argument("--health-out", default="/var/www/pereval-pro/pro-health.json",
                    help="куда писать JSON состояния здоровья воркеров (пусто — не писать)")
+    g.add_argument("--nginx-stream-out", default="",
+                   help="путь к nginx-workers-stream.conf для обновления при смене воркеров (пусто — не обновлять)")
+    g.add_argument("--nginx-http-out", default="",
+                   help="путь к nginx-workers-http.conf для обновления при смене воркеров (пусто — не обновлять)")
+    g.add_argument("--no-nginx-reload", action="store_true",
+                   help="не вызывать nginx -t / systemctl reload nginx после обновления конфигов воркеров")
     return p.parse_args(argv)
 
 

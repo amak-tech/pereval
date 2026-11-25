@@ -34,7 +34,6 @@ SRC_DIR="${SRC_DIR:-src}"
 LIB_FILES=("$SRC_DIR/poolrouting.py" "$SRC_DIR/dnscommon.py")
 # Free-кластер (primary / worker)
 FREE_FILES=(
-	"$BUILD_DIR/dnsmasq-geoblock.conf"
 	"$BUILD_DIR/cache-dnsmasq.conf"
 	"$BUILD_DIR/nginx.conf"
 	"$BUILD_DIR/nginx-sni-allow.map"
@@ -46,7 +45,6 @@ FREE_FILES=(
 	"$BUILD_DIR/free-policy-map.json"
 	"$SRC_DIR/stats_collector.py"
 	"$SRC_DIR/pro_dns.py"
-	"$SRC_DIR/doh_proxy.py"
 	"$SRC_DIR/healthcheck.py"
 	"$SRC_DIR/cert_sync.py"
 )
@@ -72,7 +70,7 @@ PRO_WORKER_FILES=(
 	"$SRC_DIR/supercell_proxy.py"
 	"$SRC_DIR/stats_collector.py"
 )
-DNSMASQ_CONF="$BUILD_DIR/dnsmasq-geoblock.conf"
+FREE_POLICY_MAP="$BUILD_DIR/free-policy-map.json"
 CLUSTER_NODES="$BUILD_DIR/cluster-nodes.json"
 PRO_NODES="$BUILD_DIR/pro-nodes.json"
 SSH_HARDEN_SCRIPT="$SRC_DIR/disable-ssh-password.sh"
@@ -276,16 +274,17 @@ for f in "${LOCAL_FILES[@]}"; do
 	fi
 done
 
-n_dnsmasq=0
+n_free_domains=0
 if ((NEED_FREE)); then
-	# списки уникальных доменов в dnsmasq и nginx-sni/host-allow.map должны совпадать
-	n_dnsmasq=$(awk -F/ '/^address=\//{print $2}' "$DNSMASQ_CONF" | sort -u | wc -l | tr -d ' ')
-	for m in "$BUILD_DIR/nginx-sni-allow.map" "$BUILD_DIR/nginx-host-allow.map"; do
-		n_map=$(grep -c '^\.' "$m" || true)
-		((n_dnsmasq == n_map)) || die "в $DNSMASQ_CONF $n_dnsmasq уникальных доменов, а в $m — $n_map
-    пересоберите оба файла одним запуском $SRC_DIR/generate.py"
-	done
-	info "$n_dnsmasq доменов, списки dnsmasq и nginx совпадают"
+	# списки активных доменов в free-policy-map.json и nginx-sni/host-allow.map должны совпадать
+	n_free_domains=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8")).get("domains") or {}))' "$FREE_POLICY_MAP")
+	n_sni=$(grep -cE '^\.[^[:space:]]+[[:space:]]+\$ssl_preread_server_name:443;' "$BUILD_DIR/nginx-sni-allow.map" || true)
+	n_host=$(grep -cE '^\.[^[:space:]]+[[:space:]]+\$host;' "$BUILD_DIR/nginx-host-allow.map" || true)
+	((n_free_domains == n_sni)) || die "в $FREE_POLICY_MAP $n_free_domains доменов, а в $BUILD_DIR/nginx-sni-allow.map — $n_sni
+    пересоберите файлы одним запуском $SRC_DIR/generate.py"
+	((n_free_domains == n_host)) || die "в $FREE_POLICY_MAP $n_free_domains доменов, а в $BUILD_DIR/nginx-host-allow.map — $n_host
+    пересоберите файлы одним запуском $SRC_DIR/generate.py"
+	info "$n_free_domains доменов, списки free-policy-map и nginx совпадают"
 fi
 if ((NEED_PRO)); then
 	n_pro=$(grep -c '^\.' "$BUILD_DIR/pro-nginx-sni-allow.map" || true)
@@ -361,9 +360,6 @@ fi
 if ((NEED_FREE)) && [[ $ROLE != "worker" ]]; then
 	ip_known=0
 	[[ $SERVER_IP == "$CLUSTER_PRIMARY" ]] && ip_known=1
-	if grep -q "/$SERVER_IP\$" "$DNSMASQ_CONF"; then
-		ip_known=1
-	fi
 	if ((${#WORKER_LINES[@]})); then
 		for wline in "${WORKER_LINES[@]}"; do
 			[[ -z $wline ]] && continue
@@ -372,8 +368,7 @@ if ((NEED_FREE)) && [[ $ROLE != "worker" ]]; then
 		done
 	fi
 	if (( ! ip_known )); then
-		baked="${CLUSTER_PRIMARY:-$(grep -m1 '^address=' "$DNSMASQ_CONF" | sed 's|.*/||')}"
-		die "$DNSMASQ_CONF и $CLUSTER_NODES собраны для адреса ${baked:-неизвестного}, а разворачивается на $SERVER_IP
+		die "$CLUSTER_NODES собран для адреса ${CLUSTER_PRIMARY:-неизвестного}, а разворачивается на $SERVER_IP
     пересоберите: python3 $SRC_DIR/generate.py $SOURCE_YAML $SERVER_IP"
 	fi
 fi
@@ -526,7 +521,7 @@ CERT_SYNC_DST="/usr/local/bin/pereval-cert-sync.py"
 CERT_SYNC_UNIT="/etc/systemd/system/pereval-cert-sync.service"
 CERT_SYNC_TIMER="/etc/systemd/system/pereval-cert-sync.timer"
 DNSMASQ_DST="/etc/dnsmasq.conf"
-DNSMASQ_BASE_DST="/etc/nginx/geoblock/dnsmasq-base.conf"
+OLD_DNSMASQ_BASE="/etc/nginx/geoblock/dnsmasq-base.conf"
 DNSMASQ_OLD="/etc/dnsmasq.d/dnsmasq-geoblock.conf"
 NGINX_DST="/etc/nginx/nginx.conf"
 MAP_DIR="/etc/nginx/geoblock"
@@ -536,11 +531,12 @@ SYSCTL_DST="/etc/sysctl.d/99-geoblock-highload.conf"
 COLLECTOR_DST="/usr/local/bin/pereval-stats-collector.py"
 STATS_UNIT_DST="/etc/systemd/system/pereval-stats.service"
 STATS_STATE_DIR="/var/lib/pereval-stats"
-DOH_DST="/usr/local/bin/pereval-doh-proxy.py"
-DOH_UNIT_DST="/etc/systemd/system/pereval-doh.service"
-HC_DST="/usr/local/bin/pereval-healthcheck.py"
-HC_UNIT_DST="/etc/systemd/system/pereval-healthcheck.service"
-HC_STATE_DIR="/var/lib/pereval-healthcheck"
+FREE_DNS_DST="/usr/local/bin/pereval-free-dns.py"
+FREE_DNS_UNIT_DST="/etc/systemd/system/pereval-free-dns.service"
+OLD_DOH_DST="/usr/local/bin/pereval-doh-proxy.py"
+OLD_DOH_UNIT_DST="/etc/systemd/system/pereval-doh.service"
+OLD_HC_DST="/usr/local/bin/pereval-healthcheck.py"
+OLD_HC_UNIT_DST="/etc/systemd/system/pereval-healthcheck.service"
 LEADS_UNIT_DST="/etc/systemd/system/pereval-leads.service"   # устаревший сервис заявок — удаляется
 LEADS_DST="/usr/local/bin/pereval-leads.py"
 
@@ -570,10 +566,10 @@ RESCONF
 	fi
 fi
 
-mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$HC_STATE_DIR" "$LIB_DIR" /etc/sysctl.d
+mkdir -p "$BACKUP" "$MAP_DIR" "$SSL_DIR" "$WEB_DIR/.well-known/acme-challenge" "$STATS_STATE_DIR" "$LIB_DIR" /etc/sysctl.d
 
 # --- всё ли доехало -------------------------------------------------------
-for f in dnsmasq-geoblock.conf cache-dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json free-policy-map.json stats_collector.py pro_dns.py doh_proxy.py healthcheck.py poolrouting.py dnscommon.py cert_sync.py; do
+for f in cache-dnsmasq.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json free-policy-map.json stats_collector.py pro_dns.py healthcheck.py poolrouting.py dnscommon.py cert_sync.py; do
 	[[ -s "$STAGE/$f" ]] || fail "файл $f не доехал или пустой — передача оборвалась"
 done
 say "файлы получены (роль узла: $NODE_ROLE)"
@@ -607,7 +603,7 @@ backup_one() {  # <источник> <имя-в-бэкапе>
 	fi
 }
 backup_one "$DNSMASQ_DST"                          dnsmasq.conf
-backup_one "$DNSMASQ_BASE_DST"                     dnsmasq-base.conf
+backup_one "$OLD_DNSMASQ_BASE"                     dnsmasq-base.conf
 backup_one "$NGINX_DST"                            nginx.conf
 backup_one "$MAP_DIR/nginx-sni-allow.map"          nginx-sni-allow.map
 backup_one "$MAP_DIR/nginx-host-allow.map"         nginx-host-allow.map
@@ -615,33 +611,43 @@ backup_one "$MAP_DIR/nginx-workers-stream.conf"    nginx-workers-stream.conf
 backup_one "$MAP_DIR/nginx-workers-http.conf"      nginx-workers-http.conf
 backup_one "$MAP_DIR/service-map.json"             service-map.json
 backup_one "$MAP_DIR/cluster-nodes.json"           cluster-nodes.json
+backup_one "$MAP_DIR/free-policy-map.json"         free-policy-map.json
 backup_one "$COLLECTOR_DST"                        pereval-stats-collector.py
 backup_one "$STATS_UNIT_DST"                       pereval-stats.service
-backup_one "$DOH_DST"                              pereval-doh-proxy.py
-backup_one "$DOH_UNIT_DST"                         pereval-doh.service
-backup_one "$HC_DST"                               pereval-healthcheck.py
-backup_one "$HC_UNIT_DST"                          pereval-healthcheck.service
+backup_one "$FREE_DNS_DST"                         pereval-free-dns.py
+backup_one "$FREE_DNS_UNIT_DST"                    pereval-free-dns.service
+backup_one "$OLD_DOH_DST"                          pereval-doh-proxy.py
+backup_one "$OLD_DOH_UNIT_DST"                     pereval-doh.service
+backup_one "$OLD_HC_DST"                           pereval-healthcheck.py
+backup_one "$OLD_HC_UNIT_DST"                      pereval-healthcheck.service
 backup_one "$LIB_DIR/poolrouting.py"               poolrouting.py
 backup_one "$LIB_DIR/dnscommon.py"                 dnscommon.py
+backup_one "$LIB_DIR/healthcheck.py"               healthcheck.py
 backup_one "$SYSCTL_DST"                           99-geoblock-highload.conf
 say "резервные копии: $BACKUP"
 
 restore() {
 	printf 'откатываю изменения\n' >&2
-	for name in dnsmasq.conf dnsmasq-base.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json pereval-stats-collector.py pereval-stats.service pereval-doh-proxy.py pereval-doh.service pereval-healthcheck.py pereval-healthcheck.service poolrouting.py dnscommon.py 99-geoblock-highload.conf; do
+	if [[ ! -f "$BACKUP/pereval-free-dns.service" ]]; then
+		systemctl disable --now pereval-free-dns.service 2>/dev/null || true
+		rm -f "$FREE_DNS_UNIT_DST" "$FREE_DNS_DST"
+	fi
+	for name in dnsmasq.conf dnsmasq-base.conf nginx.conf nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json free-policy-map.json pereval-stats-collector.py pereval-stats.service pereval-free-dns.py pereval-free-dns.service pereval-doh-proxy.py pereval-doh.service pereval-healthcheck.py pereval-healthcheck.service poolrouting.py dnscommon.py healthcheck.py 99-geoblock-highload.conf; do
 		if [[ -f "$BACKUP/$name" ]]; then
 			case "$name" in
 				dnsmasq.conf)                                                                                                    cp -a "$BACKUP/$name" "$DNSMASQ_DST" ;;
-				dnsmasq-base.conf)                                                                                               cp -a "$BACKUP/$name" "$DNSMASQ_BASE_DST" ;;
+				dnsmasq-base.conf)                                                                                               cp -a "$BACKUP/$name" "$OLD_DNSMASQ_BASE" ;;
 				nginx.conf)                                                                                                      cp -a "$BACKUP/$name" "$NGINX_DST" ;;
 				99-geoblock-highload.conf)                                                                                       cp -a "$BACKUP/$name" "$SYSCTL_DST" ;;
 				pereval-stats-collector.py)                                                                                      cp -a "$BACKUP/$name" "$COLLECTOR_DST" ;;
 				pereval-stats.service)                                                                                           cp -a "$BACKUP/$name" "$STATS_UNIT_DST" ;;
-				pereval-doh-proxy.py)                                                                                            cp -a "$BACKUP/$name" "$DOH_DST" ;;
-				pereval-doh.service)                                                                                             cp -a "$BACKUP/$name" "$DOH_UNIT_DST" ;;
-				pereval-healthcheck.py)                                                                                          cp -a "$BACKUP/$name" "$HC_DST" ;;
-				pereval-healthcheck.service)                                                                                     cp -a "$BACKUP/$name" "$HC_UNIT_DST" ;;
-				poolrouting.py|dnscommon.py)                                                                                     cp -a "$BACKUP/$name" "$LIB_DIR/$name" ;;
+				pereval-free-dns.py)                                                                                             cp -a "$BACKUP/$name" "$FREE_DNS_DST" ;;
+				pereval-free-dns.service)                                                                                        cp -a "$BACKUP/$name" "$FREE_DNS_UNIT_DST" ;;
+				pereval-doh-proxy.py)                                                                                            cp -a "$BACKUP/$name" "$OLD_DOH_DST" ;;
+				pereval-doh.service)                                                                                             cp -a "$BACKUP/$name" "$OLD_DOH_UNIT_DST" ;;
+				pereval-healthcheck.py)                                                                                          cp -a "$BACKUP/$name" "$OLD_HC_DST" ;;
+				pereval-healthcheck.service)                                                                                     cp -a "$BACKUP/$name" "$OLD_HC_UNIT_DST" ;;
+				poolrouting.py|dnscommon.py|healthcheck.py)                                                                      cp -a "$BACKUP/$name" "$LIB_DIR/$name" ;;
 				*)                                                                                                               cp -a "$BACKUP/$name" "$MAP_DIR/$name" ;;
 			esac
 		fi
@@ -651,10 +657,14 @@ restore() {
 		systemctl restart dnsmasq.service 2>/dev/null || true
 	fi
 	systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
-	systemctl restart pereval-doh.service 2>/dev/null || true
+	if [[ -f "$BACKUP/pereval-free-dns.service" ]]; then
+		systemctl restart pereval-free-dns.service 2>/dev/null || true
+	elif [[ -f "$BACKUP/pereval-doh.service" ]]; then
+		systemctl enable --now pereval-doh.service 2>/dev/null || systemctl restart pereval-doh.service 2>/dev/null || true
+	fi
 	systemctl restart pereval-stats.service 2>/dev/null || true
-	if [[ $NODE_ROLE == "primary" ]]; then
-		systemctl restart pereval-healthcheck.service 2>/dev/null || true
+	if [[ $NODE_ROLE == "primary" && -f "$BACKUP/pereval-healthcheck.service" ]]; then
+		systemctl enable --now pereval-healthcheck.service 2>/dev/null || systemctl restart pereval-healthcheck.service 2>/dev/null || true
 	fi
 }
 
@@ -712,12 +722,12 @@ fi
 
 # --- общие Python-модули (poolrouting, dnscommon, healthcheck) -------------
 file_differs() { [[ ! -f "$2" ]] || ! cmp -s "$1" "$2"; }
-DOH_NEED_RESTART=0
+FREE_DNS_NEED_RESTART=0
 if file_differs "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py" \
 	|| file_differs "$STAGE/dnscommon.py" "$LIB_DIR/dnscommon.py" \
 	|| file_differs "$STAGE/healthcheck.py" "$LIB_DIR/healthcheck.py" \
-	|| file_differs "$STAGE/pro_dns.py" "$DOH_DST"; then
-	DOH_NEED_RESTART=1
+	|| file_differs "$STAGE/pro_dns.py" "$FREE_DNS_DST"; then
+	FREE_DNS_NEED_RESTART=1
 fi
 install -m 0644 "$STAGE/poolrouting.py" "$LIB_DIR/poolrouting.py"
 install -m 0644 "$STAGE/dnscommon.py"   "$LIB_DIR/dnscommon.py"
@@ -742,17 +752,29 @@ done
 install -m 0644 "$STAGE/service-map.json"                "$MAP_DIR/service-map.json"
 install -m 0644 "$STAGE/cluster-nodes.json"              "$MAP_DIR/cluster-nodes.json"
 install -m 0644 "$STAGE/free-policy-map.json"            "$MAP_DIR/free-policy-map.json"
-install -m 0644 "$STAGE/dnsmasq-geoblock.conf"           "$DNSMASQ_BASE_DST"
+if [[ -f $OLD_DNSMASQ_BASE ]]; then
+	rm -f "$OLD_DNSMASQ_BASE"
+	say "убрал устаревший $OLD_DNSMASQ_BASE (копия в бэкапе)"
+fi
 install -m 0644 "$STAGE/nginx.conf"                      "$NGINX_DST"
 
-# --- локальный кеширующий dnsmasq на 127.0.0.1:53 (чистый форвардер для nginx) -
-# Подмену доменов для клиентов делает pro_dns.py на публичном IP, а этот dnsmasq
-# не содержит ни одной address= и обслуживает только 127.0.0.1:53 для nginx.
-# Сначала останавливаем старый pereval-healthcheck, чтобы он до своего обновления
-# не перезаписал /etc/dnsmasq.conf по таймеру.
-if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1; then
-	systemctl stop pereval-healthcheck.service >/dev/null 2>&1 || true
+# --- вывод из эксплуатации устаревших pereval-healthcheck и pereval-doh ----
+# healthcheck воркеров и обновление nginx-workers-*.conf теперь встроены в pereval-free-dns.service.
+if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1 || [[ -f $OLD_HC_UNIT_DST || -f $OLD_HC_DST ]]; then
+	systemctl disable --now pereval-healthcheck.service >/dev/null 2>&1 || true
+	rm -f "$OLD_HC_UNIT_DST" "$OLD_HC_DST"
+	say "устаревший pereval-healthcheck.service остановлен и удалён (копия в бэкапе)"
 fi
+if systemctl list-unit-files pereval-doh.service >/dev/null 2>&1 || [[ -f $OLD_DOH_UNIT_DST || -f $OLD_DOH_DST ]]; then
+	systemctl disable --now pereval-doh.service >/dev/null 2>&1 || true
+	rm -f "$OLD_DOH_UNIT_DST" "$OLD_DOH_DST"
+	FREE_DNS_NEED_RESTART=1
+	say "устаревший pereval-doh.service остановлен и удалён (копия в бэкапе)"
+fi
+
+# --- локальный кеширующий dnsmasq на 127.0.0.1:53 (чистый форвардер для nginx) -
+# Подмену доменов для клиентов делает pereval-free-dns (pro_dns.py --tier free), а этот dnsmasq
+# не содержит ни одной address= и обслуживает только 127.0.0.1:53 для nginx.
 if [[ -f $DNSMASQ_OLD ]]; then
 	cp -a "$DNSMASQ_OLD" "$BACKUP/dnsmasq.d-dnsmasq-geoblock.conf"
 	rm -f "$DNSMASQ_OLD"
@@ -794,18 +816,18 @@ if ! grep -qE '^nameserver\s+[0-9]+' /etc/resolv.conf 2>/dev/null || grep -qE '^
 	printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' >/etc/resolv.conf
 fi
 
-# --- единый DNS-сервер (pro_dns.py --tier free на Primary) -----------------
-install -m 0755 "$STAGE/pro_dns.py"           "$DOH_DST"
+# --- единый DNS-сервер (pereval-free-dns.service: pro_dns.py --tier free на Primary)
 if [[ $NODE_ROLE == "primary" ]]; then
-	cat >"$STAGE/pereval-doh.service" <<UNIT
+	install -m 0755 "$STAGE/pro_dns.py" "$FREE_DNS_DST"
+	cat >"$STAGE/pereval-free-dns.service" <<UNIT
 [Unit]
-Description=Pereval Free unified DNS (DoH/DoT/Do53) daemon
-After=network-online.target
+Description=Pereval Free unified DNS (DoH/DoT/Do53) and worker failover daemon
+After=network-online.target nginx.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 $DOH_DST --tier free --no-cp --listen-ip $SERVER_IP --pro-domain $DOMAIN --policy-map $MAP_DIR/free-policy-map.json --cert $SSL_DIR/fullchain.pem --key $SSL_DIR/privkey.pem --doh-listen 127.0.0.1:8053 --upstream 1.1.1.1:53,8.8.8.8:53 --health-out $WEB_DIR/cluster-health.json
+ExecStart=/usr/bin/python3 $FREE_DNS_DST --tier free --no-cp --listen-ip $SERVER_IP --pro-domain $DOMAIN --policy-map $MAP_DIR/free-policy-map.json --cert $SSL_DIR/fullchain.pem --key $SSL_DIR/privkey.pem --doh-listen 127.0.0.1:8053 --upstream 1.1.1.1:53,8.8.8.8:53 --health-out $WEB_DIR/cluster-health.json --nginx-stream-out $MAP_DIR/nginx-workers-stream.conf --nginx-http-out $MAP_DIR/nginx-workers-http.conf
 ExecReload=/bin/kill -HUP \$MAINPID
 TimeoutStopSec=5
 Restart=always
@@ -815,13 +837,14 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 UNIT
-	if file_differs "$STAGE/pereval-doh.service" "$DOH_UNIT_DST"; then
-		DOH_NEED_RESTART=1
+	if file_differs "$STAGE/pereval-free-dns.service" "$FREE_DNS_UNIT_DST"; then
+		FREE_DNS_NEED_RESTART=1
 	fi
-	install -m 0644 "$STAGE/pereval-doh.service" "$DOH_UNIT_DST"
+	install -m 0644 "$STAGE/pereval-free-dns.service" "$FREE_DNS_UNIT_DST"
 else
-	if systemctl list-unit-files pereval-doh.service >/dev/null 2>&1; then
-		systemctl disable --now pereval-doh.service >/dev/null 2>&1 || true
+	if systemctl list-unit-files pereval-free-dns.service >/dev/null 2>&1 || [[ -f $FREE_DNS_UNIT_DST ]]; then
+		systemctl disable --now pereval-free-dns.service >/dev/null 2>&1 || true
+		rm -f "$FREE_DNS_UNIT_DST" "$FREE_DNS_DST"
 	fi
 fi
 
@@ -861,48 +884,11 @@ chmod 0644 "$STATS_UNIT_DST"
 	--role "$NODE_ROLE" \
 	--once || true
 
-# --- демон мониторинга воркеров и failover nginx (pereval-healthcheck.service)
-install -m 0755 "$STAGE/healthcheck.py"       "$HC_DST"
-if [[ $NODE_ROLE == "primary" ]]; then
-	cat >"$HC_UNIT_DST" <<UNIT
-[Unit]
-Description=Pereval active worker healthcheck and nginx failover daemon
-After=network.target nginx.service
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 $HC_DST --cluster-config $MAP_DIR/cluster-nodes.json --nginx-stream-out $MAP_DIR/nginx-workers-stream.conf --nginx-http-out $MAP_DIR/nginx-workers-http.conf --service-map $MAP_DIR/service-map.json --status-out $WEB_DIR/cluster-health.json --state-file $HC_STATE_DIR/state.json --interval 5 --fail-threshold 2 --rise-threshold 2
-TimeoutStopSec=5
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-	chmod 0644 "$HC_UNIT_DST"
-fi
-
 # --- устаревший сервис заявок (pereval-leads) — переехал на сайт -----------
 if systemctl list-unit-files pereval-leads.service >/dev/null 2>&1 || [[ -f $LEADS_UNIT_DST ]]; then
 	systemctl disable --now pereval-leads.service >/dev/null 2>&1 || true
 	rm -f "$LEADS_UNIT_DST" "$LEADS_DST"
 	say "pereval-leads.service удалён (заявки принимает сайт)"
-fi
-
-# На основном узле сразу выполняем одиночный цикл healthcheck (без рестарта сервисов),
-# чтобы nginx-workers-*.conf и cluster-health.json отражали реальную доступность воркеров.
-if [[ $NODE_ROLE == "primary" ]]; then
-	/usr/bin/python3 "$HC_DST" \
-		--cluster-config "$MAP_DIR/cluster-nodes.json" \
-		--nginx-stream-out "$MAP_DIR/nginx-workers-stream.conf" \
-		--nginx-http-out "$MAP_DIR/nginx-workers-http.conf" \
-		--service-map "$MAP_DIR/service-map.json" \
-		--status-out "$WEB_DIR/cluster-health.json" \
-		--state-file "$HC_STATE_DIR/state.json" \
-		--fail-threshold 1 \
-		--rise-threshold 1 \
-		--no-service-reload \
-		--once || true
 fi
 
 if ! nginx -t 2>/tmp/nginx-test.log; then
@@ -939,21 +925,21 @@ fi
 
 systemctl daemon-reload
 if [[ $NODE_ROLE == "primary" ]]; then
-	systemctl enable pereval-doh.service >/dev/null 2>&1 || true
-	if [[ $DOH_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-doh.service; then
-		if ! systemctl reload pereval-doh.service; then
-			journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
+	systemctl enable pereval-free-dns.service >/dev/null 2>&1 || true
+	if [[ $FREE_DNS_NEED_RESTART -eq 0 ]] && systemctl is-active --quiet pereval-free-dns.service; then
+		if ! systemctl reload pereval-free-dns.service; then
+			journalctl -u pereval-free-dns.service -n 20 --no-pager >&2 || true
 			restore
-			fail "pereval-doh.service не перезагрузился по SIGHUP"
+			fail "pereval-free-dns.service не перезагрузился по SIGHUP"
 		fi
-		say "единый DNS-сервер pereval-doh перезагружен по SIGHUP без простоя"
+		say "единый DNS-сервер pereval-free-dns перезагружен по SIGHUP без простоя"
 	else
-		if ! systemctl restart pereval-doh.service; then
-			journalctl -u pereval-doh.service -n 20 --no-pager >&2 || true
+		if ! systemctl restart pereval-free-dns.service; then
+			journalctl -u pereval-free-dns.service -n 20 --no-pager >&2 || true
 			restore
-			fail "pereval-doh.service не поднялся"
+			fail "pereval-free-dns.service не поднялся"
 		fi
-		say "единый DNS-сервер pereval-doh (pro_dns --tier free) перезапущен"
+		say "единый DNS-сервер pereval-free-dns (pro_dns --tier free) перезапущен"
 	fi
 fi
 
@@ -964,20 +950,6 @@ if ! systemctl restart pereval-stats.service; then
 	fail "pereval-stats.service не поднялся"
 fi
 say "коллектор статистики pereval-stats перезапущен"
-
-if [[ $NODE_ROLE == "primary" ]]; then
-	systemctl enable pereval-healthcheck.service >/dev/null 2>&1 || true
-	if ! systemctl restart pereval-healthcheck.service; then
-		journalctl -u pereval-healthcheck.service -n 20 --no-pager >&2 || true
-		restore
-		fail "pereval-healthcheck.service не поднялся"
-	fi
-	say "демон мониторинга воркеров pereval-healthcheck перезапущен"
-else
-	if systemctl list-unit-files pereval-healthcheck.service >/dev/null 2>&1; then
-		systemctl disable --now pereval-healthcheck.service >/dev/null 2>&1 || true
-	fi
-fi
 
 # --- единый TLS-сертификат с control plane (только на Primary) ---------------
 # Один wildcard на всю инфраструктуру выпускается на pereval.top и раздаётся
@@ -1016,7 +988,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=$NODE_ENV_DST
-ExecStart=/usr/bin/python3 $CERT_SYNC_DST --out-dir $SSL_DIR --key-mode 0600$EXPECT_ARGS --reload 'nginx -t && systemctl reload nginx' --reload 'systemctl kill -s HUP pereval-doh.service || true'
+ExecStart=/usr/bin/python3 $CERT_SYNC_DST --out-dir $SSL_DIR --key-mode 0600$EXPECT_ARGS --reload 'nginx -t && systemctl reload nginx' --reload 'systemctl kill -s HUP pereval-free-dns.service || true'
 UNIT
 	cat >"$CERT_SYNC_TIMER" <<UNIT
 [Unit]
@@ -1048,7 +1020,7 @@ fi
 sleep 1
 EXPECTED_UNITS=(dnsmasq nginx pereval-stats)
 if [[ $NODE_ROLE == "primary" ]]; then
-	EXPECTED_UNITS+=(pereval-doh pereval-healthcheck)
+	EXPECTED_UNITS+=(pereval-free-dns)
 fi
 for unit in "${EXPECTED_UNITS[@]}"; do
 	systemctl is-active --quiet "$unit" || { restore; fail "$unit не активен после перезапуска"; }
@@ -1652,21 +1624,19 @@ DRYPRE
 			return 0
 		fi
 		printf '    %-34s -> %s\n' "$BUILD_DIR/cache-dnsmasq.conf" "/etc/dnsmasq.conf (локальный кеш 127.0.0.1:53)"
-		printf '    %-34s -> %s\n' "$DNSMASQ_CONF" "/etc/nginx/geoblock/dnsmasq-base.conf"
 		printf '    %-34s -> %s\n' "$BUILD_DIR/nginx.conf" "/etc/nginx/nginx.conf"
-		for m in nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json; do
+		for m in nginx-sni-allow.map nginx-host-allow.map nginx-workers-stream.conf nginx-workers-http.conf service-map.json cluster-nodes.json free-policy-map.json; do
 			printf '    %-34s -> %s\n' "$BUILD_DIR/$m" "/etc/nginx/geoblock/$m"
 		done
-		printf '    %-34s -> %s\n' "$SRC_DIR/poolrouting.py, dnscommon.py" "/usr/local/lib/pereval/"
+		printf '    %-34s -> %s\n' "$SRC_DIR/poolrouting.py, dnscommon.py, healthcheck.py" "/usr/local/lib/pereval/"
 		printf '    %-34s -> %s\n' "$SRC_DIR/stats_collector.py" "/usr/local/bin/pereval-stats-collector.py"
-		printf '    %-34s -> %s\n' "$SRC_DIR/doh_proxy.py" "/usr/local/bin/pereval-doh-proxy.py"
-		printf '    %-34s -> %s\n' "$SRC_DIR/healthcheck.py" "/usr/local/bin/pereval-healthcheck.py"
+		[[ $node_role == "primary" ]] && printf '    %-34s -> %s\n' "$SRC_DIR/pro_dns.py" "/usr/local/bin/pereval-free-dns.py"
 		[[ $node_role == "primary" ]] && printf '    %-34s -> %s\n' "$SRC_DIR/cert_sync.py" "/usr/local/bin/pereval-cert-sync.py"
 		printf '    %-34s -> %s\n' "sysctl (highload)" "/etc/sysctl.d/99-geoblock-highload.conf"
 		if [[ $node_role == "primary" ]]; then
-			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats, restart pereval-healthcheck, pereval-cert-sync.timer (единый сертификат с CP: %s), удаление pereval-leads\n' "$CERT_DOMAINS"
+			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, reload/restart pereval-free-dns, restart pereval-stats, pereval-cert-sync.timer (единый сертификат с CP: %s), удаление устаревших pereval-doh/pereval-healthcheck/pereval-leads\n' "$CERT_DOMAINS"
 		else
-			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-doh, restart pereval-stats (прямой выход origin)\n'
+			printf '    затем: sysctl -e -p, dnsmasq --test, nginx -t, restart dnsmasq, reload nginx, restart pereval-stats (прямой выход origin)\n'
 		fi
 		return 0
 	fi

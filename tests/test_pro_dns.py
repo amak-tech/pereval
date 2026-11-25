@@ -896,19 +896,26 @@ class FreeTierAndQuotaTests(unittest.TestCase):
             srv = pro_dns.build_server(args)
             await srv.start()
             try:
-                # 1. Распределение разных подсетей /24 в режиме Free
-                subnets_picked = set()
-                for sub_i in range(1, 30):
-                    ident = srv.identify_ip("198.51.%d.42" % sub_i)
+                # 1. Распределение разных IP /32 внутри одной подсети /24 в режиме Free
+                ips_picked = {}
+                for host_i in range(1, 31):
+                    client_ip = "198.51.100.%d" % host_i
+                    ident = srv.identify_ip(client_ip)
                     self.assertTrue(ident.known)
-                    self.assertEqual(ident.key, "198.51.%d.0/24" % sub_i)
+                    self.assertEqual(ident.key, "%s/32" % client_ip)
                     r = await srv.resolve(tu.make_query("claude.ai", 1), ident, "udp")
                     ans = tu.a_answers(r)[0]
-                    subnets_picked.add(ans)
+                    ips_picked[client_ip] = ans
                     # Другой сервис того же пула для того же клиента даёт тот же IP ноды
                     r_gpt = await srv.resolve(tu.make_query("chatgpt.com", 1), ident, "udp")
                     self.assertEqual(tu.a_answers(r_gpt)[0], ans)
-                self.assertEqual(subnets_picked, {W1, W2})
+                self.assertEqual(set(ips_picked.values()), {W1, W2})
+
+                # IPv4-mapped IPv6 нормализуется к /32, IPv6 — к /64
+                self.assertEqual(srv.identify_ip("::ffff:198.51.100.5").key, "198.51.100.5/32")
+                self.assertEqual(srv.identify_ip("2001:db8:abcd:1234::1").key, "2001:db8:abcd:1234::/64")
+                self.assertEqual(srv.identify_ip("2001:db8:abcd:1234::2").key, "2001:db8:abcd:1234::/64")
+                self.assertEqual(srv.identify_ip("2001:db8:abcd:1235::1").key, "2001:db8:abcd:1235::/64")
 
                 # 2. DoH без токена с X-Real-IP + NODATA на AAAA + passthrough + DnsCache
                 q_a = tu.make_query("claude.ai", 1, qid=0x301)
@@ -941,10 +948,26 @@ class FreeTierAndQuotaTests(unittest.TestCase):
                 self.assertEqual(up.udp_queries, 1)
                 self.assertEqual(srv.cache.hits, 1)
 
-                # 3. При падении всех воркеров (fail_open) во Free выдаётся IP primary
+                # 3. Автоматический failover при падении одного воркера и восстановление
+                w1_client = next(ip for ip, w in ips_picked.items() if w == W1)
+                srv.health.update(W1, W1, False, 0.0, "down", 1.0)
+                srv.health.update(W1, W1, False, 0.0, "down", 2.0)
+                srv.recompute_routing()
+                self.assertFalse(srv.fail_open)
+                r_failover = await srv.resolve(tu.make_query("claude.ai", 1), srv.identify_ip(w1_client), "udp")
+                self.assertEqual(tu.a_answers(r_failover), [W2])
+
+                # После восстановления W1 клиент снова получает W1
+                srv.health.update(W1, W1, True, 5.0, "ok", 3.0)
+                srv.health.update(W1, W1, True, 5.0, "ok", 4.0)
+                srv.recompute_routing()
+                r_recovered = await srv.resolve(tu.make_query("claude.ai", 1), srv.identify_ip(w1_client), "udp")
+                self.assertEqual(tu.a_answers(r_recovered), [W1])
+
+                # 4. При падении всех воркеров (fail_open) во Free выдаётся IP primary
                 for w_ip in (W1, W2):
-                    srv.health.update(w_ip, w_ip, False, 0.0, "down", 1.0)
-                    srv.health.update(w_ip, w_ip, False, 0.0, "down", 2.0)
+                    srv.health.update(w_ip, w_ip, False, 0.0, "down", 5.0)
+                    srv.health.update(w_ip, w_ip, False, 0.0, "down", 6.0)
                 srv.recompute_routing()
                 self.assertTrue(srv.fail_open)
                 r_fo = await srv.resolve(tu.make_query("claude.ai", 1), srv.identify_ip("198.51.99.1"), "udp")
@@ -1017,19 +1040,19 @@ class FreeTierAndQuotaTests(unittest.TestCase):
         q = dnscommon.parse_question(tu.make_query("claude.ai", 1))
         c1 = srv.identify_ip("198.51.100.10")
         c2 = srv.identify_ip("198.51.100.11")
-        # Обе личности в одной /24 подсети (sticky-ключ общий), но rate-limit раздельный по /32 IP
-        self.assertEqual(c1.key, "198.51.100.0/24")
-        self.assertEqual(c2.key, "198.51.100.0/24")
+        # Клиенты в одной /24 имеют независимые /32 ключи и независимый rate-limit
+        self.assertEqual(c1.key, "198.51.100.10/32")
+        self.assertEqual(c2.key, "198.51.100.11/32")
 
         # qps_limit=2, burst x2 = 4: исчерпываем бакет для .10
         r1 = [srv.decide(q, c1, now=t) for _ in range(5)]
         self.assertEqual([a for a, _ in r1[:4]], [pro_dns.D_SYNTH_A] * 4)
         self.assertEqual(r1[4][0], pro_dns.D_RATELIMIT)
 
-        # Клиент .11 из той же /24 не затронут и получает тот же sticky-воркер
+        # Клиент .11 из той же /24 не затронут и получает здоровый воркер пула
         act2, ip2 = srv.decide(q, c2, now=t)
         self.assertEqual(act2, pro_dns.D_SYNTH_A)
-        self.assertEqual(ip2, r1[0][1])
+        self.assertIn(ip2, (W1, W2))
 
     def test_pro_new_ip_waits_for_acl_sync_before_synth_a(self):
         async def run():
@@ -1371,6 +1394,160 @@ class ShutdownTests(unittest.TestCase):
                     await up.stop()
 
         asyncio.run(run())
+
+
+class NginxFailoverSyncTests(unittest.TestCase):
+    def setUp(self):
+        _quiet()
+        self.tmp = tu.tmpdir()
+
+    def _free_pm(self):
+        return {
+            "tier": "free",
+            "domain": "free.pereval.top",
+            "free_domains": ["free.pereval.top"],
+            "dns_ip": "153.80.200.170",
+            "primary": "153.80.200.170",
+            "probe_sni": "claude.ai",
+            "pools": {"default": {}, "ai": {"fallback": "default"}},
+            "workers": [
+                {"ip": W1, "name": "free-ai-1", "pools": ["ai", "default"], "weight": 2},
+                {"ip": W2, "name": "free-ai-2", "pools": ["ai"]},
+            ],
+            "categories": [{"id": "ai", "name": "AI", "tier": "free", "pool": "ai"}],
+            "passthrough": [],
+            "domains": {
+                "claude.ai": {"service": "Anthropic / Claude", "category_id": "ai", "tier": "free", "pool": "ai"},
+                "example.org": {"service": "Example", "category_id": "default", "tier": "free", "pool": "default"},
+            },
+        }
+
+    def test_sync_nginx_workers_failover_failopen_and_idempotency(self):
+        pm_path = _write_json(Path(self.tmp) / "free-pm.json", self._free_pm())
+        stream_out = Path(self.tmp) / "nginx-workers-stream.conf"
+        http_out = Path(self.tmp) / "nginx-workers-http.conf"
+        health_out = Path(self.tmp) / "cluster-health.json"
+
+        args = pro_dns.parse_args([
+            "--tier", "free",
+            "--policy-map", pm_path,
+            "--policy-cache", "",
+            "--health-out", str(health_out),
+            "--nginx-stream-out", str(stream_out),
+            "--nginx-http-out", str(http_out),
+            "--health-interval", "3600",
+            "--listen-ip", "",
+            "--doh-listen", "",
+        ])
+        srv = pro_dns.build_server(args)
+        reload_calls = []
+        srv._reload_nginx = lambda: (reload_calls.append(1) or True)
+
+        worker_status = {W1: True, W2: True}
+
+        async def fake_tls(ip, port, sni, timeout, fallback_sni=None):
+            ok = worker_status[ip]
+            return (ok, 5.0, None if ok else "TimeoutError")
+
+        async def fake_http(ip, port, host, timeout):
+            ok = worker_status[ip]
+            return (ok, 5.0, None if ok else "TimeoutError")
+
+        orig_tls = pro_dns.healthcheck.probe_tls_sni
+        orig_http = pro_dns.healthcheck.probe_http_healthz
+        pro_dns.healthcheck.probe_tls_sni = fake_tls
+        pro_dns.healthcheck.probe_http_healthz = fake_http
+        try:
+            async def run():
+                # 1. Первый цикл: оба воркера UP -> файлы созданы, reload вызван 1 раз
+                await srv.health_cycle()
+                self.assertEqual(len(reload_calls), 1)
+                s_txt = stream_out.read_text(encoding="utf-8")
+                h_txt = http_out.read_text(encoding="utf-8")
+                self.assertIn(W1, s_txt)
+                self.assertIn(W2, s_txt)
+                self.assertIn("weight=2", s_txt)
+                self.assertIn(W1, h_txt)
+                self.assertIn(W2, h_txt)
+                self.assertNotIn("153.80.200.170", s_txt)
+                self.assertTrue(health_out.is_file())
+
+                # 2. Повторный цикл без изменений -> reload НЕ вызывается
+                await srv.health_cycle()
+                self.assertEqual(len(reload_calls), 1)
+
+                # 3. Падение W2 (гистерезис 2/2) -> W2 убран из конфигов, reload = 2
+                worker_status[W2] = False
+                await srv.health_cycle()
+                self.assertEqual(len(reload_calls), 1)  # 1-я ошибка ещё не DOWN
+                await srv.health_cycle()
+                self.assertEqual(len(reload_calls), 2)
+                s_txt = stream_out.read_text(encoding="utf-8")
+                h_txt = http_out.read_text(encoding="utf-8")
+                self.assertIn(W1, s_txt)
+                self.assertNotIn(W2, s_txt)
+                self.assertIn(W1, h_txt)
+                self.assertNotIn(W2, h_txt)
+
+                # 4. Падение всех воркеров (fail-open) -> прямой выход на origin, без primary в upstream
+                worker_status[W1] = False
+                await srv.health_cycle()
+                await srv.health_cycle()
+                self.assertTrue(srv.fail_open)
+                self.assertEqual(len(reload_calls), 3)
+                s_txt = stream_out.read_text(encoding="utf-8")
+                h_txt = http_out.read_text(encoding="utf-8")
+                self.assertIn("$ssl_preread_server_name:443", s_txt)
+                self.assertIn("$host", h_txt)
+                self.assertNotIn(W1, s_txt)
+                self.assertNotIn(W2, s_txt)
+                self.assertNotIn("153.80.200.170", s_txt)
+
+                # 5. Восстановление W1 и W2 (гистерезис 2/2) -> оба возвращаются, reload = 4
+                worker_status[W1] = True
+                worker_status[W2] = True
+                await srv.health_cycle()
+                self.assertEqual(len(reload_calls), 3)
+                await srv.health_cycle()
+                self.assertFalse(srv.fail_open)
+                self.assertEqual(len(reload_calls), 4)
+                s_txt = stream_out.read_text(encoding="utf-8")
+                self.assertIn(W1, s_txt)
+                self.assertIn(W2, s_txt)
+
+            asyncio.run(run())
+        finally:
+            pro_dns.healthcheck.probe_tls_sni = orig_tls
+            pro_dns.healthcheck.probe_http_healthz = orig_http
+
+    def test_sync_nginx_workers_rolls_back_on_nginx_test_failure(self):
+        pm_path = _write_json(Path(self.tmp) / "free-pm-rb.json", self._free_pm())
+        stream_out = Path(self.tmp) / "nginx-workers-stream.conf"
+        http_out = Path(self.tmp) / "nginx-workers-http.conf"
+        stream_out.write_text("# prev stream\n", encoding="utf-8")
+        http_out.write_text("# prev http\n", encoding="utf-8")
+
+        args = pro_dns.parse_args([
+            "--tier", "free",
+            "--policy-map", pm_path,
+            "--policy-cache", "",
+            "--health-out", "",
+            "--nginx-stream-out", str(stream_out),
+            "--nginx-http-out", str(http_out),
+            "--listen-ip", "",
+            "--doh-listen", "",
+        ])
+        srv = pro_dns.build_server(args)
+        srv._reload_nginx = lambda: False
+
+        updated = srv.sync_nginx_workers_sync(reload_nginx=True)
+        self.assertFalse(updated)
+        self.assertEqual(stream_out.read_text(encoding="utf-8"), "# prev stream\n")
+        self.assertEqual(http_out.read_text(encoding="utf-8"), "# prev http\n")
+
+    def test_pro_mode_does_not_touch_nginx_configs_when_unset(self):
+        srv = make_server(self.tmp)
+        self.assertFalse(srv.sync_nginx_workers_sync())
 
 
 if __name__ == "__main__":

@@ -73,7 +73,6 @@ PLACEHOLDER_NET = ipaddress.ip_network("203.0.113.0/24")  # TEST-NET-3: адре
 
 # (шаблон, имя файла в build/, вариант значений: None = Free, "pro" = каталог Free+Pro)
 TEMPLATES = [
-    ("dnsmasq/dnsmasq.conf", "dnsmasq-geoblock.conf", None),
     ("dnsmasq/cache-dnsmasq.conf", "cache-dnsmasq.conf", None),
     ("nginx/nginx.conf", "nginx.conf", None),
     ("nginx/nginx-sni-allow.map", "nginx-sni-allow.map", None),
@@ -914,59 +913,7 @@ def validate(doc, primary_ip=None):
     return errors, warnings
 
 
-# ---------------------------------------------------- фрагменты для dnsmasq
-
-
-def wrap_comment(text, width=76):
-    out, line = [], "#"
-    for word in text.split():
-        if len(line) + 1 + len(word) > width:
-            out.append(line)
-            line = "#"
-        line += " " + word
-    if line.strip("# "):
-        out.append(line)
-    return "\n".join(out)
-
-
-def conf_body(doc, ip):
-    """address=/домен/IP для Free: IP выбирается пулом сервиса (rendezvous-хэш)."""
-    pools = doc.nodes.pools_dict()
-    by_pool = doc.free_healthy_by_pool(ip)
-    out = []
-    for i, c in enumerate(doc.categories, 1):
-        out.append("#" + "=" * 78)
-        out.append("# %d. %s (%d)" % (i, c.name.upper(), c.count))
-        out.append("#" + "=" * 78)
-        for s in c.services:
-            pool = effective_pool(c, s)
-            node_ip = poolrouting.pick(s.name, pool, pools, by_pool, last_resort=[ip])
-            out.append("")
-            out.append("# --- %s [pool: %s] ---" % (s.name, pool))
-            for d in s.domains:
-                out.append("address=/%s/%s" % (d, node_ip))
-            for ex in s.exclude_domains:
-                out.append("server=/%s/#" % ex)
-        out.append("")
-    return "\n".join(out)
-
-
-def conf_disabled(doc, ip):
-    pools = doc.nodes.pools_dict()
-    by_pool = doc.free_healthy_by_pool(ip)
-    out = []
-    for g in doc.disabled:
-        out.append("#" + "=" * 78)
-        out.append("# ОТКЛЮЧЕНО: %s" % g.name.upper())
-        out.append("#" + "=" * 78)
-        if g.note:
-            out.append(wrap_comment(g.note))
-        out.append("")
-        node_ip = poolrouting.pick(g.name, poolrouting.DEFAULT_POOL, pools, by_pool, last_resort=[ip])
-        for d in g.domains:
-            out.append("#address=/%s/%s" % (d, node_ip))
-        out.append("")
-    return "\n".join(out)
+# ---------------------------------------------------- фрагменты для nginx
 
 
 def map_entries(categories, value, exclude_value=None):
@@ -1372,11 +1319,6 @@ def build_values(doc, ip, source):
         "total": str(doc.total),
         "category_count": str(len(doc.categories)),
         "service_count": str(sum(len(c.services) for c in doc.categories)),
-        "options": "\n".join(doc.dnsmasq_options),
-        "body": conf_body(doc, ip),
-        "disabled": conf_disabled(doc, ip),
-        "passthrough_note": wrap_comment(doc.passthrough.note),
-        "passthrough": "\n".join("# passthrough: %s" % d for d in sorted(set(doc.passthrough.domains))),
         "sni_entries": map_entries(doc.categories, "$ssl_preread_server_name:443", exclude_value="127.0.0.1:9"),
         "host_entries": map_entries(doc.categories, "$host", exclude_value='""'),
         "workers_stream_body": poolrouting.render_stream_workers(
@@ -1466,7 +1408,7 @@ def main(argv=None):
     p.add_argument("--workers", default=None,
                    help="список IP воркеров Free через запятую (переопределяет nodes.workers; попадают во все пулы)")
     p.add_argument("--include-primary-in-dns", action="store_true",
-                   help="включать основной IP в ответы dnsmasq наравне с воркерами")
+                   help="включать основной IP в ответы Free DNS наравне с воркерами")
     p.add_argument("--check", action="store_true",
                    help="только проверить данные и шаблоны, ничего не записывать")
     p.add_argument("-q", "--quiet", action="store_true", help="не печатать предупреждения")

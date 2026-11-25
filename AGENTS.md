@@ -24,13 +24,14 @@
  │ DNS: free.pereval.top / pereval.portbuddy.tech (Free)  |  <token>.pro.pereval.top, https://pro.pereval.top/dns/<token>, IP (Pro)
  │ HTTPS/HTTP: к IP воркера своего пула
  ▼
-┌─ Free Primary 153.80.200.170 ───────────┐  ┌─ Free worker(s) ────────┐
-│ dnsmasq :53 (address=/домен/IP воркера) │  │ nginx stream :443 / :80 │
-│ nginx stream :443 (SNI→8443 или origin) │  │ прямой выход на origin  │
-│ nginx :8443 /dns-query→doh_proxy :8053  │  │ doh_proxy, stats        │
-│ nginx :853 DoT→dnsmasq; страницы→301    │  └─────────────────────────┘
-│ healthcheck.py (пулы, failover), stats  │
-└─────────────────────────────────────────┘
+┌─ Free Primary 153.80.200.170 ──────────────────┐  ┌─ Free worker(s) ────────┐
+│ pereval-free-dns (pro_dns.py --tier free):     │  │ nginx stream :443 / :80 │
+│   UDP/TCP :53, DoT :853, DoH 127.0.0.1:8053    │  │ прямой выход на origin  │
+│   HRW по IP /32 (/64 IPv6), квоты, failover    │  │ dnsmasq 127.0.0.1:53    │
+│   healthcheck воркеров → nginx-workers-*.conf  │  │ stats                   │
+│ nginx :443 (SNI→8443/origin), :8443 DoH/301    │  └─────────────────────────┘
+│ dnsmasq 127.0.0.1:53 (кеш для nginx), stats    │
+└────────────────────────────────────────────────┘
 ┌─ pereval.top (control plane, Docker Compose) ─────────────────────────────┐
 │ nginx (единый wildcard-cert) → app (Next.js: лендинг, кабинет, API) → PG16│
 │ jobs (outbox почты, ACL-expiry, DDNS, сверка подписок, certwatch, дайджест)│
@@ -45,11 +46,11 @@
 ```
 
 Ключевые решения:
-1. **Пулы воркеров** (`src/poolrouting.py`): пул у сервиса > у категории > `default`; нода для сервиса выбирается rendezvous-хэшем по здоровым нодам пула — все домены сервиса идут с одного IP, при отказе ноды пересаживается минимум сервисов. Пустой пул → `fallback` → Primary (Free) / все ноды (Pro).
+1. **Пулы воркеров** (`src/poolrouting.py`): пул у сервиса > у категории > `default`; нода выбирается взвешенным rendezvous-хэшем (HRW) по здоровым нодам пула с учётом лимитов `max_clients` — во Free по точному IP клиента (`/32` IPv4, `/64` IPv6), в Pro по `user_id`/токену. Все домены пула для клиента идут с одного IP, при отказе ноды пересаживаются только клиенты упавшей ноды. Пустой пул → `fallback` → Primary (Free) / все ноды (Pro).
 2. **Pro-доступ на уровне DNS**: токен (DoH-путь / DoT-SNI) или привязанный IP. IP, с которых приходят запросы подписчиков, попадают в динамический ACL (2 ч) и уезжают на воркеры long-poll'ом (<1 с). Истёкшая подписка → `plain` (обычный резолв без прокси), а не отказ: Android strict / iOS-профиль не имеют fallback-DNS.
 3. **Один writer состояния — control plane** (Postgres). `pro_dns.py` и агенты — stateless-клиенты CP по HTTPS с bearer-секретом, кешируют политику на диске.
 4. **DNS-петля**: ОС на DNS/прокси-нодах не использует 127.0.0.1 в `/etc/resolv.conf`; на Free-узлах и Pro-воркерах работает локальный кэширующий `dnsmasq` (`cache-dnsmasq.conf` на `127.0.0.1:53`, чистый форвардер без `address=` с `all-servers` на `1.1.1.1`/`8.8.8.8`/`9.9.9.9`), а `nginx` использует `resolver 127.0.0.1 valid=300s ipv6=off`.
-5. `filter-AAAA` и `filter-rr=HTTPS,SVCB` в dnsmasq (Free) и NODATA на AAAA/HTTPS/SVCB в `pro_dns.py` — иначе клиенты уйдут по IPv6/ECH мимо прокси. UDP/443 на воркерах — reject (QUIC не проксируется).
+5. NODATA на AAAA/HTTPS/SVCB в `pro_dns.py` (и для Free, и для Pro) — иначе клиенты уйдут по IPv6/ECH мимо прокси. UDP/443 на воркерах — reject (QUIC не проксируется).
 6. **Один TLS-сертификат на всю инфраструктуру**: lineage `pereval.top` с SAN `pereval.top`, `*.pereval.top`, `*.pro.pereval.top` и устаревшими Free-именами вне зоны сайта (`pereval.portbuddy.tech`); список — `cert_domains(doc)` в `generate.py` (попадает в `cluster-nodes.json`, `pro-nodes.json`, `services.json.meta`). Выпускается на CP вручную (`web/deploy/issue-cert.sh`, DNS-01), nginx-контейнер публикует копию в `/etc/letsencrypt/pereval` (root:10001, ключ 0640), ноды с ролями `free_primary`/`pro_dns` забирают её через `GET /api/internal/v1/node/cert` скриптом `src/cert_sync.py` (systemd-таймер раз в час, ETag = sha256 fullchain, проверка пары/срока/имён, атомарная запись, `nginx reload` + `SIGHUP pro_dns`). certbot на нодах не используется; `jobs/certwatch` напоминает о продлении за 25/14/7/3 дня и ругается, если хост отдаёт не тот сертификат, что лежит на CP.
 
 ---
@@ -61,18 +62,16 @@ services.yaml          ЕДИНЫЙ ИСТОЧНИК: meta, free, nodes (пул�
 deploy.sh              деплой DNS/прокси-нод по SSH: роли primary | worker | pro-dns | pro-worker, --all, --pro, --dry-run
 src/
   generate.py          сборка build/ из services.yaml и templates/, экспорт web/src/generated/services.json, --check
-  poolrouting.py       пулы: rendezvous-хэш, fallback-цепочки, рендер nginx-workers по пулам (stdlib)
-  dnscommon.py         общий DNS/HTTP-код: wire-парсер, UdpDnsPool, HTTP/1.1 сервер/клиент, hash_ip (stdlib)
-  doh_proxy.py         Free DoH (pereval-doh.service), импортирует dnscommon
-  healthcheck.py       Free: пробы воркеров, пулы, переписывание dnsmasq/nginx-workers, fail-open (pereval-healthcheck.service)
+  poolrouting.py       пулы: rendezvous-хэш, квоты, fallback-цепочки, рендер nginx-workers по пулам (stdlib)
+  dnscommon.py         общий DNS/HTTP-код: wire-парсер, UdpDnsPool, DnsCache, HTTP/1.1 сервер/клиент, hash_ip (stdlib)
+  healthcheck.py       библиотека проб воркеров (TLS ClientHello + /healthz, atomic_write_text) для pro_dns.py (/usr/local/lib/pereval/)
   stats_collector.py   телеметрия nginx-логов → node-stats.json / stats.json (pereval-stats.service)
-  pro_dns.py           Pro DNS-демон: :53 по IP, DoT :853 (SNI-токен), DoH за nginx, политика из CP (pereval-pro-dns.service)
+  pro_dns.py           единый DNS-демон (--tier free → pereval-free-dns.service; --tier pro → pereval-pro-dns.service): UDP/TCP :53, DoT :853, DoH за nginx, healthcheck и nginx-failover
   pro_node_agent.py    Pro-воркер: nftables set pro_clients ← ACL из CP, extra-домены Dedicated (pereval-pro-agent.service)
   supercell_proxy.py   Pro-воркер: прозрачный TCP-релей игр Supercell на :9339 по ClientHello 10100 (pereval-supercell.service)
-  cert_sync.py         Free primary / pro-dns: единый сертификат с CP → /…/ssl, reload nginx, HUP pro_dns (pereval-cert-sync.timer)
+  cert_sync.py         Free primary / pro-dns: единый сертификат с CP → /…/ssl, reload nginx, HUP pereval-free-dns / pereval-pro-dns (pereval-cert-sync.timer)
   update_hosts.py      клиентская утилита /etc/hosts (macOS/Linux)
 templates/
-  dnsmasq/dnsmasq.conf           → build/dnsmasq-geoblock.conf (Free)
   dnsmasq/cache-dnsmasq.conf     → build/cache-dnsmasq.conf (локальный кеш на 127.0.0.1:53 для nginx на Free-узлах и Pro-воркерах)
   nginx/nginx.conf               → build/nginx.conf (Free Primary/worker; оба DNS-имени, 301 страниц на сайт)
   nginx/nginx-*-allow.map        → build/nginx-*-allow.map (Free) и build/pro-nginx-*-allow.map (Free+Pro)
@@ -102,8 +101,8 @@ build/                 выход generate.py (gitignored)
 - `meta.name`, `meta.origin` (`https://pereval.top` — сайт/кабинет/API).
 - `free.domain` (`free.pereval.top`) и `free.legacy_domains` (`pereval.portbuddy.tech`): все имена попадают в `server_name`, в SNI-map (→ 8443); legacy-имена вне зоны сайта добавляются в SAN единого сертификата (`cert_domains`).
 - `nodes`: `primary`, `include_primary_in_dns`, `probe_sni`, `pools` (`{name: {note, fallback, strict_allowlist}}`), `workers` (`ip, name, weight, pools[], ssh_*`).
-- `dnsmasq_options`: строки опций dnsmasq для Free.
-- `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`, `exclude_domains?[]`). Поддомены в DNS/SNI покрываются автоматически, но конкретные поддомены допустимо указывать явно — они нужны для работы через `/etc/hosts` (`src/update_hosts.py`). `exclude_domains` исключает служебные UDP/STUN/P2P-поддомены из проксирования в `pro_dns.py`, `dnsmasq` и `nginx`, не подмешивая их в витрину российских сайтов `passthrough`.
+- `dnsmasq_options`: опциональное устаревшее поле (сохраняется для совместимости парсера `services.yaml`).
+- `categories[]`: `id` (slug), `name`, `pool`, `services[]` (`name`, `pool?`, `domains[]`, `exclude_domains?[]`). Поддомены в DNS/SNI покрываются автоматически, но конкретные поддомены допустимо указывать явно — они нужны для работы через `/etc/hosts` (`src/update_hosts.py`). `exclude_domains` исключает служебные UDP/STUN/P2P-поддомены из проксирования в `pro_dns.py` и `nginx`, не подмешивая их в витрину российских сайтов `passthrough`.
 - `disabled[]`, `passthrough`: как раньше (закомментированные домены; российские домены, которые нельзя проксировать).
 - `pro`: `domain`, `dns_ip`, `cp_ip`, `pools`, `workers`, `categories[]` (тот же формат, tier=pro), опционально `admin_services[]` (или `admin_only: true` у сервиса в `pro.categories`) — сервисы Pro только для админов (`ADMIN_EMAIL`/`ADMIN_EMAILS`), скрытые с сайта и исключённые из статистики. Адреса из `203.0.113.0/24` считаются заглушками (предупреждение).
 
@@ -111,7 +110,7 @@ build/                 выход generate.py (gitignored)
 Ошибки: невалидные домены/IP, дубли доменов (включая между Free и Pro), пересечения с `passthrough`, неизвестный пул у категории/сервиса/воркера, пул без воркеров, цикл `fallback`, дубль `id` категории, `pro` без `domain/dns_ip/workers`. Предупреждения: IP-подобные домены, пустые категории, адреса-заглушки.
 
 ### 4.3. Выходы
-`build/`: `dnsmasq-geoblock.conf`, `nginx.conf`, `nginx-sni-allow.map`, `nginx-host-allow.map`, `nginx-workers-stream.conf`, `nginx-workers-http.conf`, `service-map.json` (домен → service/category/category_id/tier/pool), `cluster-nodes.json` (+ `free_domains`, `site_origin`, `cert_domains`, `pools`), `pro-dns-nginx.conf`, `pro-worker-nginx.conf`, `pro-nginx-sni-allow.map`, `pro-nginx-host-allow.map`, `cache-dnsmasq.conf`, `pro-policy-map.json`, `pro-nodes.json`, `pro-service-map.json`, опционально `nginx-*-allow.<pool>.map` для пулов со `strict_allowlist`. Плюс `web/src/generated/services.json`.
+`build/`: `cache-dnsmasq.conf`, `nginx.conf`, `nginx-sni-allow.map`, `nginx-host-allow.map`, `nginx-workers-stream.conf`, `nginx-workers-http.conf`, `service-map.json` (домен → service/category/category_id/tier/pool), `cluster-nodes.json` (+ `free_domains`, `site_origin`, `cert_domains`, `pools`), `free-policy-map.json`, `pro-dns-nginx.conf`, `pro-worker-nginx.conf`, `pro-nginx-sni-allow.map`, `pro-nginx-host-allow.map`, `pro-policy-map.json`, `pro-nodes.json`, `pro-service-map.json`, опционально `nginx-*-allow.<pool>.map` для пулов со `strict_allowlist`. Плюс `web/src/generated/services.json`.
 
 ```bash
 python3 src/generate.py services.yaml 153.80.200.170 --check   # данные и шаблоны
@@ -119,16 +118,17 @@ python3 src/generate.py services.yaml 153.80.200.170           # полная с
 python3 -m unittest discover -s tests
 ```
 
-Плейсхолдеры шаблонов: `{{name}} {{ip}} {{origin}} {{site_domain}} {{domain}} {{free_domain}} {{free_domains}} {{free_server_names}} {{free_sni_targets}} {{certbot_domains}} {{cert_domains}} {{pro_domain}} {{pro_dns_ip}} {{cp_ip}} {{date}} {{source}} {{total}} {{category_count}} {{service_count}} {{options}} {{body}} {{disabled}} {{passthrough_note}} {{passthrough}} {{sni_entries}} {{host_entries}} {{workers_stream_body}} {{workers_http_body}}`; для Pro-шаблонов дополнительно `{{pro_worker_ips}} {{pro_worker_ips_nft}} {{trusted_probe_ips_nft}}`. Новый плейсхолдер → добавить в `build_values()` / `pro_values()`.
+Плейсхолдеры шаблонов: `{{name}} {{ip}} {{origin}} {{site_domain}} {{check_domain}} {{domain}} {{free_domain}} {{free_domains}} {{free_server_names}} {{free_sni_targets}} {{certbot_domains}} {{cert_domains}} {{pro_domain}} {{pro_dns_ip}} {{cp_ip}} {{date}} {{source}} {{total}} {{category_count}} {{service_count}} {{sni_entries}} {{host_entries}} {{workers_stream_body}} {{workers_http_body}}`; для Pro-шаблонов дополнительно `{{pro_worker_ips}} {{pro_worker_ips_nft}} {{trusted_probe_ips_nft}}`. Новый плейсхолдер → добавить в `build_values()` / `pro_values()`.
 
 ---
 
 ## 5. Демоны и утилиты (Python, только stdlib)
 
-- **`doh_proxy.py`** (`pereval-doh.service`, 127.0.0.1:8053): RFC 8484 DoH за nginx, fork-пул воркеров, `UdpDnsPool` к dnsmasq с TCP-fallback. Общий код — в `dnscommon.py` (должен лежать в `/usr/local/lib/pereval/`).
-- **`healthcheck.py`** (`pereval-healthcheck.service`, Primary): пробы воркеров (TLS ClientHello + `/healthz`), гистерезис 2/2; переписывает `/etc/dnsmasq.conf` по пулам (`render_dnsmasq_conf_pooled`, домен → пул из `service-map.json`) и `nginx-workers-*.conf` (upstream на пул), `cluster-health.json`; все воркеры мертвы → fail-open на Primary.
-- **`stats_collector.py`** (`pereval-stats.service`): без изменений формата; `service-map.json` теперь содержит `pool`.
-- **`pro_dns.py`** (`pereval-pro-dns.service`, пользователь `pereval-dns` + `CAP_NET_BIND_SERVICE`): см. docstring файла. Режимы по политике: `proxy` (синтез A с IP воркера пула, NODATA на AAAA/HTTPS/SVCB, остальное — в dnsmasq), `plain` (всё в upstream с лимитом qps), `deny`. Новые IP → `POST /api/internal/v1/dns/activity` немедленно; активность — батчем с суточными хэшами IP. SIGHUP перечитывает сертификат и policy-map.
+- **`pro_dns.py`** (единый демон для Free и Pro):
+  - **Free Primary** (`pereval-free-dns.service`, `--tier free --no-cp`): UDP/TCP `:53`, DoT `:853`, DoH `127.0.0.1:8053` (за nginx `127.0.0.1:8443` с `X-Real-IP`), `free-policy-map.json`, привязка клиента к воркеру пула по точному IP (`/32` IPv4, `/64` IPv6) с квотами `max_clients` и автоматическим failover (fail-open на Primary при падении всех воркеров). Встроенный healthcheck (TLS ClientHello + `/healthz`, гистерезис 2/2) пишет `/var/www/geoblock/cluster-health.json` и при смене живых воркеров атомарно обновляет `nginx-workers-stream.conf` / `nginx-workers-http.conf` с `nginx -t && systemctl reload nginx`. SIGHUP перечитывает сертификат и `free-policy-map.json`.
+  - **Pro DNS** (`pereval-pro-dns.service`, `--tier pro`, пользователь `pereval-dns` + `CAP_NET_BIND_SERVICE`): режимы по политике из CP (`proxy`, `plain`, `deny`), привязка по `user_id`/токену. Новые IP → `POST /api/internal/v1/dns/activity` немедленно; активность — батчем с суточными хэшами IP. SIGHUP перечитывает сертификат и `pro-policy-map.json`.
+- **`healthcheck.py`**: библиотека проб воркеров (`probe_tls_sni`, `probe_http_healthz`, `atomic_write_text`), ставится в `/usr/local/lib/pereval/` и импортируется `pro_dns.py`.
+- **`stats_collector.py`** (`pereval-stats.service`): без изменений формата; `service-map.json` содержит `pool`.
 - **`pro_node_agent.py`** (`pereval-pro-agent.service`, root): гарантирует таблицу `inet pereval_pro` (set `pro_clients`, `iif lo accept`, trusted IPs, drop 80/443/9339, reject udp/443), long-poll `GET /api/internal/v1/node/acl`, diff → одна транзакция `nft -f -`; CP недоступен >10 мин — ничего не удаляет; `node/config.extra_domains` → `extra-*-allow.map` + `nginx -s reload`.
 - **`supercell_proxy.py`** (`pereval-supercell.service`, пользователь `pereval-supercell`): прозрачный TCP-релей на `:9339` (закрыт `nftables` для всех кроме `@pro_clients`); валидирует стартовый пакет `ClientHello (10100)`, маршрутизирует соединение по сигнатурам игр Supercell (`content_hash`, `major_version`, `protocol`) с бесшовным live-probe при коллизии/обновлении и фоновой сверкой сигнатур (`--state-file`).
 - **`cert_sync.py`** (`pereval-cert-sync.service` + `.timer`, root): `GET /api/internal/v1/node/cert` с `If-None-Match` (sha256 установленного `fullchain.pem`); 304/404 — ничего не делает; 200 — `ssl.load_cert_chain` на паре, срок ≥ суток, `--expect` имена покрыты (wildcard одного уровня), атомарная запись `privkey.pem` (0640/0600, `--group pereval-dns` на pro-dns) и `fullchain.pem`, затем `--reload` команды. Состояние — `<out>/.cert-sync.json`.
@@ -162,7 +162,7 @@ python3 -m unittest discover -s tests
 ```
 
 - Манифесты файлов по ролям (`LIB_FILES`, `FREE_FILES`, `PRO_DNS_FILES`, `PRO_WORKER_FILES`); домены — из `cluster-nodes.json` / `pro-nodes.json`.
-- Primary/worker (`apply.sh`): пакеты, sysctl, `poolrouting.py`/`dnscommon.py` в `/usr/local/lib/pereval/`, удаление старой статики сайта и `pereval-leads.service`, проверки портов 80/443/853/8053. На Primary: `/etc/pereval/node.env` (из `FREE_PRIMARY_SECRET`), `pereval-cert-sync.{service,timer}` → `/etc/nginx/geoblock/ssl/`; `certbot.timer` отключается (старый lineage ноды больше не нужен). Пока боевого сертификата нет — старый LE этой ноды или самоподписанный с SAN на все Free-имена.
+- Primary/worker (`apply.sh`): пакеты, sysctl, `poolrouting.py`/`dnscommon.py`/`healthcheck.py` в `/usr/local/lib/pereval/`, локальный кеш `dnsmasq` (`cache-dnsmasq.conf` на `127.0.0.1:53`), удаление старой статики сайта и устаревших юнитов (`pereval-doh.service`, `pereval-healthcheck.service`, `pereval-leads.service`), проверки портов 53/80/443/853/8053. На Primary: `pereval-free-dns.service` (`/usr/local/bin/pereval-free-dns.py`, `pro_dns.py --tier free`), `/etc/pereval/node.env` (из `FREE_PRIMARY_SECRET`), `pereval-cert-sync.{service,timer}` → `/etc/nginx/geoblock/ssl/` (`nginx reload` + `SIGHUP pereval-free-dns`); `certbot.timer` отключается. Пока боевого сертификата нет — старый LE этой ноды или самоподписанный с SAN на все Free-имена.
 - pro-dns (`apply-pro.sh`): пользователь `pereval-dns`, `/etc/pereval/{node.env,pro-policy-map.json,ssl/}`, dnsmasq-кеш на 127.0.0.1:53 и `/etc/resolv.conf → 127.0.0.1`, nginx (DoH), `pereval-pro-dns.service`; сертификат — `pereval-cert-sync` с CP в `/etc/pereval/ssl/` (`--group pereval-dns`, reload nginx + `SIGHUP pro_dns`), первая синхронизация выполняется при деплое до старта демонов; пока сертификата на CP нет — временный самоподписанный.
 - pro-worker: карты → `/etc/nginx/geoblock/nginx-*-allow.map` (+ пустые `extra-*-allow.map`), `cluster-nodes.json` для stats, nftables `/etc/nftables.d/pereval-pro.nft` (include в `/etc/nftables.conf`, порты 80/443/9339), `pereval-supercell.service`, `pereval-pro-agent.service`, `pereval-stats.service`.
 - Секреты нод: `FREE_PRIMARY_SECRET`, `PRO_DNS_SECRET` и по одному на Pro-воркер в окружении → `/etc/pereval/node.env` (`CP_ORIGIN`, `NODE_SECRET`, для Pro ещё `PRO_DNS_IP`, `PRO_DOMAIN`, `TRUSTED_IPS`). Имя переменной Pro-воркера — `secret_env` воркера в `services.yaml`, по умолчанию `<NAME>_SECRET` (`pro-worker-ai-1` → `PRO_WORKER_AI_1_SECRET`; попадает в `pro-nodes.json`); если она пуста, `deploy.sh` берёт общий `PRO_WORKER_SECRET` и предупреждает, что нода в CP будет видна как общая. Новый воркер = `pnpm admin node add <name> pro_worker <ip>` + секрет `<NAME>_SECRET` в GitHub Secrets + строка в `deploy.yml`.

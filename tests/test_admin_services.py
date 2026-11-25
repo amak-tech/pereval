@@ -132,7 +132,7 @@ class AdminServicesGenerateTests(unittest.TestCase):
 
         # 2. Free конфиги: admin-only доменов нет
         values = generate.build_values(doc, "153.80.200.170", "services.yaml")
-        for key in ("body", "sni_entries", "host_entries", "service_map_json"):
+        for key in ("sni_entries", "host_entries", "service_map_json"):
             for secret_dom in ("secretwork.example", "catadmin.example", "staging-ai.example"):
                 self.assertNotIn(secret_dom, values[key])
         free_pm = json.loads(generate.free_policy_map_json(doc, "153.80.200.170"))

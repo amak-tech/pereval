@@ -123,12 +123,11 @@ class WorkerSecretEnvTests(unittest.TestCase):
         errs, _ = generate.validate(synth, primary_ip="153.80.200.170")
         self.assertEqual(errs, [])
         vals = generate.build_values(synth, "153.80.200.170", "services.yaml")
-        self.assertIn("address=/console.example/198.51.100.10", vals["body"])
-        self.assertIn("server=/stun.console.example/#", vals["body"])
         self.assertIn(".console.example", vals["sni_entries"])
         self.assertRegex(vals["sni_entries"], r"\.stun\.console\.example\s+127\.0\.0\.1:9;")
         self.assertRegex(vals["host_entries"], r'\.stun\.console\.example\s+"";')
         free_pm = json.loads(generate.free_policy_map_json(synth, "153.80.200.170"))
+        self.assertIn("console.example", free_pm["domains"])
         self.assertEqual(free_pm["passthrough"], ["gosuslugi.ru", "stun.console.example"])
 
         import update_hosts  # noqa: E402

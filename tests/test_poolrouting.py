@@ -32,6 +32,26 @@ class RendezvousTests(unittest.TestCase):
         self.assertEqual(poolrouting.client_subnet_key("203.0.113.42"), "203.0.113.0/24")
         self.assertEqual(poolrouting.client_subnet_key("::ffff:203.0.113.99"), "203.0.113.0/24")
         self.assertEqual(poolrouting.client_subnet_key("2001:db8:abcd:1234::1"), "2001:db8:abcd:1200::/56")
+        self.assertEqual(
+            poolrouting.client_subnet_key("203.0.113.42", ipv4_prefix=32, ipv6_prefix=64),
+            "203.0.113.42/32",
+        )
+        self.assertEqual(
+            poolrouting.client_subnet_key("::ffff:203.0.113.99", ipv4_prefix=32, ipv6_prefix=64),
+            "203.0.113.99/32",
+        )
+        self.assertEqual(
+            poolrouting.client_subnet_key("2001:db8:abcd:1234::1", ipv4_prefix=32, ipv6_prefix=64),
+            "2001:db8:abcd:1234::/64",
+        )
+        self.assertEqual(
+            poolrouting.client_subnet_key("2001:db8:abcd:1234::2", ipv4_prefix=32, ipv6_prefix=64),
+            "2001:db8:abcd:1234::/64",
+        )
+        self.assertEqual(
+            poolrouting.client_subnet_key("2001:db8:abcd:1235::1", ipv4_prefix=32, ipv6_prefix=64),
+            "2001:db8:abcd:1235::/64",
+        )
         self.assertEqual(poolrouting.client_subnet_key("not-an-ip"), "not-an-ip")
 
     def test_pick_for_client_distribution_and_scale_out(self):
@@ -258,17 +278,16 @@ class BuildConsistencyTests(unittest.TestCase):
         if not (self.build / "service-map.json").is_file():
             self.skipTest("build/ не собран")
 
-    def test_service_map_has_pools_and_matches_dnsmasq(self):
+    def test_service_map_has_pools_and_matches_free_policy_map(self):
         smap = json.loads((self.build / "service-map.json").read_text(encoding="utf-8"))
         self.assertTrue(all("pool" in v and "category_id" in v for v in smap.values()))
-        conf = (self.build / "dnsmasq-geoblock.conf").read_text(encoding="utf-8")
-        domains = set(re.findall(r"^address=/([^/]+)/", conf, re.M))
-        self.assertEqual(domains, set(smap))
-        # все домены одного сервиса -> один IP
-        by_service = {}
-        for d, ip in re.findall(r"^address=/([^/]+)/(\S+)", conf, re.M):
-            by_service.setdefault(smap[d]["service"], set()).add(ip)
-        self.assertTrue(all(len(v) == 1 for v in by_service.values()), by_service)
+        self.assertFalse((self.build / "dnsmasq-geoblock.conf").exists())
+        fpm = json.loads((self.build / "free-policy-map.json").read_text(encoding="utf-8"))
+        self.assertEqual(fpm.get("tier"), "free")
+        self.assertEqual(set(fpm["domains"]), set(smap))
+        for d, info in smap.items():
+            self.assertEqual(fpm["domains"][d]["pool"], info["pool"])
+            self.assertEqual(fpm["domains"][d]["service"], info["service"])
 
     def test_pro_policy_map_superset(self):
         pro = json.loads((self.build / "pro-policy-map.json").read_text(encoding="utf-8"))
@@ -281,9 +300,6 @@ class BuildConsistencyTests(unittest.TestCase):
         check_dom = cluster["check_domain"]
         primary = cluster["primary"]
         self.assertTrue(check_dom.startswith("check."))
-
-        dnsmasq_conf = (self.build / "dnsmasq-geoblock.conf").read_text(encoding="utf-8")
-        self.assertIn(f"host-record={check_dom},{primary}", dnsmasq_conf)
 
         nginx_conf = (self.build / "nginx.conf").read_text(encoding="utf-8")
         self.assertIn(check_dom, nginx_conf)
