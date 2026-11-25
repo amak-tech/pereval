@@ -275,6 +275,7 @@ categories:
           - aisandbox-pa.googleapis.com
           - aisandbox-pa.clients6.google.com
           - aisandbox-pa-webchannel.clients6.google.com
+          - feedback-pa.clients6.google.com
       - name: Google Antigravity
         slug: google-antigravity
         note: "Агентная среда разработки Google Antigravity (IDE, десктопный менеджер агентов и CLI) ограничивает авторизацию, обращения к моделям и автообновление с IP-адресов РФ и РБ."
