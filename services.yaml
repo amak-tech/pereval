@@ -85,7 +85,7 @@ nodes:
       pools: [ ai ]
 
     - ip: 162.35.51.215
-      name: fwus-ai-1
+      name: fwus-ai-2
       pools: [ ai ]
 
     - ip: 144.31.159.229

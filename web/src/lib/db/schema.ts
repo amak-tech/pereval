@@ -142,7 +142,7 @@ export const webhookEvents = pgTable(
     error: text("error"),
     payload: jsonb("payload").notNull(),
   },
-  (t) => [index("webhook_events_contract_idx").on(t.contractId)],
+  (t) => [index("webhook_events_contract_idx").on(t.contractId), index("webhook_events_received_at_idx").on(t.receivedAt)],
 );
 
 export const accessTokens = pgTable(
@@ -158,7 +158,7 @@ export const accessTokens = pgTable(
     createdAt: ts("created_at").notNull().defaultNow(),
     revokedAt: ts("revoked_at"),
   },
-  (t) => [index("access_tokens_user_idx").on(t.userId)],
+  (t) => [index("access_tokens_user_idx").on(t.userId), index("access_tokens_revoked_at_idx").on(t.revokedAt)],
 );
 
 export type BoundIpKind = "static" | "ddns_host" | "ddns_push";
@@ -220,7 +220,11 @@ export const tokenActivity = pgTable(
     lastSeen: ts("last_seen").notNull(),
     queries: integer("queries").notNull().default(0),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.day, t.ipHash] })],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.day, t.ipHash] }),
+    index("token_activity_last_seen_idx").on(t.lastSeen),
+    index("token_activity_day_idx").on(t.day),
+  ],
 );
 
 export const aclDynamic = pgTable(
@@ -287,12 +291,16 @@ export const leads = pgTable("leads", {
   userAgent: text("user_agent").notNull().default(""),
 });
 
-export const auditLog = pgTable("audit_log", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  at: ts("at").notNull().defaultNow(),
-  userId: text("user_id"),
-  action: text("action").notNull(),
-  details: jsonb("details"),
-});
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    at: ts("at").notNull().defaultNow(),
+    userId: text("user_id"),
+    action: text("action").notNull(),
+    details: jsonb("details"),
+  },
+  (t) => [index("audit_log_at_idx").on(t.at), index("audit_log_user_id_idx").on(t.userId)],
+);

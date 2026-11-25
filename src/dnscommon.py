@@ -22,6 +22,7 @@ import asyncio
 import base64
 import hashlib
 import ipaddress
+import os
 import ssl
 import struct
 import time
@@ -667,6 +668,9 @@ class _UdpDnsSocketProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport):
         self.transport = transport
 
+    def is_alive(self) -> bool:
+        return self.transport is not None and not self.transport.is_closing()
+
     def datagram_received(self, data: bytes, _addr):
         if len(data) < MIN_DNS_PACKET_LEN:
             return
@@ -679,12 +683,21 @@ class _UdpDnsSocketProtocol(asyncio.DatagramProtocol):
         pass
 
     def connection_lost(self, exc):
+        self.transport = None
         for fut in self.pending.values():
             if not fut.done():
                 fut.set_exception(exc or ConnectionError("UDP transport closed"))
         self.pending.clear()
 
     def allocate_txid(self) -> int:
+        if len(self.pending) >= 65535:
+            return -1
+        # Рандомизация Transaction ID (RFC 5452) для защиты от DNS spoofing/cache poisoning
+        for _ in range(64):
+            txid = int.from_bytes(os.urandom(2), "big")
+            if txid not in self.pending:
+                return txid
+        # Резервный перебор при высокой плотности занятых id
         for _ in range(65536):
             txid = self._next_id
             self._next_id = (txid + 1) & 0xFFFF
@@ -737,13 +750,43 @@ class UdpDnsPool:
     def close(self):
         for proto in self.protocols:
             if proto.transport is not None:
-                proto.transport.close()
+                try:
+                    proto.transport.close()
+                except Exception:
+                    pass
+                proto.transport = None
         self.protocols.clear()
 
+    async def _ensure_proto(self, proto: _UdpDnsSocketProtocol) -> _UdpDnsSocketProtocol:
+        """Переоткрывает сокет, если транспорт был разорван или закрыт."""
+        if proto.is_alive():
+            return proto
+        if proto.transport is not None:
+            try:
+                proto.transport.close()
+            except Exception:
+                pass
+            proto.transport = None
+        loop = asyncio.get_running_loop()
+        target = proto.upstream
+        try:
+            _, new_proto = await loop.create_datagram_endpoint(
+                lambda t=target: _UdpDnsSocketProtocol(upstream=t),
+                remote_addr=target,
+            )
+            for idx, p in enumerate(self.protocols):
+                if p is proto:
+                    self.protocols[idx] = new_proto
+                    break
+            return new_proto
+        except Exception:
+            return proto
+
     async def _query_proto(self, proto: _UdpDnsSocketProtocol, wire_query: bytes, tcp_fallback: bool):
+        proto = await self._ensure_proto(proto)
         orig_id = wire_query[:2]
         txid = proto.allocate_txid()
-        if txid < 0 or proto.transport is None:
+        if txid < 0 or not proto.is_alive():
             return await self.query_tcp(wire_query, upstream=proto.upstream), True
 
         loop = asyncio.get_running_loop()
@@ -753,6 +796,14 @@ class UdpDnsPool:
             rewritten = struct.pack("!H", txid) + wire_query[2:]
             proto.transport.sendto(rewritten)
             resp = await asyncio.wait_for(fut, timeout=self.timeout)
+        except (OSError, ConnectionError):
+            if proto.transport is not None:
+                try:
+                    proto.transport.close()
+                except Exception:
+                    pass
+                proto.transport = None
+            raise
         finally:
             proto.pending.pop(txid, None)
 

@@ -238,6 +238,48 @@ class UdpPoolTests(unittest.TestCase):
                 await up2.stop()
         asyncio.run(run())
 
+    def test_allocate_txid_randomness_and_limit(self):
+        proto = dnscommon._UdpDnsSocketProtocol()
+        ids = {proto.allocate_txid() for _ in range(50)}
+        self.assertGreater(len(ids), 30, "txids should be randomized across 50 allocations")
+        for x in ids:
+            self.assertTrue(0 <= x <= 0xFFFF)
+        # Saturated pending map returns -1
+        fake_pending = {i: True for i in range(65536)}
+        proto.pending = fake_pending
+        self.assertEqual(proto.allocate_txid(), -1)
+
+    def test_udp_pool_reconnect_on_transport_close(self):
+        async def run():
+            up = await tu.FakeUpstream().start()
+            pool = dnscommon.UdpDnsPool("127.0.0.1", up.port, pool_size=1, timeout=2.0)
+            await pool.start()
+            try:
+                # Первый запрос успешен
+                q1 = tu.make_query("reconnect1.example.com", qid=0x1234)
+                r1 = await pool.query(q1)
+                self.assertEqual(tu.parse_header(r1)["id"], 0x1234)
+
+                # Имитируем сбой сокета / разрыв соединения
+                proto = pool.protocols[0]
+                self.assertTrue(proto.is_alive())
+                old_tr = proto.transport
+                proto.connection_lost(ConnectionResetError("Simulated socket drop"))
+                if old_tr is not None:
+                    old_tr.close()
+                self.assertFalse(proto.is_alive())
+
+                # Следующий запрос должен автоматически переоткрыть UDP сокет и успешно ответить
+                q2 = tu.make_query("reconnect2.example.com", qid=0x5678)
+                r2 = await pool.query(q2)
+                self.assertEqual(tu.parse_header(r2)["id"], 0x5678)
+                self.assertEqual(tu.a_answers(r2), [tu.UPSTREAM_A])
+                self.assertTrue(pool.protocols[0].is_alive())
+            finally:
+                pool.close()
+                await up.stop()
+        asyncio.run(run())
+
 
 class DnsCacheTests(unittest.TestCase):
     def test_ttl_lru_and_txid_rewrite(self):

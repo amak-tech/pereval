@@ -14,19 +14,38 @@ import { checkSupercellUpstreams } from "@/jobs/supercellwatch";
 import { sendDailyDigest } from "@/jobs/digest";
 import { cleanupRetention } from "@/jobs/retention";
 
-type Job = { name: string; everyMs: number; run: () => Promise<unknown>; last: number; running: boolean };
+export type Job = {
+  name: string;
+  everyMs: number;
+  run: () => Promise<unknown>;
+  last: number;
+  running: boolean;
+  timeoutMs?: number;
+};
 
-const jobs: Job[] = [
-  { name: "outbox", everyMs: 15_000, run: () => sendPendingMail(20), last: 0, running: false },
-  { name: "acl-expire", everyMs: 30_000, run: () => expireDynamicAcl(), last: 0, running: false },
-  { name: "ddns", everyMs: 60_000, run: () => refreshDdnsHosts(), last: 0, running: false },
-  { name: "nodewatch", everyMs: 60_000, run: () => checkNodesLoad(), last: 0, running: false },
-  { name: "blockwatch", everyMs: 30 * 60_000, run: () => checkNodesBlocking(), last: 0, running: false },
-  { name: "reconcile", everyMs: 6 * 3_600_000, run: () => reconcileSubscriptions(), last: 0, running: false },
-  { name: "certwatch", everyMs: 12 * 3_600_000, run: () => checkCertificate(), last: 0, running: false },
-  { name: "supercellwatch", everyMs: 12 * 3_600_000, run: () => checkSupercellUpstreams(), last: 0, running: false },
-  { name: "digest", everyMs: 3_600_000, run: () => sendDailyDigest(), last: 0, running: false },
-  { name: "retention", everyMs: 24 * 3_600_000, run: () => cleanupRetention(), last: 0, running: false },
+export async function withTimeout<T>(promise: Promise<T>, ms: number, jobName: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`[jobs] задача ${jobName} превысила таймаут ${ms}ms`)), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+export const jobs: Job[] = [
+  { name: "outbox", everyMs: 15_000, timeoutMs: 30_000, run: () => sendPendingMail(20), last: 0, running: false },
+  { name: "acl-expire", everyMs: 30_000, timeoutMs: 25_000, run: () => expireDynamicAcl(), last: 0, running: false },
+  { name: "ddns", everyMs: 60_000, timeoutMs: 45_000, run: () => refreshDdnsHosts(), last: 0, running: false },
+  { name: "nodewatch", everyMs: 60_000, timeoutMs: 45_000, run: () => checkNodesLoad(), last: 0, running: false },
+  { name: "blockwatch", everyMs: 30 * 60_000, timeoutMs: 180_000, run: () => checkNodesBlocking(), last: 0, running: false },
+  { name: "reconcile", everyMs: 6 * 3_600_000, timeoutMs: 120_000, run: () => reconcileSubscriptions(), last: 0, running: false },
+  { name: "certwatch", everyMs: 12 * 3_600_000, timeoutMs: 60_000, run: () => checkCertificate(), last: 0, running: false },
+  { name: "supercellwatch", everyMs: 12 * 3_600_000, timeoutMs: 60_000, run: () => checkSupercellUpstreams(), last: 0, running: false },
+  { name: "digest", everyMs: 3_600_000, timeoutMs: 60_000, run: () => sendDailyDigest(), last: 0, running: false },
+  { name: "retention", everyMs: 24 * 3_600_000, timeoutMs: 180_000, run: () => cleanupRetention(), last: 0, running: false },
 ];
 
 let stopping = false;
@@ -37,8 +56,8 @@ async function tick(): Promise<void> {
     if (job.running || now - job.last < job.everyMs) continue;
     job.running = true;
     job.last = now;
-    job
-      .run()
+    const timeout = job.timeoutMs ?? Math.min(Math.max(job.everyMs * 2, 30_000), 300_000);
+    withTimeout(job.run(), timeout, job.name)
       .then((res) => {
         if (res && typeof res === "object") console.log(`[jobs] ${job.name}: ${JSON.stringify(res)}`);
         else if (typeof res === "number" && res > 0) console.log(`[jobs] ${job.name}: ${res}`);
@@ -67,4 +86,6 @@ async function main(): Promise<void> {
   process.on("SIGINT", stop);
 }
 
-void main();
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  void main();
+}
