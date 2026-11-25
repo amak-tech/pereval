@@ -1856,7 +1856,7 @@ if (( ! DRY_RUN )); then
 	if ((NEED_PRO)); then
 		info "Pro обновлён ($PRO_DOMAIN). Логи: journalctl -u pereval-pro-dns -f | journalctl -u pereval-pro-agent -f"
 	else
-		info "кластер обновлён ($n_dnsmasq доменов)"
-		info "логи: journalctl -u dnsmasq -f  |  journalctl -u pereval-healthcheck -f  |  tail -f /var/log/nginx/sni.log"
+		info "кластер обновлён ($n_free_domains доменов)"
+		info "логи: journalctl -u pereval-free-dns -f  |  tail -f /var/log/nginx/sni.log"
 	fi
 fi
