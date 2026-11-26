@@ -30,6 +30,11 @@ function providers(): NextAuthConfig["providers"] {
       Yandex({
         clientId: e.AUTH_YANDEX_ID,
         clientSecret: e.AUTH_YANDEX_SECRET,
+        // Провайдер по умолчанию просит login:avatar, который не используется и вызывает invalid_scope без этой галочки в Яндекс ID.
+        authorization: {
+          url: "https://oauth.yandex.ru/authorize",
+          params: { scope: "login:info login:email" },
+        },
         // Email подтверждён Яндексом — безопасно привязать к пользователю, оплатившему по email.
         allowDangerousEmailAccountLinking: true,
       }),
