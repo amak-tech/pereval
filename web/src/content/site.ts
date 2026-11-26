@@ -19,7 +19,7 @@ export const SITE = {
   /** Профиль Apple (DNS-over-HTTPS) для бесплатной версии — маршрут src/app/dns.mobileconfig. */
   appleProfilePath: "/dns.mobileconfig",
   /** Дата редакции правовых документов (ISO). */
-  legalUpdated: "2026-11-17",
+  legalUpdated: "2026-11-26",
 } as const;
 
 export const NAV = [
