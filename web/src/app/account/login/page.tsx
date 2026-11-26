@@ -7,7 +7,7 @@ import { SITE } from "@/content/site";
 
 export const metadata: Metadata = {
   title: "Вход в кабинет",
-  description: "Вход в личный кабинет Перевал Pro по ссылке на email или через Google.",
+  description: "Вход в личный кабинет Перевал Pro по ссылке на email, через Google или Яндекс.",
   robots: { index: false, follow: false },
 };
 
@@ -28,6 +28,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const error = typeof sp.error === "string" ? (ERRORS[sp.error] ?? ERRORS.default) : null;
   const googleEnabled = !!(env().AUTH_GOOGLE_ID && env().AUTH_GOOGLE_SECRET);
+  const yandexEnabled = !!(env().AUTH_YANDEX_ID && env().AUTH_YANDEX_SECRET);
+  const oauthEnabled = googleEnabled || yandexEnabled;
 
   return (
     <div className="wrap max-w-[520px] py-12">
@@ -44,27 +46,52 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       ) : null}
 
       <div className="card mt-6 grid gap-5">
-        {googleEnabled ? (
-          <form
-            action={async () => {
-              "use server";
-              await signIn("google", { redirectTo: "/account" });
-            }}
-          >
-            <button type="submit" className="btn-secondary w-full">
-              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
-                <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.8 6C12.3 13.6 17.7 9.5 24 9.5z" />
-                <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z" />
-                <path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z" />
-                <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.8 6C6.5 42.6 14.6 48 24 48z" />
-              </svg>
-              Войти через Google
-            </button>
-            <p className="m-0 mt-2 text-center text-xs text-mute">Подойдёт, если подписка оформлена на тот же email, что и аккаунт Google.</p>
-          </form>
+        {oauthEnabled ? (
+          <div className="grid gap-3">
+            {googleEnabled ? (
+              <form
+                action={async () => {
+                  "use server";
+                  await signIn("google", { redirectTo: "/account" });
+                }}
+              >
+                <button type="submit" className="btn-secondary w-full">
+                  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
+                    <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.8 6C12.3 13.6 17.7 9.5 24 9.5z" />
+                    <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17z" />
+                    <path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z" />
+                    <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.7-4.1-13.6-9.9l-7.8 6C6.5 42.6 14.6 48 24 48z" />
+                  </svg>
+                  Войти через Google
+                </button>
+              </form>
+            ) : null}
+
+            {yandexEnabled ? (
+              <form
+                action={async () => {
+                  "use server";
+                  await signIn("yandex", { redirectTo: "/account" });
+                }}
+              >
+                <button type="submit" className="btn-secondary w-full">
+                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+                    <circle cx="12" cy="12" r="12" fill="#FC3F1D" />
+                    <path
+                      fill="#fff"
+                      d="M13.32 7.666h-.924c-1.694 0-2.585.858-2.585 2.123 0 1.43.616 2.1 1.881 2.959l1.045.704-3.003 4.487H7.49l2.695-4.014c-1.55-1.111-2.42-2.19-2.42-4.015 0-2.288 1.595-3.85 4.62-3.85h3.003v11.868h-2.068V7.666z"
+                    />
+                  </svg>
+                  Войти через Яндекс
+                </button>
+              </form>
+            ) : null}
+
+            <p className="m-0 text-center text-xs text-mute">Подойдёт, если подписка оформлена на тот же email.</p>
+          </div>
         ) : null}
 
-        {googleEnabled ? <div className="flex items-center gap-3 text-xs text-mute"><span className="h-px flex-1 bg-line" />или<span className="h-px flex-1 bg-line" /></div> : null}
+        {oauthEnabled ? <div className="flex items-center gap-3 text-xs text-mute"><span className="h-px flex-1 bg-line" />или<span className="h-px flex-1 bg-line" /></div> : null}
 
         {/* Обычный POST без server action: не зависит от свежести JS во вкладке, ответ — 303 на /account/login/sent */}
         <form method="post" action="/api/account/login-link" className="grid gap-3">

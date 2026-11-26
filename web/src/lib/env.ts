@@ -20,6 +20,8 @@ const schema = z.object({
   AUTH_SECRET: z.string().min(16).default("dev-only-secret-change-me-please-0000"),
   AUTH_GOOGLE_ID: z.string().default(""),
   AUTH_GOOGLE_SECRET: z.string().default(""),
+  AUTH_YANDEX_ID: z.string().default(""),
+  AUTH_YANDEX_SECRET: z.string().default(""),
   AUTH_TRUST_HOST: z.string().default("true"),
   SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
 
