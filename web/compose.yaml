@@ -71,22 +71,6 @@ services:
     restart: unless-stopped
     logging: *log
 
-  backup:
-    image: postgres:16-alpine
-    environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      BACKUP_KEEP_DAYS: "${BACKUP_KEEP_DAYS:-14}"
-      BACKUP_MAX_FILES: "${BACKUP_MAX_FILES:-20}"
-    volumes:
-      - /var/backups/pereval:/backups
-      - ./deploy/backup-loop.sh:/backup-loop.sh:ro
-    entrypoint: ["sh", "/backup-loop.sh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    logging: *log
-
   nginx:
     image: nginx:1.27-alpine
     ports:

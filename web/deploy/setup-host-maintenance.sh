@@ -29,6 +29,7 @@ DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
 LOGROTATE_D="${LOGROTATE_D:-/etc/logrotate.d}"
 LOGROTATE_CONF="${LOGROTATE_CONF:-$LOGROTATE_D/pereval-cp}"
 CLEANUP_BIN="${CLEANUP_BIN:-/usr/local/sbin/pereval-cp-cleanup}"
+BACKUP_BIN="${BACKUP_BIN:-/usr/local/sbin/pereval-cp-backup}"
 SYSTEMD_UNIT_DIR="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
 JOURNAL_MAX_USE="${JOURNAL_MAX_USE:-200M}"
 JOURNAL_RETENTION_DAYS="${JOURNAL_RETENTION_DAYS:-14}"
@@ -169,11 +170,14 @@ JOURNAL_MAX_USE=\"\${JOURNAL_MAX_USE:-${JOURNAL_MAX_USE}}\"
 
 BACKUP_KEEP_DAYS=14
 BACKUP_MAX_FILES=20
+BACKUP_KEEP_COUNT=7
 if [[ -f \"\$PEREVAL_DIR/.env\" ]]; then
 	val=\$(grep -E '^BACKUP_KEEP_DAYS=[0-9]+\$' \"\$PEREVAL_DIR/.env\" | tail -n 1 | cut -d= -f2 || true)
 	[[ -n \$val ]] && BACKUP_KEEP_DAYS=\"\$val\"
 	val=\$(grep -E '^BACKUP_MAX_FILES=[0-9]+\$' \"\$PEREVAL_DIR/.env\" | tail -n 1 | cut -d= -f2 || true)
 	[[ -n \$val ]] && BACKUP_MAX_FILES=\"\$val\"
+	val=\$(grep -E '^BACKUP_KEEP_COUNT=[0-9]+\$' \"\$PEREVAL_DIR/.env\" | tail -n 1 | cut -d= -f2 || true)
+	[[ -n \$val ]] && BACKUP_KEEP_COUNT=\"\$val\"
 fi
 
 # 1) Журнал systemd и ротация текстовых логов
@@ -188,9 +192,18 @@ if [[ -d \"\$VAR_LOG_DIR\" ]]; then
 	find \"\$VAR_LOG_DIR\" -maxdepth 2 -type f \\( -name '*.gz' -o -name '*.[0-9]' -o -name '*.[0-9][0-9]' -o -name '*.old' \\) -mtime +\"\$log_mtime\" -delete 2>/dev/null || true
 fi
 
-# 2) Локальные дампы Postgres (/var/backups/pereval): осиротевшие tmp и файлы сверх срока/лимита
+# 2) Локальные бэкапы (/var/backups/pereval): осиротевшие tmp, полные архивы сверх BACKUP_KEEP_COUNT и устаревшие дампы
 if [[ -d \"\$BACKUP_DIR\" ]]; then
-	find \"\$BACKUP_DIR\" -maxdepth 1 -type f -name '*.tmp' -mmin +120 -delete 2>/dev/null || true
+	find \"\$BACKUP_DIR\" -maxdepth 1 -type f \\( -name '*.tmp' -o -name '*.tmp.*' \\) -mmin +120 -delete 2>/dev/null || true
+	if [[ \"\$BACKUP_KEEP_COUNT\" -gt 0 ]]; then
+		idx=0
+		for f in \$(ls -1 \"\$BACKUP_DIR\"/pereval-cp-*.tar.gz 2>/dev/null | sort -r); do
+			idx=\$((idx + 1))
+			if [[ \"\$idx\" -gt \"\$BACKUP_KEEP_COUNT\" ]]; then
+				rm -f \"\$f\"
+			fi
+		done
+	fi
 	bkp_mtime=\$((BACKUP_KEEP_DAYS > 0 ? BACKUP_KEEP_DAYS - 1 : 0))
 	find \"\$BACKUP_DIR\" -maxdepth 1 -type f -name 'pereval-*.dump' -mtime +\"\$bkp_mtime\" -delete 2>/dev/null || true
 	if [[ \"\$BACKUP_MAX_FILES\" -gt 0 ]]; then
@@ -232,6 +245,12 @@ fi
 
 write_if_changed "$CLEANUP_BIN" 0755 "$CLEANUP_CONTENT" || true
 
+BACKUP_WRAPPER_CONTENT="#!/usr/bin/env bash
+set -euo pipefail
+exec ${PYTHON_BIN:-python3} ${PEREVAL_DIR}/deploy/cp_backup.py --pereval-dir \"${PEREVAL_DIR}\" --backup-dir \"${BACKUP_DIR}\" backup \"\$@\"
+"
+write_if_changed "$BACKUP_BIN" 0755 "$BACKUP_WRAPPER_CONTENT" || true
+
 SERVICE_CONTENT="[Unit]
 Description=Pereval CP disk & log cleanup
 After=network.target
@@ -253,6 +272,28 @@ Persistent=true
 WantedBy=timers.target
 "
 
+BACKUP_SERVICE_CONTENT="[Unit]
+Description=Pereval CP full backup & S3 upload
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${BACKUP_BIN}
+"
+
+BACKUP_TIMER_CONTENT="[Unit]
+Description=Daily Pereval CP backup to S3
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"
+
 unit_changed=0
 if write_if_changed "$SYSTEMD_UNIT_DIR/pereval-cp-cleanup.service" 0644 "$SERVICE_CONTENT"; then
 	unit_changed=1
@@ -260,14 +301,24 @@ fi
 if write_if_changed "$SYSTEMD_UNIT_DIR/pereval-cp-cleanup.timer" 0644 "$TIMER_CONTENT"; then
 	unit_changed=1
 fi
+if write_if_changed "$SYSTEMD_UNIT_DIR/pereval-cp-backup.service" 0644 "$BACKUP_SERVICE_CONTENT"; then
+	unit_changed=1
+fi
+if write_if_changed "$SYSTEMD_UNIT_DIR/pereval-cp-backup.timer" 0644 "$BACKUP_TIMER_CONTENT"; then
+	unit_changed=1
+fi
 
-if [[ -n $SYSTEMCTL_BIN && -x $SYSTEMCTL_BIN && -d /run/systemd/system ]]; then
+if [[ -n $SYSTEMCTL_BIN && -x $SYSTEMCTL_BIN ]] && { [[ -d /run/systemd/system ]] || [[ ${PEREVAL_FORCE_SYSTEMCTL:-0} == 1 ]]; }; then
 	if ((unit_changed)); then
 		"$SYSTEMCTL_BIN" daemon-reload >/dev/null 2>&1 || true
 	fi
 	"$SYSTEMCTL_BIN" enable --now pereval-cp-cleanup.timer >/dev/null 2>&1 || true
+	if ! "$SYSTEMCTL_BIN" is-enabled pereval-cp-backup.timer >/dev/null 2>&1 || ! "$SYSTEMCTL_BIN" is-active pereval-cp-backup.timer >/dev/null 2>&1; then
+		warn "pereval-cp-backup.timer не включён или не активен — включаем автоматически"
+		"$SYSTEMCTL_BIN" enable --now pereval-cp-backup.timer >/dev/null 2>&1 || true
+	fi
 fi
 
 # Выполняем безопасную очистку файлов/логов/бэкапов сразу при деплое
 "$CLEANUP_BIN" --deploy
-say "CP cleanup: логи, временные файлы и бэкапы проверены (таймер pereval-cp-cleanup.timer активен)"
+say "CP maintenance: cleanup и backup-таймеры настроены (pereval-cp-cleanup.timer, pereval-cp-backup.timer)"

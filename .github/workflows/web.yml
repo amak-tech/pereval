@@ -139,6 +139,13 @@ jobs:
           SYNC_AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
           SYNC_AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
           SYNC_GLOBALPING_TOKEN: ${{ secrets.GLOBALPING_TOKEN }}
+          SYNC_S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          SYNC_S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          SYNC_S3_REGION: ${{ secrets.S3_REGION }}
+          SYNC_S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          SYNC_S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          SYNC_S3_PREFIX: ${{ secrets.S3_PREFIX }}
+          SYNC_S3_PATH_STYLE: ${{ secrets.S3_PATH_STYLE }}
         run: |
           KEY="$(mktemp)"; trap 'rm -f "$KEY"' EXIT
           printf '%s\n' "$CP_SSH_KEY" > "$KEY"; chmod 600 "$KEY"
@@ -149,12 +156,13 @@ jobs:
           # образ в GHCR приватный: логинимся на сервере токеном этого запуска (живёт только на время job)
           printf '%s' "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
           scp -i "$KEY" -o StrictHostKeyChecking=accept-new -r web/compose.yaml web/deploy "$CP_SSH_USER@$CP_HOST:/opt/pereval/"
-          $SSH "chmod +x /opt/pereval/deploy/*.sh && cd /opt/pereval && test -f .env || { echo 'нет /opt/pereval/.env — создайте из deploy/.env.example'; exit 1; }"
+          $SSH "chmod +x /opt/pereval/deploy/*.sh /opt/pereval/deploy/cp_backup.py && cd /opt/pereval && test -f .env || { echo 'нет /opt/pereval/.env — создайте из deploy/.env.example'; exit 1; }"
           # синхронизация секретов в .env: KEY=VALUE построчно через stdin, на сервере upsert (значения в файл, не в командную строку)
           env | grep '^SYNC_' | sed 's/^SYNC_//' | awk -F= 'length($0) > length($1) + 1' \
             | $SSH 'cd /opt/pereval && while IFS= read -r line; do k="${line%%=*}"; if grep -q "^$k=" .env; then awk -v l="$line" -v k="$k" "index(\$0, k\"=\")==1 {print l; next} {print}" .env > .env.tmp && cat .env.tmp > .env && rm -f .env.tmp; else printf "%s\n" "$line" >> .env; fi; done; chmod 600 .env; echo "секреты синхронизированы: $(grep -cE "^(SMTP_PASSWORD|LAVA_API_KEY)=.+" .env)/2 ключевых заполнены"'
-          # настраиваем лимиты логов (journald, docker, logrotate) и автоочистку файлов/бэкапов на CP
+          # настраиваем лимиты логов (journald, docker, logrotate), автоочистку и расписание бэкапов на CP
           $SSH 'if [ "$(id -u)" -eq 0 ]; then bash -s; else sudo -n bash -s; fi' < web/deploy/setup-host-maintenance.sh
+          $SSH 'if [ "$(id -u)" -eq 0 ]; then S=systemctl; else S="sudo -n systemctl"; fi; $S is-enabled --quiet pereval-cp-backup.timer && $S is-active --quiet pereval-cp-backup.timer || $S enable --now pereval-cp-backup.timer; $S is-active --quiet pereval-cp-backup.timer'
           # перед загрузкой нового образа убираем старые неиспользуемые образы, чтобы не упереться в диск
           $SSH 'docker container prune -f >/dev/null 2>&1 || true; docker image prune -af >/dev/null 2>&1 || true'
           $SSH "cd /opt/pereval && echo 'APP_IMAGE=$IMAGE' > .image.env && docker compose --env-file .env --env-file .image.env pull app jobs && docker compose --env-file .env --env-file .image.env up -d --remove-orphans && docker compose --env-file .env --env-file .image.env up -d --force-recreate --no-deps nginx && docker compose ps"

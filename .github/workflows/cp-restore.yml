@@ -1,0 +1,85 @@
+name: Control Plane Restore (S3)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_restore:
+        description: "Confirm restoring Control Plane from S3 backup (overwrites DB, .env, and certificates)"
+        type: boolean
+        required: true
+        default: false
+      backup_name:
+        description: "Optional backup archive name (e.g. pereval-cp-20261126-120000.tar.gz). Leave empty for latest."
+        type: string
+        required: false
+        default: ""
+
+concurrency:
+  group: cp-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    environment: pereval-top
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Verify confirmation flag
+        if: ${{ !inputs.confirm_restore }}
+        run: |
+          echo "::error::Restore aborted: confirm_restore must be set to true"
+          exit 1
+
+      - uses: actions/checkout@v5
+
+      - name: Restore Control Plane from S3 via SSH
+        env:
+          CP_HOST: ${{ secrets.CP_HOST }}
+          CP_SSH_USER: ${{ secrets.CP_SSH_USER }}
+          CP_SSH_KEY: ${{ secrets.CP_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          BACKUP_NAME: ${{ inputs.backup_name }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_PREFIX: ${{ secrets.S3_PREFIX }}
+          S3_PATH_STYLE: ${{ secrets.S3_PATH_STYLE }}
+        run: |
+          KEY="$(mktemp)"
+          S3_ENV="$(mktemp)"
+          trap 'rm -f "$KEY" "$S3_ENV"' EXIT
+          printf '%s\n' "$CP_SSH_KEY" > "$KEY"
+          chmod 600 "$KEY"
+
+          {
+            printf 'S3_ENDPOINT=%s\n' "$S3_ENDPOINT"
+            printf 'S3_BUCKET=%s\n' "$S3_BUCKET"
+            printf 'S3_REGION=%s\n' "$S3_REGION"
+            printf 'S3_ACCESS_KEY_ID=%s\n' "$S3_ACCESS_KEY_ID"
+            printf 'S3_SECRET_ACCESS_KEY=%s\n' "$S3_SECRET_ACCESS_KEY"
+            printf 'S3_PREFIX=%s\n' "$S3_PREFIX"
+            printf 'S3_PATH_STYLE=%s\n' "$S3_PATH_STYLE"
+          } > "$S3_ENV"
+          chmod 600 "$S3_ENV"
+
+          SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes $CP_SSH_USER@$CP_HOST"
+          $SSH 'mkdir -p /opt/pereval/deploy/nginx /var/backups/pereval'
+          printf '%s' "$GHCR_TOKEN" | $SSH "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+
+          scp -i "$KEY" -o StrictHostKeyChecking=accept-new -r web/compose.yaml web/deploy "$CP_SSH_USER@$CP_HOST:/opt/pereval/"
+          $SSH 'chmod +x /opt/pereval/deploy/*.sh /opt/pereval/deploy/cp_backup.py'
+
+          REMOTE_S3_ENV="/tmp/pereval-restore-s3.$$.env"
+          scp -i "$KEY" -o StrictHostKeyChecking=accept-new "$S3_ENV" "$CP_SSH_USER@$CP_HOST:$REMOTE_S3_ENV"
+          $SSH "chmod 600 '$REMOTE_S3_ENV'"
+
+          TARGET_BACKUP="${BACKUP_NAME:-latest}"
+          $SSH "set -e; trap 'rm -f \"$REMOTE_S3_ENV\"' EXIT; set -a; . '$REMOTE_S3_ENV'; set +a; if [ \"\$(id -u)\" -eq 0 ]; then python3 /opt/pereval/deploy/cp_backup.py --pereval-dir /opt/pereval --backup-dir /var/backups/pereval restore --backup '$TARGET_BACKUP'; else sudo -n -E python3 /opt/pereval/deploy/cp_backup.py --pereval-dir /opt/pereval --backup-dir /var/backups/pereval restore --backup '$TARGET_BACKUP'; fi"
+
+          $SSH 'if [ "$(id -u)" -eq 0 ]; then bash -s; else sudo -n bash -s; fi' < web/deploy/setup-host-maintenance.sh
+          $SSH 'cd /opt/pereval && sleep 5 && curl -fsS http://127.0.0.1/healthz && docker compose exec -T app wget -qO- http://127.0.0.1:3000/api/healthz && (docker logout ghcr.io >/dev/null 2>&1 || true)'
