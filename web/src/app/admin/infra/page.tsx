@@ -298,6 +298,7 @@ export default async function AdminInfraPage() {
             ["Каталог", `${totalServices()} сервисов, ${catalog.categories.length} категорий, ${totalDomains()} доменов (services.yaml)`],
             ["Grace / ACL TTL / IP на аккаунт", `${e.GRACE_DAYS} дн. / ${e.ACL_DYNAMIC_TTL_MINUTES} мин / ${e.MAX_BOUND_IPS}`],
             ["Google OAuth", e.AUTH_GOOGLE_ID ? "включён" : "выключен"],
+            ["Яндекс OAuth", e.AUTH_YANDEX_ID ? "включён" : "выключен"],
             ["Globalping (blockwatch)", e.GLOBALPING_TOKEN ? "с токеном (500 проб/ч)" : "без токена (250 проб/ч)"],
             ["SMTP", `${e.SMTP_HOST}:${e.SMTP_PORT} (${e.SMTP_USERNAME ? "с авторизацией" : "без логина"}) от ${e.MAIL_FROM}`],
             ["Админы", [...new Set(`${e.ADMIN_EMAILS},${e.ADMIN_EMAIL}`.split(",").map((s) => s.trim()).filter(Boolean))].join(", ")],

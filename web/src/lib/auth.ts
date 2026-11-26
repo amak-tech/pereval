@@ -1,5 +1,6 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
+import Yandex from "next-auth/providers/yandex";
 import Nodemailer from "next-auth/providers/nodemailer";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db, schema } from "@/lib/db/client";
@@ -9,8 +10,7 @@ import { magicLinkMail } from "@/lib/mail-templates";
 import { allow, cooldownLeft, touch } from "@/lib/ratelimit";
 
 /**
- * Auth.js v5: Google OIDC + magic-link по email. Сессии в Postgres (database strategy).
- * Добавить Яндекс/Apple/GitHub — одна запись в providers[].
+ * Auth.js v5: Google / Яндекс OAuth + magic-link по email. Сессии в Postgres (database strategy).
  */
 function providers(): NextAuthConfig["providers"] {
   const e = env();
@@ -21,6 +21,16 @@ function providers(): NextAuthConfig["providers"] {
         clientId: e.AUTH_GOOGLE_ID,
         clientSecret: e.AUTH_GOOGLE_SECRET,
         // Email подтверждён Google — безопасно привязать к пользователю, оплатившему по email.
+        allowDangerousEmailAccountLinking: true,
+      }),
+    );
+  }
+  if (e.AUTH_YANDEX_ID && e.AUTH_YANDEX_SECRET) {
+    list.push(
+      Yandex({
+        clientId: e.AUTH_YANDEX_ID,
+        clientSecret: e.AUTH_YANDEX_SECRET,
+        // Email подтверждён Яндексом — безопасно привязать к пользователю, оплатившему по email.
         allowDangerousEmailAccountLinking: true,
       }),
     );
@@ -62,6 +72,9 @@ export const authConfig: NextAuthConfig = {
   },
   callbacks: {
     async signIn({ account, email, user }) {
+      if (account?.provider === "yandex" && !user.email) {
+        return "/account/login?error=Email";
+      }
       // Запрос magic-link: cooldown 60 с на адрес (анти-спам, анти-энумерация по времени ответа).
       if (account?.provider === "nodemailer" && email?.verificationRequest) {
         const key = `magic:${(user.email ?? "").toLowerCase()}`;
