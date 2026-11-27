@@ -480,6 +480,26 @@ categories:
         note: "Веб-интерфейс и API ИИ-ассистента Monica (monica.im, api.monica.im) отклоняют прямые подключения с IP-адресов региона на уровне CloudFront (HTTP 403)."
         domains:
           - monica.im
+      - name: Freebuff
+        slug: freebuff
+        note: "ИИ-агент для разработки Freebuff (на базе Codebuff — CLI, Desktop, Web и Cloud) ограничивает доступ к части моделей и сессиям в зависимости от региона IP-адреса."
+        domains:
+          - freebuff.com
+          - freebuffcdn.com
+          - codebuff.com
+      - name: OpenCode
+        slug: opencode
+        note: "Терминальный и десктопный ИИ-агент для разработки OpenCode (opencode.ai, шлюз моделей OpenCode Zen / Go и каталог models.dev) ограничивает доступ к части облачных моделей и API с IP-адресов РФ и РБ."
+        domains:
+          - opencode.ai
+          - models.dev
+      - name: Dia Browser
+        slug: dia-browser
+        note: "ИИ-браузер Dia от The Browser Company (в составе Atlassian) ограничивает авторизацию и облачные ИИ-функции для прямых подключений с IP-адресов РФ и РБ; домены входа Atlassian (atlassian.com) также входят в бесплатный каталог."
+        domains:
+          - diabrowser.com
+          - diabrowser.engineering
+          - thebrowser.company
   - id: dev
     name: Инструменты разработки, SaaS и облака
     pool: default
@@ -1096,6 +1116,16 @@ pro:
             # на PS4/PS5 обязаны резолвиться и идти напрямую с домашнего роутера пользователя мимо SNI-прокси.
             - stun.playstation.net
             - stun.ww.np.cn.s0.playstation.net
+        - name: Destiny 2 (Bungie)
+          slug: destiny-2
+          note: "Серверы авторизации Bungie (deadorbit.net, gravityshavings.net, bungie.net) блокируют вход в Destiny 2 и Marathon с IP-адресов РФ и РБ с кодом ошибки Tapir."
+          domains:
+            - bungie.net
+            - auth.bungie.net
+            - bungie.com
+            - deadorbit.net
+            - gravityshavings.net
+            - destinythegame.com
     - id: auto
       name: Автомобили, диагностика и СТО
       pool: default
